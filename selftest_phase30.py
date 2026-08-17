@@ -35,6 +35,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 TAVERNA = "taverna-do-gancho"
@@ -202,28 +203,16 @@ if tool_acusar:
 
 # --------------------------------------------------------------------------- #
 # 7) o CAMINHO VIVO do tool-calling
-def _scripted_loop(script):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
 mid_evidencia2 = motor.memoria._write_memory(
     motor.find_character_folder(TOR), "Vi Elga discutir alto com um cliente.",
     involved=[ELGA])
 ctx_tor = motor.get_context(TOR)
 intent_viva = {"action": "confronta Elga com o que sabe", "target": ELGA,
               "utterance": None, "movement": None, "note": ""}
-out_viva = arbiter.resolve_with_tools(intent_viva, ctx_tor, _scripted_loop([
+out_viva = selftest_helpers.resolve_scripted(intent_viva, ctx_tor, [
     ("accuse", {"alvo": ELGA, "memoria_id": mid_evidencia2}),
     ("narrate", {"narrative_hint": "confronta Elga"}),
-]))
+])
 check("caminho vivo: outcome expõe 'accuse_ops_applied'",
       bool(out_viva.get("accuse_ops_applied")))
 

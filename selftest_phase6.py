@@ -5,18 +5,22 @@ Cobre (tudo com transporte FAKE — nenhum teste chama LLM real):
   - US1: chamada com id errado recebe erro + "validos", corrige, e a resolução final
     aplica com ids canônicos (o mundo realmente muda)
   - conflito de fila: mesmo item duas vezes no turno é recusado
-  - US2: degradação — texto em vez de tools (parse leniente no mesmo turno),
-    ToolsUnsupported memorizado (segunda chamada nem tenta), tool_calling: off
-  - US3: devlog registra manifest, chamadas, validações e resolução final
+  - US3: devlog registra chamadas, validações e resolução final
   - US4: quem insiste no erro até o limite não muta o mundo, e a sobra vira
     tool_rejections → failed_effects (narrativa coerente com o estado)
+
+spec 045: os casos que cobriam a DEGRADAÇÃO (texto em vez de tools com parse
+leniente, ToolsUnsupported, tool_calling: off) saíram daqui — testavam
+comportamento interno de `arbiter.resolve_with_tools`, removido junto com o
+Fluxo B (prosa legado via /api/act). Não há mais segundo motor pra degradar
+para; ver `selftest_helpers.resolve_scripted` e `loreforge-connector/laco.js`
+(`_porQueNada`/`_fecharTurno`) para o caminho único que resta.
 
 Roda sobre uma CÓPIA temporária do mundo de teste. Uso:  python3 server/selftest_phase6.py
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
@@ -35,8 +39,8 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import devlog  # noqa: E402
-import llm  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -46,22 +50,6 @@ def check(name: str, cond: bool, detail: str = "") -> None:
     print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
     if not cond:
         FAILS.append(name)
-
-
-def scripted_loop(script, captured):
-    """Transporte fake: executa o roteiro de chamadas contra o handler real do Árbitro."""
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            captured.append(result)
-            if done:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-            if calls >= max_calls:
-                return {"stopped": "limit", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
 
 
 INTENT = {"action": "deixa a moeda no chão da taverna", "target": None,
@@ -131,8 +119,8 @@ try:
             ("shove", {"item": "moeda-de-ouro", "to": "taverna-do-gancho"}),
             ("narrate", {"narrative_hint": "a moeda repousa no chão da taverna"}),
         ]
-        resolution = arbiter.resolve_with_tools(
-            INTENT, ctx, scripted_loop(script, captured), max_calls=8)
+        resolution = selftest_helpers.resolve_scripted(
+            INTENT, ctx, script, captured=captured)
     finally:
         devlog.log = _orig_log
 
@@ -150,8 +138,11 @@ try:
     check("US1: narrate encerrou com o hint",
           resolution["narrative_hint"] == "a moeda repousa no chão da taverna")
 
+    # spec 045: "MANIFEST DE TOOLS DO TURNO" era logado só dentro de
+    # `resolve_with_tools` (o laço do Fluxo B, removido) — o caminho único
+    # (`resolver_proposta`) nunca monta um manifesto de turno, já que cada
+    # chamada HTTP é UM `execute()` só; não há substituto a testar aqui.
     labels = [lab for lab, _ in logged]
-    check("US3: devlog registra manifest do turno", "MANIFEST DE TOOLS DO TURNO" in labels)
     check("US3: devlog registra as chamadas e validações na ordem",
           labels.count("TOOL CHAMADA PELO ÁRBITRO") == 3
           and labels.count("RETORNO DA VALIDAÇÃO") == 3
@@ -171,7 +162,7 @@ try:
         ("give", {"item": "moeda-de-ouro", "to": "elga-taverneira"}),
         ("narrate", {"narrative_hint": "a moeda muda de mãos uma única vez"}),
     ]
-    res2 = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(script2, captured2))
+    res2 = selftest_helpers.resolve_scripted(INTENT, ctx, script2, captured=captured2)
     check("conflito: segunda movimentação do mesmo item recusada",
           captured2[1].get("ok") is False
           and "já foi movimentado" in captured2[1].get("erro", ""))
@@ -183,100 +174,49 @@ try:
     # conta própria; agora quem recusa é `_apply_item_transfers` — e a recusa vem
     # CORRIGÍVEL (leva os validos, sem o "não refaça" do veredito do mundo).
     cap_np = []
-    arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
-        [("give", {"item": "espada-curta", "to": "elga-taverneira"})], cap_np))
+    selftest_helpers.resolve_scripted(INTENT, ctx, [
+        ("give", {"item": "espada-curta", "to": "elga-taverneira"})], captured=cap_np)
     r_np = cap_np[0]
     check("item31: give de item não-possuído recusa com regra nao_possui_item",
           r_np.get("ok") is False and r_np.get("regra") == "nao_possui_item")
     check("item31: recusa corrigível leva validos e NÃO traz o 'não refaça' do veredito",
           bool(r_np.get("validos")) and "não refaça" not in r_np.get("erro", ""))
     cap_dp = []
-    arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
-        [("drop", {"item": "espada-curta"})], cap_dp))
+    selftest_helpers.resolve_scripted(INTENT, ctx, [
+        ("drop", {"item": "espada-curta"})], captured=cap_dp)
     check("item31: drop de item não-possuído recusa pela MESMA autoridade",
           cap_dp[0].get("regra") == "nao_possui_item")
     # shove é o oposto: só o SOLTO se empurra. `bolsa-de-couro` está na mão do torvin.
     cap_sh = []
-    arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
-        [("shove", {"item": "bolsa-de-couro", "to": "taverna-do-gancho"})], cap_sh))
+    selftest_helpers.resolve_scripted(INTENT, ctx, [
+        ("shove", {"item": "bolsa-de-couro", "to": "taverna-do-gancho"})], captured=cap_sh)
     r_sh = cap_sh[0]
     check("item31: shove de item carregado recusa item_carregado (corrigível, com validos)",
           r_sh.get("regra") == "item_carregado" and bool(r_sh.get("validos"))
           and "não refaça" not in r_sh.get("erro", ""))
 
-    # --- US2: modelo responde texto (sem tools) → parse leniente no turno ---- #
-    texto = json.dumps({
-        "narrative_hint": "Torvin range os dentes",
-        "movement": None,
-        "mutations": [{"target": "torvin-ferreiro", "path": "status.mood",
-                       "value": "irritado", "reason": "texto"}],
-        "item_transfers": [], "memories": [],
-    })
+    # --- spec 045: degradação por texto/ToolsUnsupported não existe mais ----- #
+    # As US2/US2b (modelo respondendo em prosa em vez de tool_call, com parse
+    # leniente) e o teste de ToolsUnsupported (spec 020/FR-011) testavam
+    # comportamento interno de `arbiter.resolve_with_tools` — removido junto
+    # com o Fluxo B (spec 045). Não há mais segundo motor pra degradar: o
+    # caminho único (conector → MCP → guichê único) ou produz um tool_call ou
+    # termina no recado honesto (`_porQueNada`/`_fecharTurno` em laco.js,
+    # coberto por `loreforge-connector/test/laco.test.js`).
 
-    def text_loop(system, user, tools, execute, max_calls):
-        return {"stopped": "text", "text": texto, "calls": 0}
-
-    res_texto = arbiter.resolve_with_tools(INTENT, ctx, text_loop)
-    check("US2: texto sem tools vira resolução via parse leniente (mesmo turno)",
-          res_texto["narrative_hint"] == "Torvin range os dentes"
-          and res_texto["mutations"][0]["path"] == "status.mood")
-
-    # --- US2b: modelo DESCREVE as tools em prosa (caso llama3.1:8b real) ------ #
-    # dois JSONs cercados no meio do texto → executados pela MESMA guarda,
-    # nunca um 5xx ("Extra data") nem um caminho de validação paralelo.
-    prosa = (
-        "Para resolver a ação, primeiro pegamos o seixo:\n\n"
-        "```json\n"
-        '{\n  "name": "take",\n  "parameters": {\n    "item": "seixo-branco"\n  }\n}\n'
-        "```\n\n"
-        "Depois encerramos o turno:\n\n"
-        "```json\n"
-        '{\n  "name": "narrate",\n  "parameters": {\n'
-        '    "narrative_hint": "recolhe o seixo branco do chão"\n  }\n}\n'
-        "```\n\nEssa é uma possível solução para a ação.\n"
-    )
-
-    def prose_loop(system, user, tools, execute, max_calls):
-        return {"stopped": "text", "text": prosa, "calls": 0}
-
-    res_prosa = arbiter.resolve_with_tools(INTENT, ctx, prose_loop)
-    check("US2b: tools descritas em prosa são executadas pela guarda",
-          res_prosa["item_transfers"] == [{"item": "seixo-branco",
-                                           "to": "torvin-ferreiro"}]
-          and res_prosa["narrative_hint"] == "recolhe o seixo branco do chão")
-    check("US2b: nada sobra em tool_rejections quando a prosa era válida",
-          res_prosa.get("tool_rejections") == [])
-
-    # --- spec 020: runtime SEM tool-calling deixou de ser suportado (FR-011) -- #
-    # Não há mais degradação para o modo clássico: resolve_action exige tools e
-    # levanta erro claro se o runtime não as oferece.
-    def unsupported_factory():
-        def loop_fn(system, user, tools, execute, max_calls):
-            raise llm.ToolsUnsupported("modelo de teste sem tools")
-        return loop_fn
-
-    def _unused_model_factory():
-        return lambda system, user: ""
-
-    try:
-        server_app.resolve_action(INTENT, ctx, {"tool_calling": "auto"},
-                                  unsupported_factory, _unused_model_factory)
-        exigiu = False
-    except llm.LLMError:
-        exigiu = True
-    check("spec 020: runtime sem tool-calling → erro claro (sem fallback clássico)",
-          exigiu)
-
-    # --- US4: insistência no erro até o limite — mundo intacto, sobra honesta - #
+    # --- US4: insistência no erro não muta o mundo, sobra vira recado honesto - #
     # spec 020: o `take` do teste res2 aplicou por-op (fase única) — a moeda está na
     # mão do Torvin agora, não no chão. O proxy "um item segue existindo" aponta pra lá.
+    # spec 045: o TETO de chamadas por turno era imposto pelo loop_fn do servidor
+    # (max_calls); sem ele, quem limita rodadas é o conector (MAX_RODADAS em
+    # mente.js). Aqui só resta provar que insistir no MESMO erro não corrompe o
+    # mundo nem some com o motivo — não "parar em exatamente N chamadas".
     moeda_antes = (motor.find_character_folder("torvin-ferreiro")
                    / "moeda-de-ouro" / "item.md")
     captured3 = []
-    script3 = [("take", {"item": "machado-fantasma"})] * 5
-    res3 = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(script3, captured3),
-                                      max_calls=3)
-    check("US4: loop parou no limite com todas as chamadas rejeitadas",
+    script3 = [("take", {"item": "machado-fantasma"})] * 3
+    res3 = selftest_helpers.resolve_scripted(INTENT, ctx, script3, captured=captured3)
+    check("US4: toda insistência no mesmo erro é rejeitada (nada se corrompe)",
           len(captured3) == 3 and all(r.get("ok") is False for r in captured3))
     check("US4: sobra vira tool_rejections com o motivo",
           any(r.get("item") == "machado-fantasma" and r.get("why")

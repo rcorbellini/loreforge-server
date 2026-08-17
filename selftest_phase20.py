@@ -52,6 +52,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -253,18 +254,14 @@ motor._write_memory(pasta(A), f"Eu vi. {EPISODIO}.", intensity="large",
 def _ask_z(_system, _user):
     return '{"conta": "Contei o que sei dele, do jeito que me lembro."}'
 
-_visto = {}
-
-
-def _loop(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": A, "sobre": ALVO, "disposicao": 8})
-    _visto["r"] = r
-    return {"stopped": "tools", "text": ""}
-
+_visto_lista = []
 
 dado(20)
-_r = arbiter.resolve_with_tools({"action": "pergunta de Draven"},
-                                motor.get_context(OUVINTE), _loop, ask=_ask_z)
+_r = selftest_helpers.resolve_scripted(
+    {"action": "pergunta de Draven"}, motor.get_context(OUVINTE),
+    [("ask_about", {"quem": A, "sobre": ALVO, "disposicao": 8})],
+    ask=_ask_z, captured=_visto_lista)
+_visto = {"r": _visto_lista[0]}
 check("ask_about surfacea episódios e põe a prosa em lido",
       _visto["r"].get("episodios") and _r.get("lido"))
 check("ask_about NÃO surfacea ouvido_de nos episódios",
@@ -278,19 +275,14 @@ check("a resposta confirma o registro (`registrado`), sem número nenhum",
 
 # nota 0: recusa sem dado, nada registrado
 limpar(OUVINTE)
-_visto2 = {}
-
-
-def _loop_fechado(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": A, "sobre": ALVO, "disposicao": 0})
-    _visto2["r"] = r
-    return {"stopped": "tools", "text": ""}
-
+_visto2_lista = []
 
 # spec 043: a nota vem do MUNDO (`ctx.ask`), não de args.
-_r2 = arbiter.resolve_with_tools({"action": "pergunta"},
-                                 motor.get_context(OUVINTE), _loop_fechado,
-                                 ask=lambda _s, _u: "0")
+_r2 = selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context(OUVINTE),
+    [("ask_about", {"quem": A, "sobre": ALVO, "disposicao": 0})],
+    ask=lambda _s, _u: "0", captured=_visto2_lista)
+_visto2 = {"r": _visto2_lista[0]}
 check("disposicao 0 recusa SEM dado, nada registrado",
       _visto2["r"].get("erro")
       and not any(motor.memory_ouvido_de(m) == A

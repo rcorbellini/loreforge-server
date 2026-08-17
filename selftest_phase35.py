@@ -38,6 +38,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 import validator  # noqa: E402
 
 FAILS = []
@@ -231,46 +232,34 @@ check("a prosa da testemunha inclui o PARADEIRO (rumo a...)",
       _ev_partida and "rumo a" in _ev_partida[0].get("summary", ""),
       str(_ev_partida))
 
-_visto_par = {}
-
-
-def _loop_paradeiro(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "vizinho-par", "sobre": "sumido-p",
-                                 "disposicao": 9})
-    _visto_par["pessoa"] = r
-    return {"stopped": "tools", "text": ""}
-
-
 motor._roll_d20 = lambda: 20
 
 # ITEM 52: o reconto pede ao mundo o Z (o que o informante DIZ) pelo MESMO `ctx.ask`
 # que entrega a nota da régua. O dublê distingue pelo system: régua devolve NÚMERO,
-# reconto devolve JSON. A suíte segue sem modelo — dublê, como o `loop_fn`.
+# reconto devolve JSON. A suíte segue sem modelo — dublê, como antes.
 def _ask_mundo(system, _user):
     if '{"conta"' in (system or ""):
         return '{"conta": "Contei o que sei, do jeito que me lembro."}'
     return "8"
 
-arbiter.resolve_with_tools({"action": "pergunta pelo paradeiro"},
-                           motor.get_context("curioso-par"), _loop_paradeiro, ask=_ask_mundo)
+_cap_par = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta pelo paradeiro"}, motor.get_context("curioso-par"),
+    [("ask_about", {"quem": "vizinho-par", "sobre": "sumido-p", "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_par)
+_visto_par = {"pessoa": _cap_par[0]}
 check("perguntar SOBRE A PESSOA revela o paradeiro (rumo a...)",
       any("rumo a" in (e.get("content") or "")
           for e in _visto_par["pessoa"].get("episodios") or []),
       str(_visto_par["pessoa"]))
 
 _mk_char(TAVERNA, "curioso-par2", "CuriosoPar2")
-_visto_par2 = {}
-
-
-def _loop_lugar_par(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "vizinho-par", "sobre": TAVERNA,
-                                 "disposicao": 9})
-    _visto_par2["lugar"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta sobre o lugar"},
-                           motor.get_context("curioso-par2"), _loop_lugar_par, ask=_ask_mundo)
+_cap_par2 = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta sobre o lugar"}, motor.get_context("curioso-par2"),
+    [("ask_about", {"quem": "vizinho-par", "sobre": TAVERNA, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_par2)
+_visto_par2 = {"lugar": _cap_par2[0]}
 check("perguntar SOBRE O LUGAR TAMBÉM acha o mesmo episódio de partida"
       " (o lugar entra em `involved`, não só quem se moveu)",
       any("SumidoP" in (e.get("content") or "")
@@ -304,19 +293,13 @@ _mk_char(TAVERNA, "perguntador-l", "PerguntadorL")
 motor._write_memory(pasta("testemunha-l"), "Vi um furto acontecer bem aqui.",
                     intensity="medium", involved=[TAVERNA], evento="witness_theft")
 
-_visto_l = {}
-
-
-def _loop_lugar(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "testemunha-l", "sobre": TAVERNA,
-                                 "disposicao": 9})
-    _visto_l["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
 motor._roll_d20 = lambda: 20
-arbiter.resolve_with_tools({"action": "pergunta sobre o lugar"},
-                           motor.get_context("perguntador-l"), _loop_lugar, ask=_ask_mundo)
+_cap_l = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta sobre o lugar"}, motor.get_context("perguntador-l"),
+    [("ask_about", {"quem": "testemunha-l", "sobre": TAVERNA, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_l)
+_visto_l = {"r": _cap_l[0]}
 check("episódio real do lugar é devolvido",
       bool(_visto_l["r"].get("episodios")), str(_visto_l["r"]))
 check("reconto nasce no perguntador na mesma chamada",
@@ -328,18 +311,12 @@ check("reconto nasce no perguntador na mesma chamada",
 print("\n--- US2: sem episódio, resposta explícita de nada a contar ------------")
 
 _mk_char(TAVERNA, "silencioso-l", "SilenciosoL")
-_visto_l2 = {}
-
-
-def _loop_nada(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "silencioso-l", "sobre": TAVERNA,
-                                 "disposicao": 9})
-    _visto_l2["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta"},
-                           motor.get_context("perguntador-l"), _loop_nada, ask=_ask_mundo)
+_cap_l2 = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context("perguntador-l"),
+    [("ask_about", {"quem": "silencioso-l", "sobre": TAVERNA, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_l2)
+_visto_l2 = {"r": _cap_l2[0]}
 check("sem episódio, `nada_a_contar` explícito, sem erro",
       _visto_l2["r"].get("ok") and _visto_l2["r"].get("nada_a_contar"),
       str(_visto_l2["r"]))
@@ -361,18 +338,12 @@ def _mems52(cid):
 
 
 _antes52 = {c: _mems52(c) for c in ("perguntador-l", "silencioso-l")}
-_visto52 = {}
-
-
-def _loop_sem_referente(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "silencioso-l", "sobre": _ASSUNTO52,
-                                 "disposicao": 9})
-    _visto52["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta"},
-                           motor.get_context("perguntador-l"), _loop_sem_referente, ask=_ask_mundo)
+_cap52 = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context("perguntador-l"),
+    [("ask_about", {"quem": "silencioso-l", "sobre": _ASSUNTO52, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap52)
+_visto52 = {"r": _cap52[0]}
 
 _novas52 = {c: _mems52(c) - _antes52[c] for c in _antes52}
 check("grava memória nos DOIS lados (quem perguntou e quem foi perguntado)",
@@ -415,18 +386,12 @@ check("o recall NÃO passou a casar qualquer coisa (pergunta alheia segue vazia)
 
 print("\n--- US2: lugar fora do enum é recusado ---------------------------------")
 
-_visto_l3 = {}
-
-
-def _loop_fora(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_about", {"quem": "testemunha-l", "sobre": MIRANTE,
-                                 "disposicao": 9})
-    _visto_l3["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta"},
-                           motor.get_context("perguntador-l"), _loop_fora, ask=_ask_mundo)
+_cap_l3 = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context("perguntador-l"),
+    [("ask_about", {"quem": "testemunha-l", "sobre": MIRANTE, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_l3)
+_visto_l3 = {"r": _cap_l3[0]}
 check("lugar nunca conhecido/visitado é recusado, nunca aceito",
       not _visto_l3["r"].get("ok"), str(_visto_l3["r"]))
 
@@ -446,20 +411,17 @@ motor._write_memory(pasta("fonte-3"), "Vi algo acontecer.",
 def _ask(disposicao):
     """spec 043: a nota NÃO vem mais em `args` — a capacidade a pede ao mundo por
     `ctx.ask`. O ponto de injeção do teste passa a ser esse, que é o caminho real."""
-    _v = {}
-
-    def _loop(_s, _u, _t, execute, _m):
-        r, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA})
-        _v["r"] = r
-        return {"stopped": "tools", "text": ""}
-    arbiter.resolve_with_tools({"action": "pergunta"},
-                               motor.get_context("pergunta-3"), _loop,
-                               # o dublê serve aos DOIS usos do `ask` (item 52): a
-                               # NOTA da régua e o Z do reconto.
-                               ask=lambda _sys, _usr: (
-                                   '{"conta": "Contei o que sei dele."}'
-                                   if '{"conta"' in (_sys or "") else str(disposicao)))
-    return _v["r"]
+    _cap = []
+    selftest_helpers.resolve_scripted(
+        {"action": "pergunta"}, motor.get_context("pergunta-3"),
+        [("ask_about", {"quem": "fonte-3", "sobre": TAVERNA})],
+        # o dublê serve aos DOIS usos do `ask` (item 52): a NOTA da régua e o
+        # Z do reconto.
+        ask=lambda _sys, _usr: (
+            '{"conta": "Contei o que sei dele."}'
+            if '{"conta"' in (_sys or "") else str(disposicao)),
+        captured=_cap)
+    return _cap[0]
 
 
 def _boom():
@@ -474,19 +436,12 @@ check("disposicao 10 registra SEM dado", r10.get("registrado"), str(r10))
 
 motor._roll_d20 = lambda: 15
 _mk_char(TAVERNA, "pergunta-3b", "Pergunta3b")
-rmid = None
-
-
-def _loop_mid(_s, _u, _t, execute, _m):
-    global rmid
-    r, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA,
-                                 "disposicao": 5})
-    rmid = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta"},
-                           motor.get_context("pergunta-3b"), _loop_mid, ask=_ask_mundo)
+_cap_mid = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context("pergunta-3b"),
+    [("ask_about", {"quem": "fonte-3", "sobre": TAVERNA, "disposicao": 5})],
+    ask=_ask_mundo, captured=_cap_mid)
+rmid = _cap_mid[0]
 check("faixa intermediária resolve com uma rolagem (não explode)",
       rmid is not None, str(rmid))
 
@@ -496,29 +451,13 @@ print("\n--- US3: veredito único — repetir não re-rola ---------------------
 motor._roll_d20 = lambda: 20
 _mk_char(TAVERNA, "pergunta-3c", "Pergunta3c")
 
-
-def _loop_dup(_s, _u, _t, execute, _m):
-    r1, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA,
-                                  "disposicao": 9})
-    r2, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA,
-                                  "disposicao": 9})
-    return {"stopped": "tools", "text": "", "r1": r1, "r2": r2}
-
-
-_res_dup = {}
-
-
-def _loop_dup2(_s, _u, _t, execute, _m):
-    r1, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA,
-                                  "disposicao": 9})
-    r2, _ = execute("ask_about", {"quem": "fonte-3", "sobre": TAVERNA,
-                                  "disposicao": 9})
-    _res_dup["r1"], _res_dup["r2"] = r1, r2
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta duas vezes"},
-                           motor.get_context("pergunta-3c"), _loop_dup2, ask=_ask_mundo)
+_cap_dup = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta duas vezes"}, motor.get_context("pergunta-3c"),
+    [("ask_about", {"quem": "fonte-3", "sobre": TAVERNA, "disposicao": 9}),
+     ("ask_about", {"quem": "fonte-3", "sobre": TAVERNA, "disposicao": 9})],
+    ask=_ask_mundo, captured=_cap_dup)
+_res_dup = {"r1": _cap_dup[0], "r2": _cap_dup[1]}
 check("repetir a mesma pergunta no mesmo turno não produz um segundo veredito"
       " (recusada OU reconhecida como repetição — nunca um novo registro)",
       _res_dup["r2"].get("erro")

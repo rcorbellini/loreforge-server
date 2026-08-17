@@ -45,22 +45,21 @@ def _make_world(manifest: str | None) -> Path:
 _PROBE = r'''
 import sys, json
 sys.path.insert(0, %r)
-import motor, arbiter
+import motor, arbiter, selftest_helpers
 ACTOR = "torvin-ferreiro"
 ctx = motor.get_context(ACTOR)
 names = sorted(t["name"] for t in arbiter.build_tools(ctx))
-capt = {}
-def loop(system, user, tools, execute, max_calls):
-    r, _ = execute("attack", {"alvo": "elga-taverneira", "vantagem": 5})
-    capt["attack"] = r if isinstance(r, dict) else {}
-    execute("narrate", {"narrative_hint": "x"})
-    return {"stopped": "narrate", "text": None, "calls": 2}
-out = arbiter.resolve_with_tools(
-    {"action": "ataca Elga", "target": "elga-taverneira"}, ctx, loop)
+capt = []
+out = selftest_helpers.resolve_scripted(
+    {"action": "ataca Elga", "target": "elga-taverneira"}, ctx,
+    [("attack", {"alvo": "elga-taverneira", "vantagem": 5}),
+     ("narrate", {"narrative_hint": "x"})],
+    captured=capt)
+attack_r = capt[0] if capt and isinstance(capt[0], dict) else {}
 print(json.dumps({
     "names": names,
     "attack_active": motor.ativacao.is_active("attack"),
-    "attack_erro": (capt.get("attack") or {}).get("erro", ""),
+    "attack_erro": attack_r.get("erro", ""),
     "attack_resolveu": bool(out.get("attack_ops_applied")),
     "orfas": sorted(w["id"] for w in motor.world_warnings()
                     if w.get("kind") == "tool_ativacao_orfa"),

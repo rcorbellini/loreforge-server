@@ -13,9 +13,11 @@ Endpoints (leitura livre para o client):
   GET  /api/character?character_id=ID -> definição + estado
   GET  /api/inventory?character_id=ID -> árvore de inventário
   GET  /api/entity?id=ID              -> detalhe diegético
-  POST /api/act                       -> (Phase 0: no-op; Phase 1: O Árbitro)
+  POST /api/tools/<nome>              -> resolver_proposta() (o guichê único —
+                                         spec 045 aposentou o /api/act legado)
+  POST /api/mcp                       -> mcp_core.tratar() (o caminho da Mente)
 
-Escrita é exclusiva do server (Princípio III). No Phase 0 /act ainda não muta nada.
+Escrita é exclusiva do server (Princípio III).
 Rodar:  python3 server/app.py [--port 8777]
 """
 
@@ -129,52 +131,6 @@ def load_config() -> dict:
     return {"arbiter": arb, "server": {"stream": True if stream is None else bool(stream)}}
 
 
-def build_loop_fn(arb: dict):
-    """Constrói o loop_fn de tool calling do Árbitro conforme o runtime (spec 003)."""
-    runtime = arb.get("runtime", "ollama")
-    if runtime == "anthropic":
-        api_key = arb.get("api_key") or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            raise llm.LLMError(
-                "runtime 'anthropic' exige 'api_key' em server/config.server.json "
-                "(ou a variável ANTHROPIC_API_KEY)."
-            )
-        endpoint = arb.get("endpoint") or ""
-        if "anthropic" not in endpoint:
-            endpoint = "https://api.anthropic.com"
-        return llm.make_anthropic_tools_fn(
-            api_key, arb["model"],
-            temperature=arb.get("temperature", 0.2),
-            max_tokens=arb.get("max_tokens", 2048),
-            endpoint=endpoint,
-        )
-    if runtime == "openrouter":
-        api_key = arb.get("api_key") or os.environ.get("OPENROUTER_API_KEY", "")
-        if not api_key:
-            raise llm.LLMError(
-                "runtime 'openrouter' exige 'api_key' em server/config.server.json "
-                "(ou a variável OPENROUTER_API_KEY)."
-            )
-        # endpoint é o do OpenRouter por padrão, mas TROCÁVEL: qualquer host que
-        # fale o mesmo formato (openai-completions — /chat/completions,
-        # Authorization: Bearer, tools/tool_calls) serve, ex. o Zen da OpenCode
-        # (https://opencode.ai/zen/v1, modelo "big-pickle"). Antes disto, um
-        # endpoint customizado sem a substring "openrouter" era silenciosamente
-        # substituído pelo do OpenRouter — travava qualquer provider alternativo
-        # que falasse o mesmo formato.
-        endpoint = arb.get("endpoint") or "https://openrouter.ai/api/v1"
-        return llm.make_openrouter_tools_fn(
-            api_key, arb["model"],
-            temperature=arb.get("temperature", 0.2),
-            max_tokens=arb.get("max_tokens", 2048),
-            endpoint=endpoint,
-        )
-    return llm.make_ollama_tools_fn(
-        arb["endpoint"], arb["model"], temperature=arb.get("temperature", 0.2),
-        num_ctx=arb.get("num_ctx"), think=arb.get("think"),
-    )
-
-
 def build_ask(arb: dict, falhas: list | None = None):
     """O transporte do JUÍZO (spec 043) — `ask(system, user) -> str`, de um tiro.
 
@@ -235,33 +191,6 @@ def build_ask(arb: dict, falhas: list | None = None):
         return raw
 
     return ask
-
-
-def resolve_action(intent: dict, context: dict, arb: dict,
-                   loop_fn_factory, model_fn_factory, emit=None) -> dict:
-    """Seleciona o modo do Árbitro (tool_calling: auto|on|off) e resolve a intenção.
-
-    Degradação do "auto", sempre no mesmo turno lógico: runtime sem tools → memoriza e
-    usa o caminho clássico; modelo respondeu texto → parse leniente já dentro de
-    resolve_with_tools; limite do loop → fila validada + hint derivado (nunca 5xx).
-    Fábricas injetáveis para teste sem LLM (selftest_phase6).
-
-    `emit` (spec 022): callback opcional de streaming, repassado a resolve_with_tools.
-    """
-    # spec 020: só tool-calling. O caminho de fase única APLICA-E-REGISTRA por-op
-    # dentro de resolve_with_tools e devolve o outcome já aplicado — não há mais
-    # fallback clássico (runtime sem tools deixou de ser suportado, FR-011).
-    max_calls = int(arb.get("max_tool_calls") or 8)
-    try:
-        return arbiter.resolve_with_tools(
-            intent, context, loop_fn_factory(), max_calls=max_calls, emit=emit,
-            ask=build_ask(arb),
-        )
-    except llm.ToolsUnsupported as exc:
-        raise llm.LLMError(
-            "o runtime do Árbitro precisa de tool-calling (spec 020 — turno de "
-            f"fase única): {exc}"
-        ) from exc
 
 
 CONFIG = load_config()
@@ -724,8 +653,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/api/act":
-            return self._handle_act()
         # spec 043 — UMA ROTA POR CAPACIDADE. A Mente propõe chamando a capacidade
         # pelo nome, com os alvos que escolheu e a prosa do que faz. Não há despacho
         # a editar quando nasce uma capacidade: o nome vem da URL e o registro
@@ -1098,245 +1025,6 @@ class Handler(BaseHTTPRequestHandler):
             "informes": [], "persuade_ops": [], "viradas": [],
             "context": context,
         }
-
-    def _handle_act_plain(self, character_id, intent) -> None:
-        """Modo NÃO-STREAMADO: roda o turno e devolve o `outcome` como JSON único
-        (Content-Length), como era antes da spec 022. Mesma trava de turno-em-andamento
-        (FR-005b) e mesmo desfecho — só a ENTREGA muda (sem beats/heartbeat)."""
-        if not _claim_turn(character_id):
-            return self._send_json(
-                {"error": "uma ação já está em andamento para este personagem — "
-                          "aguarde o desfecho"}, 409)
-        captured = {}
-
-        def emit(ev, payload=None):
-            if ev == "done":  # ignora turn_start/heartbeat/op_applied/failed
-                captured["outcome"] = (payload or {}).get("outcome")
-
-        try:
-            self._run_act_turn(character_id, intent, emit)
-        finally:
-            _release_turn(character_id)
-        outcome = captured.get("outcome")
-        if outcome is None:
-            return self._send_json({"error": "o turno não produziu desfecho"}, 500)
-        self._send_json(outcome)
-
-    def _handle_act(self) -> None:
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
-        try:
-            payload = json.loads(raw or b"{}")
-        except json.JSONDecodeError:
-            return self._send_json({"error": "JSON inválido"}, 400)
-
-        character_id = payload.get("character_id")
-        intent = payload.get("intent")
-        if not character_id or intent is None:
-            return self._send_json(
-                {"error": "payload precisa de 'character_id' e 'intent'."}, 400
-            )
-
-        # spec 026, FR-015: "origem" ("manual"/"autonoma") é só OBSERVABILIDADE —
-        # PÁRA AQUI. Nunca é repassada a resolve_action/resolve_with_tools (assinatura
-        # nomeada, sem **payload) — não é convenção a respeitar, é impossível de
-        # vazar por engano. Ausente (client antigo) só empobrece o log.
-        origem = payload.get("origem")
-        # spec 043: `consultou_regras` (telemetria da spec 039) SAIU. Era um sinal
-        # falso: o client mandava sempre `true`, porque media uma Promise em vez do
-        # fato. O livro de regras que ele dizia medir foi aposentado junto.
-        # fatia C (item 38): `plano` — array ORDENADO de ações-do-livro + narrativa que o
-        # client produz em MODO SOMBRA. MESMA telemetria que `consultou_regras`: só entra
-        # no log, NUNCA é repassado à arbitragem (fora de `intent`). Por ora só medimos se
-        # a Mente casa a narrativa com capacidades reais; a análise segue pelo `intent`.
-        plano = payload.get("plano")
-        devlog.log("RECEBIDO DO CLIENT",
-                  {"character_id": character_id, "intent": intent, "origem": origem,
-                   "plano": plano})
-
-        # MODO NÃO-STREAMADO (config server.stream = false): responde um JSON único com
-        # Content-Length — atravessa proxies (ngrok) como o GET, sem a conexão chunked
-        # longa que alguns resetam. O modelo quente (keep_alive) mantém o turno curto.
-        if not CONFIG.get("server", {}).get("stream", True):
-            return self._handle_act_plain(character_id, intent)
-
-        # spec 022 — a resposta de /api/act vira um STREAM NDJSON (uma linha JSON por
-        # evento, flush a cada; sem Content-Length, HTTP/1.0 fecha no fim). O app é dono
-        # do ciclo: turn_start / heartbeat / done|rejected. Erros de PAYLOAD (acima)
-        # ainda são JSON simples — o cliente os trata pelo status/content-type.
-        # Transfer-Encoding: CHUNKED sobre HTTP/1.1 — é o jeito padrão de streamar por
-        # HTTP e o que ATRAVESSA proxies (ngrok/CDN). O close-delimited de HTTP/1.0 não
-        # sobrevive a intermediários (a resposta não chegava ao client via ngrok).
-        self.protocol_version = "HTTP/1.1"  # por-request; chunked exige 1.1
-        self.send_response(200)
-        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-        self.send_header("Transfer-Encoding", "chunked")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Accel-Buffering", "no")  # pede a proxies para não bufferizar
-        self.send_header("Connection", "close")       # fecha ao fim do turno (sem keep-alive)
-        self._cors()
-        self.end_headers()
-        _wlock = threading.Lock()
-
-        def _raw(data: bytes):
-            with _wlock:
-                try:
-                    self.wfile.write(data)
-                    self.wfile.flush()
-                except (BrokenPipeError, ConnectionError, OSError):
-                    pass  # cliente foi embora; o turno segue e grava no mundo (resync)
-
-        def emit(ev, ev_payload=None):
-            line = (json.dumps({"ev": ev, **(ev_payload or {})},
-                               ensure_ascii=False) + "\n").encode("utf-8")
-            _raw(f"{len(line):X}\r\n".encode("ascii") + line + b"\r\n")  # 1 chunk
-
-        try:
-            # Trava de turno-em-andamento (FR-005b): 2º /act do MESMO personagem enquanto
-            # o turno corre é REJEITADO na hora (não enfileira — jogo de vez). Não é o
-            # WRITE_LOCK do Motor (que serializa a gravação por-op); protege o TURNO.
-            if not _claim_turn(character_id):
-                emit("rejected", {"reason": "turn_in_flight",
-                                  "why": "uma ação já está em andamento para este "
-                                         "personagem — aguarde o desfecho"})
-                return
-
-            emit("turn_start", {"character_id": character_id})
-            # Batimento por thread dedicada: uma chamada de modelo bloqueia sem yield,
-            # então o keep-alive não pode depender de "entre ops". Encerra por Event.
-            _stop_beat = threading.Event()
-
-            def _beat():
-                while not _stop_beat.wait(HEARTBEAT_SECS):
-                    emit("heartbeat")
-
-            _beat_thread = threading.Thread(target=_beat, daemon=True)
-            _beat_thread.start()
-            try:
-                self._run_act_turn(character_id, intent, emit)
-            finally:
-                _stop_beat.set()
-                _beat_thread.join(timeout=1.0)
-                _release_turn(character_id)
-        finally:
-            _raw(b"0\r\n\r\n")  # chunk terminador — SEMPRE fecha o corpo chunked
-
-    def _run_act_turn(self, character_id, intent, emit) -> None:
-        """Corpo do turno: resolve e emite `done{outcome}` (ou um outcome de erro).
-        Roda entre turn_start e o fecho; a trava e o batimento são geridos por quem chama."""
-        try:
-            context = motor.get_context(character_id)
-            # Quem caiu não age (spec 008). Vem ANTES dos dois ramos de resolução —
-            # inclusive do atalho de deslocamento, que contorna o Árbitro — para que
-            # nenhuma ação de caído toque modelo ou arquivo por caminho nenhum.
-            caido = self._refuse_if_down(character_id, context)
-            if caido is not None:
-                return emit("done", {"outcome": caido})
-            # Ordem nova cancela a viagem em curso (spec 012, FR-009): a mais
-            # recente vale. É decisão determinística sobre estado, não
-            # arbitragem — gastar uma chamada de LLM para descobrir que ele
-            # estava viajando seria caro por uma condição legível em duas linhas.
-            # E CANCELAR NÃO É RECUSAR: o turno segue normalmente daqui, só o
-            # plano morre. Quem manda parar e olhar em volta, para e olha.
-            try:
-                motor.cancel_travel_plan(character_id, "mudou de ideia no caminho")
-            except motor.MotorError:
-                pass
-            # TODA ação passa pelo Árbitro — inclusive deslocamento. Houve um atalho
-            # aqui que resolvia `intent.movement.enter_route` direto no Motor, por
-            # velocidade; ele engolia a intenção inteira e descartava o resto dela.
-            # Foi assim que "carried_item_ids o Coppo e vai pela ladeira" virou uma caminhada
-            # solitária: a tool `carry` nunca chegou a ser oferecida. O `movement`
-            # da intenção segue no prompt como DICA — o Árbitro é quem decide entre
-            # partir sozinho (`enter_route`) e levar alguém junto (`carry`).
-            arb = CONFIG["arbiter"]
-            # spec 020: resolve_action já APLICA-E-REGISTRA por-op (fase única) e
-            # devolve o outcome pronto — `app` NÃO reaplica (era aqui que morava a
-            # segunda fase). O outcome e a "resolução" são o mesmo dict agora.
-            outcome = resolve_action(
-                intent, context, arb,
-                lambda: build_loop_fn(arb), lambda: None,  # sem model_fn (só tool-calling)
-                emit=emit,  # spec 022: op_applied por beat (Fase 2)
-            )
-            resolution = outcome
-            updated = motor.get_context(character_id)
-        except llm.LLMError as exc:
-            return emit("done", {"outcome": {"error": f"Árbitro indisponível: {exc}"}})
-        except motor.ValidationError as exc:
-            return emit("done", {"outcome": {"error": f"mutação rejeitada: {exc}"}})
-        except motor.MotorError as exc:
-            return emit("done", {"outcome": {"error": str(exc)}})
-        except Exception as exc:  # noqa: BLE001 — o stream já enviou 200; um erro
-            # inesperado NÃO pode deixar a conexão sem fecho. Loga o detalhe e emite
-            # um `done` de erro para o cliente destravar (spec 022).
-            devlog.log("ERRO INESPERADO NO TURNO", {"erro": repr(exc)})
-            return emit("done", {"outcome": {"error": f"erro interno: {exc}"}})
-
-        # O client recebe narrative_hint + contexto + o que NÃO se concretizou
-        # (failed_effects, em linguagem de mundo): a narração final deve ser coerente
-        # com o estado real, nunca com um sucesso que o Motor negou.
-        # Em deslocamento, o desfecho real (partiu/negado) vem do Motor, não do Árbitro.
-        hint = outcome.get("narrative_hint") or resolution["narrative_hint"]
-        # sobras do loop de tools (referências nunca corrigidas) somam às rejeições do
-        # Motor: a narração precisa saber de TUDO que não se concretizou (spec 003, FR-008)
-        all_rejected = outcome["rejected"] + (resolution.get("tool_rejections") or [])
-        response = {
-            "narrative_hint": hint,
-            "applied": outcome["applied"],
-            "rejected": all_rejected,
-            "failed_effects": inworld_failures(all_rejected)
-                              + _passo_nao_dado(character_id, intent, outcome),
-            # o que de fato mudou no mundo — sem isto A Mente narra a INTENÇÃO
-            "aconteceu": inworld_effects(outcome),
-            "item_transfers": outcome.get("item_transfers_applied", []),
-            "equip_ops": outcome.get("equip_ops_applied", []),
-            "lock_ops": outcome.get("lock_ops_applied", []),
-            "attack_ops": outcome.get("attack_ops_applied", []),
-            "carry_ops": outcome.get("carry_ops_applied", []),
-            "trade_ops": outcome.get("trade_ops_applied", []),
-            # resposta do mercador à pergunta "o que você tem?" — matéria para A
-            # Mente narrar. Preço dito em voz alta é fala de feira, não mecânica.
-            "wares": resolution.get("wares") or [],
-            # a quem se perguntou o caminho e o que ele conhece — para A Mente
-            # narrar a fala. A NOTA de disposição NÃO vem aqui: ela é segredo do
-            # mundo e morre no devlog (spec 015, FR-008a). O motivo da recusa
-            # chega pelo `atitude` dentro de `failed_effects`.
-            "informes": resolution.get("informes") or [],
-            "persuade_ops": outcome.get("persuade_ops_applied", []),
-            "travel": outcome.get("travel_ops_applied", []),
-            "aprendeu": outcome.get("learn_ops_applied", []),
-            "cura_ops": outcome.get("cura_ops_applied", []),
-            "viagens_interrompidas": outcome.get("viagens_interrompidas", []),
-            "viradas": fate_twists(outcome.get("rolls", [])),
-            # RECONHECER (spec 018): a vivência do personagem com o que ele percebe,
-            # para A Mente TINGIR a narração. Cor ambiente (scene_recognitions) +
-            # o que a tool `recognize` buscou no turno. Só rótulos + episódios,
-            # nunca número. O Árbitro não interpretou nada disto — é do personagem.
-            # cor ambiente (scene_recognitions) + o que a tool `recognize` buscou,
-            # DEDUPLICADO por id: se o Árbitro reconheceu explicitamente algo que já
-            # vinha do ambiente, não desce duas vezes.
-            "reconhecimentos": _dedupe_por_id(
-                motor.scene_recognitions(character_id)
-                + (resolution.get("reconhecimentos") or [])),
-            "context": updated,
-        }
-        devlog.log("ENVIADO AO CLIENT", {
-            "narrative_hint": response["narrative_hint"],
-            "applied": response["applied"],
-            "rejected": response["rejected"],
-            "failed_effects": response["failed_effects"],
-            "viradas": response["viradas"],
-            "rolls": outcome.get("rolls", []),
-            "aconteceu": response["aconteceu"],
-            "travel_ops_applied": response["travel"],
-            "learn_ops_applied": response["aprendeu"],
-            "viagens_interrompidas": response["viagens_interrompidas"],
-            "memories_created": outcome.get("memories_created", []),
-            "item_transfers_applied": response["item_transfers"],
-            "memories_created": outcome.get("memories_created", []),
-            "context": "(proximity_context atualizado — omitido do log)",
-        })
-        emit("done", {"outcome": response})
 
     def _require(self, q: dict, key: str) -> str:
         if key not in q:

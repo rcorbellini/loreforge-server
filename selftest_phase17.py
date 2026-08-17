@@ -36,6 +36,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 import validator  # noqa: E402
 
 FAILS = []
@@ -354,23 +355,19 @@ motor.write_doc(motor.WORLD_DIR / "taverna-do-gancho" / MAPA / "item.md",
 _ctx_arb = motor.get_context(ELGA)
 
 
-def _loop_falso(_sys, _user, _tools, execute, _max):
-    """Simula o Árbitro: lê, e cita uma verdade e uma invenção."""
-    execute("examine", {"alvo": MAPA})
-    execute("learn_routes", {"rotas": [
-        {"rota": ROTA, "trecho": "portão lateral"},
-        {"rota": "subida-do-corvo", "trecho": "isto o mapa jamais disse"},
-    ]})
-    return {"stopped": "tools", "text": ""}
-
-
-# spec 020: o learn aplica-e-registra DENTRO do resolve_with_tools (fase única),
-# na pasta do ator (ELGA). Limpa a memória e injeta o dado ANTES, e confere o
-# outcome direto — não há mais um apply_resolution separado depois.
+# spec 020: o learn aplica-e-registra DENTRO do turno (fase única), na pasta
+# do ator (ELGA). Limpa a memória e injeta o dado ANTES, e confere o outcome
+# direto — não há mais um apply_resolution separado depois.
 for _p in (motor.find_character_folder(ELGA) / "memories").glob("*.md"):
     _p.unlink()
 dado(20)
-_r = arbiter.resolve_with_tools({"action": "lê o mapa"}, _ctx_arb, _loop_falso)
+_r = selftest_helpers.resolve_scripted({"action": "lê o mapa"}, _ctx_arb, [
+    ("examine", {"alvo": MAPA}),
+    ("learn_routes", {"rotas": [
+        {"rota": ROTA, "trecho": "portão lateral"},
+        {"rota": "subida-do-corvo", "trecho": "isto o mapa jamais disse"},
+    ]}),
+])
 check("o texto lido pelo `examine` FICA registrado no turno",
       bool(_r.get("lido")), str(_r.get("lido")))
 check("e é o texto real do material",

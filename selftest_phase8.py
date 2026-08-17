@@ -31,6 +31,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 
 sys.path.insert(0, str(SERVER_DIR))
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import motor  # noqa: E402
 import validator  # noqa: E402
 
@@ -42,19 +43,6 @@ def check(name: str, cond: bool, detail: str = "") -> None:
     print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
     if not cond:
         FAILS.append(name)
-
-
-def scripted_loop(script, captured):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            captured.append(result)
-            if done:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
 
 
 def res(**parts):
@@ -169,10 +157,10 @@ try:
                                          "noop": True}])
     ctx15 = motor.get_context("torvin-ferreiro")
     cap15 = []
-    arbiter.resolve_with_tools(INTENT, ctx15, scripted_loop(
+    selftest_helpers.resolve_scripted(INTENT, ctx15,
         [("open", {"target": "caixa-de-pinho"}),
          ("open", {"target": "caixa-de-pinho"}),
-         ("narrate", {"narrative_hint": "abre a caixinha de pinho"})], cap15))
+         ("narrate", {"narrative_hint": "abre a caixinha de pinho"})], captured=cap15)
     # o 2º open idêntico é interceptado pelo anti-loop genérico (spec 007) — o
     # importante é: ok neutro, nota de "já feito", e UM único lock_op na fila.
     check("15: guarda — 1º open ok; 2º open no turno vira nota de repetição",

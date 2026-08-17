@@ -35,6 +35,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import motor  # noqa: E402
 import validator  # noqa: E402
 
@@ -51,21 +52,6 @@ def check(name: str, cond: bool, detail: str = "") -> None:
     print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
     if not cond:
         FAILS.append(name)
-
-
-def scripted_loop(script, captured):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            captured.append(result)
-            if done:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-            if calls >= max_calls:
-                return {"stopped": "limit", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
 
 
 def res(actor=None, **parts):
@@ -160,10 +146,10 @@ try:
 
     ctx = motor.get_context("torvin-ferreiro")
     captured = []
-    r_guard = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
+    r_guard = selftest_helpers.resolve_scripted(INTENT, ctx,
         [("equip", {"item": "calca-de-la"}),
          ("narrate", {"narrative_hint": "desiste de trocar de calça por ora"})],
-        captured))
+        captured=captured)
     check("4: guarda nega 2ª calça com regra slot_ocupado + valores",
           captured[0].get("ok") is False
           and captured[0].get("regra") == "slot_ocupado"
@@ -201,10 +187,10 @@ try:
     motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "seixo-preto", "to": "torvin-ferreiro"}]))
     cap5b = []
-    arbiter.resolve_with_tools(INTENT, motor.get_context("torvin-ferreiro"),
-                               scripted_loop([("stow", {"item": "seixo-preto"}),
-                                              ("narrate", {"narrative_hint": "guarda"})],
-                                             cap5b))
+    selftest_helpers.resolve_scripted(INTENT, motor.get_context("torvin-ferreiro"),
+                               [("stow", {"item": "seixo-preto"}),
+                                ("narrate", {"narrative_hint": "guarda"})],
+                               captured=cap5b)
     destino5b = (cap5b[0].get("aplicado") or {}).get("to")
     check("5b: `stow` sem destino ACHA a bolsa sozinho e tira o item da mão",
           cap5b[0].get("ok") is True and destino5b
@@ -230,10 +216,10 @@ try:
     # 6 + 16: mesma violação, mesmo {regra} pela guarda e pelo caminho clássico
     ctx = motor.get_context("torvin-ferreiro")
     cap6 = []
-    arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
+    selftest_helpers.resolve_scripted(INTENT, ctx,
         [("stow", {"item": "aticador-de-ferro", "container": "calca-de-linho"}),
          ("narrate", {"narrative_hint": "o atiçador não passa da boca do bolso"})],
-        cap6))
+        captured=cap6)
     out6 = motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "aticador-de-ferro", "to": "calca-de-linho"}]))
     rej6 = [r for r in out6["rejected"] if r.get("regra")]
@@ -301,10 +287,10 @@ try:
     # ===================== US5 — shove (10, 11) ============================== #
     ctx = motor.get_context("torvin-ferreiro")
     cap10 = []
-    r10 = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
+    r10 = selftest_helpers.resolve_scripted(INTENT, ctx,
         [("shove", {"item": "arca-de-ferro", "to": "mesa-de-madeira"}),
          ("narrate", {"narrative_hint": "arrasta a arca até junto da mesa"})],
-        cap10))
+        captured=cap10)
     out10 = motor.apply_resolution("torvin-ferreiro", r10)
     check("10: shove da arca (153 ≤ 224) aplicado, sem entrar na estrutura",
           cap10[0].get("ok") is True
@@ -315,9 +301,9 @@ try:
 
     ctx = motor.get_context("torvin-ferreiro")
     cap11 = []
-    r11 = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
+    r11 = selftest_helpers.resolve_scripted(INTENT, ctx,
         [("shove", {"item": "bigorna-de-pedra", "to": "mesa-de-madeira"}),
-         ("narrate", {"narrative_hint": "a bigorna não cede um dedo"})], cap11))
+         ("narrate", {"narrative_hint": "a bigorna não cede um dedo"})], captured=cap11)
     out11 = motor.apply_resolution("torvin-ferreiro", r11)
     check("11: bigorna (300 > 224) negada — peso_excede_empurrar (guarda e Motor)",
           cap11[0].get("regra") == "peso_excede_empurrar"
@@ -347,11 +333,11 @@ try:
 
     ctx = motor.get_context("torvin-ferreiro")
     cap12 = []
-    r12 = arbiter.resolve_with_tools(INTENT, ctx, scripted_loop(
+    r12 = selftest_helpers.resolve_scripted(INTENT, ctx,
         [("unequip", {"item": "calca-de-linho"}),
          ("equip", {"item": "calca-de-la"}),
          ("narrate", {"narrative_hint": "troca a calça de linho pela de lã"})],
-        cap12))
+        captured=cap12)
     check("12: guarda aceita a TROCA no mesmo turno (unequip + equip)",
           cap12[0].get("ok") is True and cap12[1].get("ok") is True
           and r12["equip_ops"] == [
@@ -432,17 +418,17 @@ try:
     # do executor `_apply_equip_ops`, CORRIGÍVEL (leva os validos), sem "não refaça".
     ctx_e = motor.get_context("elga-taverneira")
     cap_al = []
-    arbiter.resolve_with_tools(INTENT, ctx_e, scripted_loop(
+    selftest_helpers.resolve_scripted(INTENT, ctx_e,
         [("equip", {"item": "calca-de-linho"}),
-         ("narrate", {"narrative_hint": "a calça é de Torvin"})], cap_al))
+         ("narrate", {"narrative_hint": "a calça é de Torvin"})], captured=cap_al)
     check("item31: equip de item alheio recusa item_alheio (corrigível, com validos)",
           cap_al[0].get("regra") == "item_alheio" and bool(cap_al[0].get("validos"))
           and "não refaça" not in cap_al[0].get("erro", ""))
     ctx_t = motor.get_context("torvin-ferreiro")
     cap_nv = []
-    arbiter.resolve_with_tools(INTENT, ctx_t, scripted_loop(
+    selftest_helpers.resolve_scripted(INTENT, ctx_t,
         [("unequip", {"item": "seixo-branco"}),
-         ("narrate", {"narrative_hint": "o seixo não estava vestido"})], cap_nv))
+         ("narrate", {"narrative_hint": "o seixo não estava vestido"})], captured=cap_nv)
     check("item31: unequip de item não-vestido recusa nao_vestido_em_voce (corrigível)",
           cap_nv[0].get("regra") == "nao_vestido_em_voce"
           and "não refaça" not in cap_nv[0].get("erro", ""))

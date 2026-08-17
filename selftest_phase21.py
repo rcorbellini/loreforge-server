@@ -50,6 +50,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -176,17 +177,11 @@ print("\n--- A FRONTEIRA: o Árbitro dispara mas NÃO interpreta (SC-006) ------
 limpar(TOR)
 motor._write_memory(pasta(TOR), "Elga me serviu ensopado quando eu não tinha um cobre.",
                     intensity="large", involved=[EL], valence={EL: motor.POSITIVA})
-_visto = {}
-
-
-def _loop(_s, _u, _t, execute, _m):
-    r, _ = execute("recognize", {"alvo": EL})
-    _visto["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-_r = arbiter.resolve_with_tools({"action": "observa Elga"},
-                                motor.get_context(TOR), _loop)
+_visto_lista = []
+_r = selftest_helpers.resolve_scripted(
+    {"action": "observa Elga"}, motor.get_context(TOR),
+    [("recognize", {"alvo": EL})], captured=_visto_lista)
+_visto = {"r": _visto_lista[0]}
 check("recognize devolve ao MODELO só o aviso (sem a matéria)",
       _visto["r"].get("ok") and "prosa" not in _visto["r"]
       and "memorias_vivas" not in _visto["r"], str(_visto["r"]))

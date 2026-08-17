@@ -37,6 +37,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import motor  # noqa: E402
 
 FAILS = []
@@ -86,14 +87,6 @@ def bring_back(cid) -> None:
     fm.pop("transit", None)
     motor.write_doc(child / "character.md", fm, body)
     os.replace(child, motor.WORLD_DIR / TAVERNA_ID / cid)
-
-
-def scripted_loop(calls):
-    def loop_fn(system, user, tools, execute, max_calls):
-        for name, args in calls:
-            execute(name, args)
-        return {"stopped": "limit", "text": None, "calls": len(calls)}
-    return loop_fn
 
 
 try:
@@ -232,19 +225,18 @@ try:
     check("manifest: tool persuade presente (há rota e outro personagem)",
           any(t["name"] == "persuade" for t in tools))
 
-    r_self = arbiter.resolve_with_tools(
+    r_self = selftest_helpers.resolve_scripted(
         {"action": "convence a si mesmo a ir"}, ctx,
-        scripted_loop([("persuade", {"personagem": TORVIN, "rota": ROTA,
-                                     "vontade": 8})]))
+        [("persuade", {"personagem": TORVIN, "rota": ROTA, "vontade": 8})])
     check("guarda: alvo==ator redireciona (nada enfileirado)",
           r_self.get("persuade_ops") == [])
 
     # spec 043: a nota é PEDIDA ao mundo (`ctx.ask`), não recebida em args — o ponto
     # de injeção do teste passa a ser esse, que é o caminho real.
-    r_zero = arbiter.resolve_with_tools(
+    r_zero = selftest_helpers.resolve_scripted(
         {"action": "manda a taverneira embora"}, ctx,
-        scripted_loop([("persuade", {"personagem": ELGA, "rota": ROTA,
-                                     "vontade": 0})]), ask=lambda _s, _u: "0")
+        [("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 0})],
+        ask=lambda _s, _u: "0")
     check("guarda: vontade 0 nega já no turno com recusa_absoluta",
           r_zero.get("persuade_ops") == []
           and any(r.get("regra") == "recusa_absoluta"
@@ -257,18 +249,18 @@ try:
     # chama — a capacidade a pede ao mundo, com a régua que mora ao lado dela. Aqui
     # o "modelo" insiste mandando 0 e depois 8 em `args`, e os dois valores são
     # IGNORADOS: o mundo responde 0 nas duas vezes, e o veredito se mantém.
+    # dois execute() na MESMA sessão, capturando (result, done) de cada um —
+    # não é um "script" de nomes fixos, é inspeção passo a passo. Chamado
+    # direto contra a primitiva (build_ctx/execute/finalize_turn), sem
+    # indireção de helper — é o mesmo caminho, só sem a lista intermediária.
     _cap: list = []
-
-    def _cap_loop(system, user, tools, execute, max_calls):
-        _cap.append(execute("persuade", {"personagem": ELGA, "rota": ROTA,
-                                          "vontade": 0}))
-        _cap.append(execute("persuade", {"personagem": ELGA, "rota": ROTA,
-                                          "vontade": 8}))
-        return {"stopped": "limit", "text": None, "calls": 2}
-
-    r_escape = arbiter.resolve_with_tools(
-        {"action": "recua e insiste com mais lábia"}, ctx, _cap_loop,
-        ask=lambda _s, _u: "0")   # o MUNDO diz 0, venha o que vier em args
+    _ctx_escape = arbiter.build_ctx(ctx, ask=lambda _s, _u: "0",
+                                    prosa={"acao": "recua e insiste com mais lábia"})
+    _cap.append(_ctx_escape.execute("persuade", {"personagem": ELGA, "rota": ROTA,
+                                                  "vontade": 0}))
+    _cap.append(_ctx_escape.execute("persuade", {"personagem": ELGA, "rota": ROTA,
+                                                  "vontade": 8}))
+    r_escape = arbiter.finalize_turn(_ctx_escape, acao="recua e insiste com mais lábia")
     check("régua-escape: 1ª recusa (v0) carried_item_ids orientação a NÃO re-tentar",
           not _cap[0][0].get("ok")
           and "NÃO refaça a MESMA" in (_cap[0][0].get("erro") or ""),
@@ -280,12 +272,11 @@ try:
     check("régua-escape: nada moveu — a recusa 0 valeu o turno inteiro",
           (r_escape.get("persuade_ops") or []) == [])
 
-    r_dupla = arbiter.resolve_with_tools(
+    r_dupla = selftest_helpers.resolve_scripted(
         {"action": "insiste duas vezes"}, ctx,
-        scripted_loop([
-            ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7}),
-            ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 9}),
-        ]), ask=lambda _s, _u: "7")
+        [("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7}),
+         ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 9})],
+        ask=lambda _s, _u: "7")
     check("guarda: segundo persuade do mesmo alvo no turno é negado",
           len(r_dupla.get("persuade_ops") or []) == 1
           and r_dupla["persuade_ops"][0]["vontade"] == 7)
@@ -293,16 +284,12 @@ try:
     ctx = motor.get_context(TORVIN)
 
     # anti-loop genérico: chamada IDÊNTICA repetida não duplica efeito
-    r_eco = arbiter.resolve_with_tools(
+    r_eco = selftest_helpers.resolve_scripted(
         {"action": "insiste na mesma coisa"}, ctx,
-        scripted_loop([
-            ("mutate", {"target": TORVIN, "path": "status.mood",
-                        "value": "decidido"}),
-            ("mutate", {"target": TORVIN, "path": "status.mood",
-                        "value": "decidido"}),
-            ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7}),
-            ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7}),
-        ]))
+        [("mutate", {"target": TORVIN, "path": "status.mood", "value": "decidido"}),
+         ("mutate", {"target": TORVIN, "path": "status.mood", "value": "decidido"}),
+         ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7}),
+         ("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 7})])
     check("anti-loop: chamada idêntica repetida é ignorada (1 mutation, 1 persuade)",
           len(r_eco.get("mutations") or []) == 1
           and len(r_eco.get("persuade_ops") or []) == 1)
@@ -314,9 +301,10 @@ try:
     # descartava o `rolls` na recusa). Pela TOOL, a virada tem de subir em `rolls`.
     ctx = motor.get_context(TORVIN)
     force_roll(2)  # vontade 8 tende IR; d20=2 → falha COM virada, pela tool
-    r_virada = arbiter.resolve_with_tools(
+    r_virada = selftest_helpers.resolve_scripted(
         {"action": "tenta convencer e falha"}, ctx,
-        scripted_loop([("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 8})]), ask=lambda _s, _u: "8")
+        [("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 8})],
+        ask=lambda _s, _u: "8")
     check("item31: persuade migrada — virada de FALHA sobe em rolls pela tool",
           any(rr.get("virada") for rr in (r_virada.get("rolls") or []))
           and any(t.get("regra") == "persuasao_falhou"
@@ -325,11 +313,10 @@ try:
     # só o motivo. O número narra pelo client (rolls→fate_twists), nunca ao Árbitro.
     _capv: list = []
     force_roll(2)
-    arbiter.resolve_with_tools(
-        {"action": "tenta e falha"}, motor.get_context(TORVIN),
-        lambda sy, u, t, execute, m: (_capv.append(
-            execute("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 8})),
-            {"stopped": "x", "text": None, "calls": 1})[1])
+    _ctx_v = arbiter.build_ctx(motor.get_context(TORVIN),
+                               prosa={"acao": "tenta e falha"})
+    _capv.append(_ctx_v.execute("persuade",
+                                {"personagem": ELGA, "rota": ROTA, "vontade": 8}))
     check("item31: recusa de rolagem NÃO vaza o dado ao modelo (Princípio IX)",
           "rolagem" not in json.dumps(_capv[0][0], ensure_ascii=False)
           and "dc" not in (_capv[0][0].get("valores") or {}))

@@ -33,6 +33,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 TAVERNA = "taverna-do-gancho"
@@ -136,19 +137,6 @@ check("descanso >= 8h recupera fadiga por completo",
 _com_fadiga_no_arquivo(TOR, 50)
 
 
-def _scripted_loop(script, capturados):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            capturados.append((name, result))
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
 # T009 — manifest, com o ator descansando, só oferece a capacidade de ACORDAR
 # (item 50: era `sleep` alternador; agora é `wake_up`, capacidade própria)
 motor.apply_resolution(TOR, {"rest_ops": [{"op": "sleep"}]})  # inicia (TOR descansando)
@@ -166,11 +154,11 @@ intent_take = {"action": "pega a agulha", "target": "agulha-de-ferro",
               "utterance": None, "movement": None, "note": ""}
 capturados: list = []
 fadiga_antes_take, _ = fadiga_de(TOR)
-arbiter.resolve_with_tools(intent_take, ctx_dormindo, _scripted_loop([
+selftest_helpers.resolve_scripted(intent_take, ctx_dormindo, [
     ("take", {"item": "agulha-de-ferro"}),
     ("narrate", {"narrative_hint": "tenta pegar algo"}),
-], capturados))
-take_result = next((r for n, r in capturados if n == "take"), None)
+], captured=capturados)
+take_result = capturados[0] if capturados else None  # "take" é o 1º item do script
 check("US2: 'take' enquanto descansando é recusado (via arbiter)",
       take_result is not None and take_result.get("ok") is False,
       str(take_result))

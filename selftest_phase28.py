@@ -15,7 +15,8 @@ jeito que o tool-calling). Cobre:
   - teto de exposição no contexto (as mais RECENTES ficam)
   - o manifest do Árbitro expõe `set_intention` com o enum de intenções ativas
   - FR-015: "origem" (manual/autônoma) é garantia ESTRUTURAL de observabilidade —
-    `resolve_action` não tem (nem pode ganhar por acidente) esse parâmetro
+    o guichê único (`resolver_proposta`) filtra a chave de QUALQUER payload
+    antes de virar `args`, e nenhuma capacidade a recebe por acidente
 
 Uso:  python3 server/selftest_phase28.py
 """
@@ -37,6 +38,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import app as server_app  # noqa: E402
 
 FAILS = []
@@ -180,31 +182,20 @@ if tool:
 
 
 # 10) o CAMINHO VIVO do tool-calling — não só motor.apply_resolution direto.
-# resolve_with_tools enfileira via execute() e aplica pelo MESMO _apply_queued_
-# delta que mutations/attack_ops/etc. já usam — prova que a fiação de T010-T012
+# `ctx.execute` (via `selftest_helpers.resolve_scripted`) enfileira e aplica
+# pelo MESMO _apply_queued_delta que mutations/attack_ops/etc. já usam —
+# prova que a fiação de T010-T012
 # (queue/_MUT_CH/build_tools/execute) funciona de ponta a ponta, não só o
 # handler isolado (que a seção 1-8 já provou via motor.apply_resolution).
-def _scripted_loop(script):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
 _mk_char("viva-p28")
 ctx_viva = motor.get_context("viva-p28")
 intent_viva = {"action": "reflete sobre um compromisso", "target": None,
               "utterance": None, "movement": None, "note": ""}
-out_viva = arbiter.resolve_with_tools(intent_viva, ctx_viva, _scripted_loop([
+out_viva = selftest_helpers.resolve_scripted(intent_viva, ctx_viva, [
     ("set_intention", {"content": "Vou ajudar a taverneira a encontrar o gato.",
                        "status": "ativa"}),
     ("narrate", {"narrative_hint": "resolve ajudar com o gato sumido"}),
-]))
+])
 check("caminho vivo: o loop de tools aplicou a intenção (via execute→queue→"
       "_apply_queued_delta, não motor.apply_resolution direto)",
       len(_files("viva-p28")) == 1)
@@ -216,12 +207,17 @@ check("caminho vivo: nenhuma linha nova em app.inworld_effects (precedente "
       "create_memory — o relato mora no narrative_hint do turno, research.md D6)",
       not any("gato" in s.lower() for s in server_app.inworld_effects(out_viva)))
 
-# 11) FR-015: "origem" é garantia ESTRUTURAL — resolve_action tem assinatura
-# nomeada, sem **payload; acrescentar "origem" ali exigiria edição deliberada e
-# visível no diff, nunca um repasse acidental do payload de /api/act.
-_params = set(inspect.signature(server_app.resolve_action).parameters)
-check("FR-015: 'origem' NÃO é (nem pode virar sem querer) parâmetro de resolve_action",
-      "origem" not in _params, f"parâmetros={sorted(_params)}")
+# 11) FR-015: "origem" é garantia ESTRUTURAL — spec 045 aposentou resolve_action
+# (assinatura nomeada, sem **payload) junto com o Fluxo B. No guichê único que
+# ficou, `resolver_proposta` recebe um payload GENÉRICO (dict de JSON), então a
+# garantia migra de "não é parâmetro nomeado" para "toda linha que filtra o
+# payload em `args` exclui a chave 'origem' explicitamente" — o mesmo efeito
+# (nenhuma capacidade recebe 'origem' por acidente), garantido por outro meio.
+_src_rp = inspect.getsource(server_app.Handler.resolver_proposta)
+_filtros = [ln.strip() for ln in _src_rp.splitlines() if "k not in (" in ln]
+check("FR-015: 'origem' segue fora de QUALQUER args repassado a uma capacidade "
+      "(cada filtro de payload→args exclui a chave explicitamente)",
+      bool(_filtros) and all('"origem"' in ln for ln in _filtros), str(_filtros))
 
 print()
 if FAILS:

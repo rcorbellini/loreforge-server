@@ -33,6 +33,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -196,16 +197,11 @@ for r in motor.all_route_ids():
 motor._write_memory(pasta(ELGA), "Torvin me espancou.", intensity="large",
                     involved=[TORVIN], valence={TORVIN: motor.NEGATIVA})
 
-_visto = {}
-
-
-def _loop(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_directions", {"quem": ELGA, "disposicao": 9})
-    _visto["r"] = r
-    return {"stopped": "tools", "text": ""}
-
-
-arbiter.resolve_with_tools({"action": "pergunta"}, motor.get_context(TORVIN), _loop)
+_visto_lista = []
+selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context(TORVIN),
+    [("ask_directions", {"quem": ELGA, "disposicao": 9})], captured=_visto_lista)
+_visto = {"r": _visto_lista[0]}
 check("ask_directions entrega `saldo_afeto` ao Árbitro",
       "saldo_afeto" in _visto["r"], str(_visto["r"].keys()))
 check("e o saldo reflete a agressão (negativo, em linguagem)",

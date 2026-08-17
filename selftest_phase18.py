@@ -39,6 +39,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -361,18 +362,13 @@ check("e continua exigindo só `rotas`",
 # na guarda, e nenhum outro teste nota porque todos montam a resolução na mão.
 limpar_memorias(TORVIN)
 motor._remember_route(pasta(ELGA), ROTA, "Portão Lateral")
-_visto = {}
-
-
-def _loop_conversa(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_directions", {"quem": ELGA, "disposicao": 9})
-    _visto["resposta"] = r
-    return {"stopped": "tools", "text": ""}
-
+_visto_lista = []
 
 dado(20)
-_r = arbiter.resolve_with_tools({"action": "pergunta o caminho"},
-                                motor.get_context(TORVIN), _loop_conversa)
+_r = selftest_helpers.resolve_scripted(
+    {"action": "pergunta o caminho"}, motor.get_context(TORVIN),
+    [("ask_directions", {"quem": ELGA, "disposicao": 9})], captured=_visto_lista)
+_visto = {"resposta": _visto_lista[0]}
 check("`ask_directions` devolve os caminhos que ela sabe",
       _visto["resposta"].get("caminhos"), str(_visto.get("resposta")))
 check("e devolve o que ela lembra de QUEM pergunta",
@@ -386,19 +382,14 @@ check("a resposta ao Árbitro leva `informes` e NUNCA a nota",
 
 # a régua fechada (spec 034): nota 0 não ensina nada, numa chamada só
 limpar_memorias(TORVIN)
-_visto2 = {}
-
-
-def _loop_fechado(_s, _u, _t, execute, _m):
-    r, _ = execute("ask_directions", {"quem": ELGA, "disposicao": 0})
-    _visto2["r"] = r
-    return {"stopped": "tools", "text": ""}
-
+_visto2_lista = []
 
 # spec 043: a nota vem do MUNDO (`ctx.ask`), não de args — injeta por ali.
-_r_fechado = arbiter.resolve_with_tools({"action": "pergunta"},
-                                        motor.get_context(TORVIN), _loop_fechado,
-                                        ask=lambda _s, _u: "0")
+_r_fechado = selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, motor.get_context(TORVIN),
+    [("ask_directions", {"quem": ELGA, "disposicao": 0})],
+    ask=lambda _s, _u: "0", captured=_visto2_lista)
+_visto2 = {"r": _visto2_lista[0]}
 check("disposicao 0 recusa SEM dado, e nada é ensinado",
       _visto2["r"].get("erro") and rotas_de(TORVIN) == set(), str(_visto2))
 check("mesmo na recusa, o contexto (o que ela sabe/o afeto) chega ao Árbitro",
@@ -409,20 +400,15 @@ check("mesmo na recusa, o contexto (o que ela sabe/o afeto) chega ao Árbitro",
 # só deixa de existir como campo lido; a validação de sempre (citação contra
 # `lido`) continua se aplicando igual, sem `fonte` nenhuma para mudar o rumo.
 limpar_memorias(TORVIN)
-_ignorado = {}
-
-
-def _loop_fonte_fantasma(_s, _u, _t, execute, _m):
-    r, _ = execute("learn_routes", {
-        "rotas": [{"rota": ROTA, "trecho": prosa_de(ROTA)}],
-        "fonte": ELGA, "disposicao": 9, "atitude": "cordial"})
-    _ignorado["r"] = r
-    return {"stopped": "tools", "text": ""}
-
+_ignorado_lista = []
 
 dado(20)
-_r_ign = arbiter.resolve_with_tools({"action": "aprende"},
-                                    motor.get_context(TORVIN), _loop_fonte_fantasma)
+_r_ign = selftest_helpers.resolve_scripted(
+    {"action": "aprende"}, motor.get_context(TORVIN),
+    [("learn_routes", {"rotas": [{"rota": ROTA, "trecho": prosa_de(ROTA)}],
+                       "fonte": ELGA, "disposicao": 9, "atitude": "cordial"})],
+    captured=_ignorado_lista)
+_ignorado = {"r": _ignorado_lista[0]}
 check("`fonte`/disposicao/atitude extra não impedem o enfileiramento (sem crash)",
       _ignorado["r"].get("ok"), str(_ignorado))
 _out_ign = motor.apply_resolution(TORVIN, _r_ign)
@@ -457,19 +443,14 @@ motor.apply_resolution(TORVIN, res(
 check("sem fala no turno, aprender sem fonte continua valendo (spec 014)",
       ROTA in rotas_de(TORVIN), str(rotas_de(TORVIN)))
 
+# Spec 034: sem `fonte` no schema, o único jeito de aprender de uma PESSOA que
+# não está na cena é `ask_directions` — e ela barra `quem` fora do enum de
+# presentes, antes de qualquer coisa.
 _chamadas = []
-
-
-def _loop_sem_perguntar(_s, _u, _t, execute, _m):
-    """Spec 034: sem `fonte` no schema, o único jeito de aprender de uma
-    PESSOA que não está na cena é `ask_directions` — e ela barra `quem` fora
-    do enum de presentes, antes de qualquer coisa."""
-    r, _ = execute("ask_directions", {"quem": "sarga-do-cais", "disposicao": 8})
-    _chamadas.append(r)
-    return {"stopped": "tools", "text": ""}
-
-
-_r = arbiter.resolve_with_tools({"action": "pergunta"}, _ctx, _loop_sem_perguntar)
+_r = selftest_helpers.resolve_scripted(
+    {"action": "pergunta"}, _ctx,
+    [("ask_directions", {"quem": "sarga-do-cais", "disposicao": 8})],
+    captured=_chamadas)
 check("perguntar a quem não está presente é barrado",
       _chamadas and _chamadas[0].get("erro"), str(_chamadas))
 check("e nada entrou na fila", not (_r.get("learn_ops") or []),

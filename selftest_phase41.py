@@ -26,6 +26,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 from motor import fatos  # noqa: E402
 
 FAILS = []
@@ -71,19 +72,13 @@ check("T081: a reação react_actor_memory gravou a memória do ato (transfer)",
 
 # ---- T081: recusa CORRIGÍVEL com validos (tool declarada) ------------------------
 idx = arbiter._scene_index(motor.get_context(TOR))
-capt = {}
-
-
-def _loop(system, user, tools_, execute, max_calls):
-    r, _ = execute("take", {"item": "item-que-nao-existe-xyz"})
-    capt["take"] = r
-    execute("narrate", {"narrative_hint": "x"})
-    return {"stopped": "narrate", "text": None, "calls": 2}
-
-
-arbiter.resolve_with_tools({"action": "pega algo", "target": None},
-                           motor.get_context(TOR), _loop)
-r = capt.get("take") or {}
+_capt = []
+selftest_helpers.resolve_scripted(
+    {"action": "pega algo", "target": None}, motor.get_context(TOR),
+    [("take", {"item": "item-que-nao-existe-xyz"}),
+     ("narrate", {"narrative_hint": "x"})],
+    captured=_capt)
+r = _capt[0] if _capt else {}
 check("T081: item inválido → recusa corrigível com `validos`",
       r.get("ok") is False and bool(r.get("validos")), str(r)[:200])
 

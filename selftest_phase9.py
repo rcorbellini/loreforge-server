@@ -34,6 +34,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import motor  # noqa: E402
 
 FAILS = []
@@ -162,14 +163,9 @@ try:
           "arca-de-ferro" in cand["shove"])
 
     # --- objeto fixo: tentar CARREGAR mobília nega com narrativa clara ------- #
-    def one_call_loop(name, args):
-        def loop_fn(system, user, tools, execute, max_calls):
-            result, _ = execute(name, args)
-            return {"stopped": "limit", "text": None, "calls": 1}
-        return loop_fn
-    r_fixo = arbiter.resolve_with_tools(
+    r_fixo = selftest_helpers.resolve_scripted(
         {"action": "leva a mesa embora"}, ctx,
-        one_call_loop("take", {"item": "mesa-de-madeira"}))
+        [("take", {"item": "mesa-de-madeira"})])
     check("objeto_fixo: guarda nega take de object com regra estruturada",
           any(r.get("regra") == "objeto_fixo"
               for r in r_fixo.get("tool_rejections", [])))

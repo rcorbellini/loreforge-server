@@ -16,7 +16,8 @@ auto-contidos (`compromisso._h_promise`, `itens._h_transfer`,
     realizado (nunca vira `rejected` — FR-007)
   - `give` sem `intention_id`: comportamento IDÊNTICO ao de sempre (zero
     regressão)
-  - o CAMINHO VIVO do tool-calling (`resolve_with_tools`): `prometer` no
+  - o CAMINHO VIVO do tool-calling (`selftest_helpers.resolve_scripted`,
+    a mesma primitiva de `resolver_proposta` — spec 045): `prometer` no
     manifest (sem `item` em properties), dispatch via `execute()`, e o
     outcome expõe `promise_ops_applied` E `intentions_applied` (o achado do
     `_ACC_CH` corrigido junto desta spec)
@@ -43,6 +44,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 TAVERNA = "taverna-do-gancho"
@@ -192,18 +194,6 @@ check("give sem intention_id: applied NÃO ganha a chave intention_closed",
 # --------------------------------------------------------------------------- #
 # 8) o CAMINHO VIVO do tool-calling — prometer no manifest + dispatch real +
 #    o achado do _ACC_CH (promise_ops_applied E intentions_applied aparecem)
-def _scripted_loop(script):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
 ctx_tor = motor.get_context(TOR)
 tools = arbiter.build_tools(ctx_tor)
 tool_prometer = next((t for t in tools if t["name"] == "promise"), None)
@@ -225,22 +215,21 @@ check("manifest: 'give' ganhou 'emprestimo' opcional (spec 036)",
 
 intent_viva = {"action": "promete algo a Elga", "target": ELGA,
               "utterance": None, "movement": None, "note": ""}
-out_viva = arbiter.resolve_with_tools(intent_viva, ctx_tor, _scripted_loop([
+out_viva = selftest_helpers.resolve_scripted(intent_viva, ctx_tor, [
     ("promise", {"para": ELGA,
                   "expectativa": "que vou ajudar na forja amanhã"}),
     ("narrate", {"narrative_hint": "promete ajudar Elga"}),
-]))
+])
 check("caminho vivo: outcome expõe 'promise_ops_applied' (o canal novo)",
       bool(out_viva.get("promise_ops_applied")))
 
 intent_si = {"action": "reflete sobre um compromisso", "target": None,
             "utterance": None, "movement": None, "note": ""}
-out_si = arbiter.resolve_with_tools(intent_si, motor.get_context(TOR),
-                                    _scripted_loop([
+out_si = selftest_helpers.resolve_scripted(intent_si, motor.get_context(TOR), [
     ("set_intention", {"content": "Vou visitar o ferreiro amanhã.",
                        "status": "ativa"}),
     ("narrate", {"narrative_hint": "decide visitar o ferreiro"}),
-]))
+])
 check("achado do _ACC_CH: outcome de set_intention expõe 'intentions_applied' "
       "no caminho VIVO de tool-calling (antes desta spec, _ACC_CH não listava "
       "o canal e o outcome nunca carregava isto, mesmo com o arquivo escrito certo)",

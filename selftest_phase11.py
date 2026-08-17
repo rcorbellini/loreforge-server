@@ -8,9 +8,9 @@ Cobre, com rolagem forçada (motor._roll_d20 injetável):
   - absorção: acerto com dano 0 é `golpe_absorvido`, DIFERENTE de `ataque_errou`
   - derrota: hp 0 ⇒ `incapacitado`, pasta intacta; golpe em caído MATA sem dado
     (SC-002); alvo morto nega sem dado
-  - a regra do caído (FR-008a/SC-007): POST /api/act em nome de um caído é
-    abortado antes do Árbitro — modelo nunca chamado, mundo idêntico byte a byte,
-    inclusive pelo atalho de deslocamento que contorna o Árbitro
+  - a regra do caído (FR-008a/SC-007): POST /api/tools/<nome> em nome de um caído
+    é abortado antes do Árbitro — modelo nunca chamado, mundo idêntico byte a
+    byte, para qualquer capacidade (inclusive enter_route)
   - viradas (SC-004): inversão de tendência e críticos naturais 20/1
   - segredo (SC-003): a vantagem não desce ao client
   - preservação (SC-005): nenhum arquivo do mundo é removido
@@ -31,6 +31,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -44,6 +45,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 
 sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
+import selftest_helpers  # noqa: E402
 server_app.CONFIG["server"]["stream"] = True  # testa o STREAMING, indep. do config local
 import arbiter  # noqa: E402
 import motor  # noqa: E402
@@ -146,33 +148,15 @@ def world_files() -> set:
             for p in motor.WORLD_DIR.rglob("*") if p.is_file()}
 
 
-def scripted_loop(calls):
-    def loop_fn(system, user, tools, execute, max_calls):
-        for name, args in calls:
-            execute(name, args)
-        return {"stopped": "limit", "text": None, "calls": len(calls)}
-    return loop_fn
-
-
-def post_act(port, payload) -> dict:
-    # spec 022: /api/act responde em STREAM NDJSON (uma linha JSON por evento). O
-    # DESFECHO é o `outcome` do evento `done` — idêntico ao corpo único de antes.
+def post_tool(port, nome, payload) -> dict:
+    # spec 045: /api/act saiu; o guichê único é /api/tools/<nome> (resposta JSON
+    # simples, sem streaming — o mesmo `resolver_proposta` que o MCP usa).
     req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/api/act",
+        f"http://127.0.0.1:{port}/api/tools/{nome}",
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=10) as r:
-        outcome = {}
-        for line in r.read().decode("utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            ev = json.loads(line)
-            if ev.get("ev") == "done":
-                outcome = ev.get("outcome") or {}
-            elif ev.get("ev") == "rejected":
-                outcome = {"rejected_turn": ev}
-        return outcome
+        return json.loads(r.read().decode("utf-8"))
 
 
 ARQUIVOS_INICIAIS = None
@@ -313,19 +297,23 @@ try:
           and out_morto["rolls"] == [])
 
     # --- a regra do caído na fronteira (FR-008a / SC-007) --------------------- #
-    def _boom_resolve(*a, **kw):
+    # spec 045: o guichê único é `resolver_proposta` (via /api/tools/<nome> ou
+    # /api/mcp); o ponto de checagem migra de `resolve_action` para
+    # `arbiter.build_ctx`, chamado logo após o guard do caído em
+    # `resolver_proposta` — mesma posição relativa, motor novo.
+    def _boom_build_ctx(*a, **kw):
         raise AssertionError("o Árbitro não deveria ser consultado por um caído")
 
-    _resolve_real = server_app.resolve_action
-    server_app.resolve_action = _boom_resolve
+    _build_ctx_real = arbiter.build_ctx
+    arbiter.build_ctx = _boom_build_ctx
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server_app.Handler)
     porta = httpd.server_address[1]
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     try:
         antes = world_fingerprint()
-        r_caido = post_act(porta, {"character_id": ELGA,
-                                   "intent": {"action": "levanta e foge"}})
+        r_caido = post_tool(porta, "examine",
+            {"character_id": ELGA, "alvo": ELGA, "prosa": {"acao": "tenta se levantar"}})
         check("caído: ação abortada com recusa in-world (sem Árbitro)",
               r_caido.get("failed_effects")
               and not r_caido.get("applied")
@@ -333,26 +321,36 @@ try:
         check("SC-007: mundo idêntico byte a byte após a tentativa",
               world_fingerprint() == antes)
 
-        # o atalho de deslocamento contorna o Árbitro — não pode escapar
-        r_rota = post_act(porta, {
-            "character_id": ELGA,
-            "intent": {"action": "parte", "movement": {"enter_route": "portao-lateral"}}})
-        check("caído: o atalho de deslocamento também é abortado",
+        # a mesma guarda vale pra QUALQUER capacidade, inclusive deslocamento — o
+        # guichê único não tem atalho especial por verbo (diferente do /api/act
+        # antigo, que precisava blindar essa rota à parte).
+        r_rota = post_tool(porta, "enter_route",
+            {"character_id": ELGA, "route": "portao-lateral",
+             "prosa": {"acao": "tenta partir"}})
+        check("caído: enter_route também é abortado pela mesma guarda",
               r_rota.get("failed_effects") and not r_rota.get("applied"))
-        check("SC-007: mundo intacto também pelo atalho de rota",
+        check("SC-007: mundo intacto também via enter_route",
               world_fingerprint() == antes)
 
-        # controle: personagem apto NÃO é barrado pela guarda (chega ao Árbitro).
-        # spec 022: /api/act streama e já enviou 200 antes de resolver; um erro do
-        # _boom_resolve agora vem como `done{outcome:{error:...}}`, não como exceção
-        # HTTP. Chegou ao Árbitro = o outcome traz o erro do boom.
-        resp_apto = post_act(porta, {"character_id": TORVIN,
-                                     "intent": {"action": "olha ao redor"}})
+        # controle: personagem apto NÃO é barrado pela guarda (chega ao Árbitro) —
+        # aqui o boom estoura DE VERDADE (a rota não tem try/except pra exceção
+        # genérica), então a conexão cai sem resposta: prova de que passou da
+        # guarda e o boom disparou dentro do handler (BaseHTTPRequestHandler não
+        # manda 500 pra exceção não tratada — só derruba a conexão em silêncio).
+        estourou = False
+        try:
+            post_tool(porta, "examine",
+                {"character_id": TORVIN, "alvo": TORVIN,
+                 "prosa": {"acao": "olha ao redor"}})
+        except urllib.error.HTTPError as e:
+            estourou = e.code == 500
+        except ConnectionError:
+            estourou = True
         check("controle: personagem apto passa da guarda e chega ao Árbitro",
-              bool(resp_apto.get("error")))
+              estourou)
     finally:
         httpd.shutdown()
-        server_app.resolve_action = _resolve_real
+        arbiter.build_ctx = _build_ctx_real
 
     # --- viradas e segredo (US4) ---------------------------------------------- #
     set_status(ELGA, hp=90, hp_max=90, conditions=[])
@@ -419,25 +417,24 @@ try:
     # apply_op_now — então força-se o dado a ACERTAR (hp folgado) para a op ficar no log.
     set_status(ELGA, hp=90, hp_max=90)
     force_roll(15)
-    r_dup = arbiter.resolve_with_tools(
-        {"action": "ataca duas vezes"}, ctx,
-        scripted_loop([
+    r_dup = selftest_helpers.resolve_scripted(
+        {"action": "ataca duas vezes"}, ctx, [
             ("attack", {"alvo": ELGA, "arma": ESPADA, "vantagem": 5}),
             ("attack", {"alvo": ELGA, "arma": ESPADA, "vantagem": 9}),
-        ]))
+        ])
     check("guarda: segundo golpe no mesmo alvo é ignorado (a primeira nota vale)",
           len(r_dup.get("attack_ops") or []) == 1
           and r_dup["attack_ops"][0]["vantagem"] == 5)
 
-    r_self = arbiter.resolve_with_tools(
+    r_self = selftest_helpers.resolve_scripted(
         {"action": "ataca a si mesmo"}, ctx,
-        scripted_loop([("attack", {"alvo": TORVIN, "vantagem": 5})]))
+        [("attack", {"alvo": TORVIN, "vantagem": 5})])
     check("guarda: alvo == ator é recusado (nada enfileirado)",
           not (r_self.get("attack_ops") or []))
 
-    r_clamp = arbiter.resolve_with_tools(
+    r_clamp = selftest_helpers.resolve_scripted(
         {"action": "ataca com vantagem absurda"}, ctx,
-        scripted_loop([("attack", {"alvo": ELGA, "arma": ESPADA})]),
+        [("attack", {"alvo": ELGA, "arma": ESPADA})],
         ask=lambda _s, _u: "99")   # spec 043: a nota vem do mundo; 99 grampeia em 10
     check("juizo.nota grampeia a nota fora de 0-10 (spec 043)",
           r_clamp["attack_ops"][0]["vantagem"] == 10)

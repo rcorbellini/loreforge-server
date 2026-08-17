@@ -36,6 +36,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 import validator  # noqa: E402
 
 FAILS = []
@@ -175,60 +176,47 @@ check("US2: memória sem 'domain' ainda grava (executor tem fallback), "
       "tool (T008), testada abaixo via manifest/handler",
       last_domain(ELGA) == "nenhuma")
 
-# 4a) a rejeição estrutural de verdade acontece no HANDLER da tool
-# (arbiter.resolve_with_tools), antes de a op chegar à fila — testado
-# chamando o dispatch de tool diretamente via um loop roteirizado.
-def _capture_loop(script, results):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            results.append(result)
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
+# 4a) a rejeição estrutural de verdade acontece no HANDLER da tool (dentro de
+# `ctx.execute`, o mesmo usado por `resolver_proposta`), antes de a op chegar
+# à fila — testado chamando o dispatch de tool diretamente via um roteiro.
 ctx_tor = motor.get_context(TOR)
 intent_base = {"action": "registra uma lembrança", "target": ELGA,
                "utterance": None, "movement": None, "note": ""}
 
 res_sem_domain = []
-arbiter.resolve_with_tools(intent_base, ctx_tor, _capture_loop([
+selftest_helpers.resolve_scripted(intent_base, ctx_tor, [
     ("create_memory", {"target": ELGA, "content": "teste", "intensity": "small",
                         "ttl_seconds": 3600}),
-], res_sem_domain))
+], captured=res_sem_domain)
 check("US2: create_memory sem 'domain' é rejeitado na fronteira da tool",
       res_sem_domain and res_sem_domain[0].get("ok") is False
       and res_sem_domain[0].get("campo") == "domain", str(res_sem_domain))
 
 res_domain_invalido = []
-arbiter.resolve_with_tools(intent_base, ctx_tor, _capture_loop([
+selftest_helpers.resolve_scripted(intent_base, ctx_tor, [
     ("create_memory", {"target": ELGA, "content": "teste", "intensity": "small",
                         "ttl_seconds": 3600, "domain": "alquimia"}),
-], res_domain_invalido))
+], captured=res_domain_invalido)
 check("US2: create_memory com 'domain' fora do enum é rejeitado",
       res_domain_invalido and res_domain_invalido[0].get("ok") is False
       and res_domain_invalido[0].get("campo") == "domain", str(res_domain_invalido))
 
 n_elga_antes = len(memories(ELGA))
 res_nenhuma = []
-arbiter.resolve_with_tools(intent_base, ctx_tor, _capture_loop([
+selftest_helpers.resolve_scripted(intent_base, ctx_tor, [
     ("create_memory", {"target": ELGA, "content": "um momento qualquer, sem prática nenhuma",
                         "intensity": "small", "ttl_seconds": 3600, "domain": "nenhuma"}),
-], res_nenhuma))
+], captured=res_nenhuma)
 check("US2: create_memory com domain='nenhuma' é ACEITO (resposta válida, não erro)",
       res_nenhuma and res_nenhuma[0].get("ok") is True, str(res_nenhuma))
 check("US2: a memória com domain='nenhuma' nasce de verdade",
       len(memories(ELGA)) == n_elga_antes + 1 and last_domain(ELGA) == "nenhuma")
 
 res_domain_real = []
-arbiter.resolve_with_tools(intent_base, ctx_tor, _capture_loop([
+selftest_helpers.resolve_scripted(intent_base, ctx_tor, [
     ("create_memory", {"target": ELGA, "content": "vi Torvin martelar até tarde, aprendendo o ofício",
                         "intensity": "medium", "ttl_seconds": 3600, "domain": "crime"}),
-], res_domain_real))
+], captured=res_domain_real)
 check("US2: create_memory com domain válido é aceito e grava o domínio certo",
       res_domain_real and res_domain_real[0].get("ok") is True
       and last_domain(ELGA) == "crime", str(res_domain_real))

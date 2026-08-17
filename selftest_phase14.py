@@ -23,7 +23,6 @@ Uso:  python3 server/selftest_phase14.py
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import sys
@@ -41,6 +40,7 @@ sys.path.insert(0, str(SERVER_DIR))
 import app as server_app  # noqa: E402
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -149,14 +149,6 @@ def digital() -> str:
         h.update(str(p.relative_to(motor.WORLD_DIR)).encode())
         h.update(p.read_bytes())
     return h.hexdigest()
-
-
-def scripted_loop(calls):
-    def loop_fn(system, user, tools, execute, max_calls):
-        for name, args in calls:
-            execute(name, args)
-        return {"stopped": "limit", "text": None, "calls": len(calls)}
-    return loop_fn
 
 
 try:
@@ -384,25 +376,21 @@ try:
           and ANEL not in tools["trade"]["parameters"]["properties"]["quero"]["items"]["enum"],
           str(tools.get("buy", {}).get("parameters", {})))
 
-    r_self = arbiter.resolve_with_tools(
+    r_self = selftest_helpers.resolve_scripted(
         {"action": "negocia consigo"}, ctx,
-        scripted_loop([("buy", {"parceiro": TORVIN, "pagamento": MOEDAS,
-                                "mercadoria": [FRASCO]})]))
+        [("buy", {"parceiro": TORVIN, "pagamento": MOEDAS, "mercadoria": [FRASCO]})])
     check("guarda: parceiro == ator é recusado", not (r_self.get("trade_ops") or []))
 
-    r_dup = arbiter.resolve_with_tools(
+    r_dup = selftest_helpers.resolve_scripted(
         {"action": "negocia duas vezes"}, ctx,
-        scripted_loop([("buy", {"parceiro": ELGA, "pagamento": MOEDAS,
-                                "mercadoria": [FRASCO]}),
-                       ("buy", {"parceiro": ELGA, "pagamento": MOEDAS,
-                                "mercadoria": [FRASCO]})]))
+        [("buy", {"parceiro": ELGA, "pagamento": MOEDAS, "mercadoria": [FRASCO]}),
+         ("buy", {"parceiro": ELGA, "pagamento": MOEDAS, "mercadoria": [FRASCO]})])
     check("guarda: segunda negociação com o mesmo parceiro é ignorada",
           len(r_dup.get("trade_ops") or []) == 1)
 
-    r_anel = arbiter.resolve_with_tools(
+    r_anel = selftest_helpers.resolve_scripted(
         {"action": "compra o anel"}, ctx,
-        scripted_loop([("buy", {"parceiro": ELGA, "pagamento": MOEDAS,
-                                "mercadoria": [ANEL]})]))
+        [("buy", {"parceiro": ELGA, "pagamento": MOEDAS, "mercadoria": [ANEL]})])
     check("guarda: o intocável é barrado já no Árbitro",
           not (r_anel.get("trade_ops") or []))
 
@@ -459,48 +447,23 @@ try:
           and FRASCO in tools2["buy"]["parameters"]["properties"]["mercadoria"]["items"]["enum"])
     check("ask_wares está no manifest", "ask_wares" in tools2)
 
-    r_ask = arbiter.resolve_with_tools(
+    r_ask = selftest_helpers.resolve_scripted(
         {"action": "pergunta o que ela vende"}, ctx2,
-        scripted_loop([("ask_wares", {"parceiro": ELGA})]))
+        [("ask_wares", {"parceiro": ELGA})])
     check("perguntar devolve a lista para A Mente narrar",
           r_ask.get("wares") and FRASCO in
           [i["id"] for i in r_ask["wares"][0]["a_venda"]], str(r_ask.get("wares")))
 
-    print("\n--- Guarda de prosa: JSON descrito não é ato ------------------------")
-
-    _ctx_g = motor.get_context(TORVIN)
-    _por_nome = {t["name"]: t for t in arbiter.build_tools(_ctx_g)}
-
-    def _extrai(texto):
-        """Espelha a extração da guarda, para testá-la sem chamar o modelo."""
-        achados = []
-        for obj in arbiter._json_objects(texto):
-            if not isinstance(obj, dict) or not obj.get("name"):
-                continue
-            spec = _por_nome.get(obj["name"])
-            if spec is None:
-                continue
-            args = obj.get("parameters")
-            if not isinstance(args, dict):
-                args = obj.get("arguments")
-            if not isinstance(args, dict):
-                args = {}
-            if [k for k in (spec["parameters"].get("required") or []) if k not in args]:
-                continue
-            achados.append((obj["name"], args))
-        return achados
-
-    # o caso real: o modelo escreveu prosa com um JSON de unequip, e a guarda
-    # largou o gibão de um personagem no chão da praça quando o jogador só
-    # queria perguntar o que o mascate tinha para trocar
-    check("tool fora do manifest NÃO vira ato",
-          _extrai('poderia usar {"name": "teleportar", "parameters": {"x": 1}}') == [])
-    check("menção SEM os parâmetros obrigatórios NÃO vira ato",
-          _extrai('eu poderia {"name": "drop"} se quisesse') == [],
-          str(_extrai('eu poderia {"name": "drop"} se quisesse')))
-    _ok = _extrai('{"name": "ask_wares", "parameters": {"parceiro": "%s"}}' % ELGA)
-    check("chamada COMPLETA e no manifest continua sendo executada",
-          any(n == "ask_wares" for n, _ in _ok), str(_ok))
+    # spec 045: a seção "Guarda de prosa: JSON descrito não é ato" morava aqui —
+    # espelhava a guarda que `arbiter.resolve_with_tools` aplicava quando o
+    # modelo DESCREVIA tool calls em prosa em vez de chamá-las nativamente
+    # (nome tem de estar no manifest do turno + todos os parâmetros
+    # obrigatórios presentes). Essa guarda inteira saiu com o Fluxo B — o
+    # caminho único (MCP/tools nativas) não tem branch de "texto em vez de
+    # tool_call" a proteger. `arbiter._json_objects` continua existindo (serve
+    # a `normalize()`, ainda testado por selftest_phase1/2), mas ninguém mais
+    # usa essa combinação específica pra decidir se uma menção em prosa vira
+    # ato.
 
     print()
     if FAILS:

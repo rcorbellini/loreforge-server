@@ -43,6 +43,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 TAVERNA = "taverna-do-gancho"
@@ -277,34 +278,22 @@ check("manifest: 'dormir' está sempre disponível, sem parâmetros",
       tool_dormir is not None and tool_dormir["parameters"]["properties"] == {})
 
 
-def _scripted_loop(script):
-    def loop_fn(system, user, tools, execute, max_calls):
-        calls = 0
-        for name, args in script:
-            calls += 1
-            result, done = execute(name, args)
-            if done or calls >= max_calls:
-                return {"stopped": "narrate", "text": None, "calls": calls}
-        return {"stopped": "limit", "text": None, "calls": calls}
-    return loop_fn
-
-
 intent_dormir = {"action": "descansa", "target": None, "utterance": None,
                  "movement": None, "note": ""}
-arbiter.resolve_with_tools(intent_dormir, ctx_tor, _scripted_loop([
+selftest_helpers.resolve_scripted(intent_dormir, ctx_tor, [
     ("sleep", {}),
     ("narrate", {"narrative_hint": "descansa"}),
-]))
+])
 check("caminho vivo: 'dormir' via tool-calling inicia o descanso (spec 031)",
       _descansando_desde_p32(TOR) is not None)
 _backdate_p32(TOR, 8 * 3600 + 60)
 ctx_tor2 = motor.get_context(TOR)
 # item 50: acordar é `wake_up`, capacidade própria — não mais a 2ª chamada de
 # `sleep`. Chamar `sleep` aqui passaria a ser RECUSADO (`ja_dormindo`).
-arbiter.resolve_with_tools(intent_dormir, ctx_tor2, _scripted_loop([
+selftest_helpers.resolve_scripted(intent_dormir, ctx_tor2, [
     ("wake_up", {}),
     ("narrate", {"narrative_hint": "acorda"}),
-]))
+])
 check("caminho vivo: 'wake_up' via tool-calling acorda e zera a fadiga de verdade",
       fadiga_de(TOR)[0] == 0, str(fadiga_de(TOR)))
 

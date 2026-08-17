@@ -44,6 +44,7 @@ import app as server_app  # noqa: E402
 server_app.CONFIG["server"]["stream"] = True  # testa o STREAMING, indep. do config local
 import arbiter  # noqa: E402
 import motor  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 
@@ -153,14 +154,6 @@ def bring_back(cid) -> None:
     fm.pop("transit", None)
     motor.write_doc(child / "character.md", fm, body)
     os.replace(child, motor.WORLD_DIR / TAVERNA_ID / cid)
-
-
-def scripted_loop(calls):
-    def loop_fn(system, user, tools, execute, max_calls):
-        for name, args in calls:
-            execute(name, args)
-        return {"stopped": "limit", "text": None, "calls": len(calls)}
-    return loop_fn
 
 
 try:
@@ -376,25 +369,24 @@ try:
     # spec 020: resolve_with_tools APLICA por-op (fase única); carry rola (disputa)
     # e move ATOR e ALVO — injeta-se dado válido e devolvem-se ambos à cena.
     force_roll(15)
-    r_self = arbiter.resolve_with_tools(
+    r_self = selftest_helpers.resolve_scripted(
         {"action": "carried_item_ids a si mesmo"}, ctx,
-        scripted_loop([("carry", {"alvo": TORVIN, "rota": ROTA})]))
+        [("carry", {"alvo": TORVIN, "rota": ROTA})])
     check("guarda: alvo == ator é recusado", not (r_self.get("carry_ops") or []))
 
-    r_dup = arbiter.resolve_with_tools(
+    r_dup = selftest_helpers.resolve_scripted(
         {"action": "carried_item_ids duas vezes"}, ctx,
-        scripted_loop([("carry", {"alvo": ELGA, "rota": ROTA}),
-                       ("carry", {"alvo": ELGA, "rota": ROTA})]))
+        [("carry", {"alvo": ELGA, "rota": ROTA}),
+         ("carry", {"alvo": ELGA, "rota": ROTA})])
     check("guarda: segunda tentativa no mesmo alvo é ignorada",
           len(r_dup.get("carry_ops") or []) == 1)
     bring_back(TORVIN); bring_back(ELGA)  # o carry moveu os dois
 
     knock_down(ELGA)
     ctx_caida = motor.get_context(TORVIN)
-    r_pers = arbiter.resolve_with_tools(
+    r_pers = selftest_helpers.resolve_scripted(
         {"action": "convence a caída"}, ctx_caida,
-        scripted_loop([("persuade", {"personagem": ELGA, "rota": ROTA,
-                                     "vontade": 10})]))
+        [("persuade", {"personagem": ELGA, "rota": ROTA, "vontade": 10})])
     check("guarda: persuade recusa alvo caído já no Árbitro",
           not (r_pers.get("persuade_ops") or []))
 
@@ -420,74 +412,27 @@ try:
     # --- gente não é item: a guarda redireciona para carry -------------------- #
     stand_up(ELGA)
     ctx_p = motor.get_context(TORVIN)
-    r_take = arbiter.resolve_with_tools(
+    r_take = selftest_helpers.resolve_scripted(
         {"action": "pega Elga no colo"}, ctx_p,
-        scripted_loop([("take", {"item": ELGA})]))
+        [("take", {"item": ELGA})])
     check("guarda: `take` num personagem não vira transferência de item",
           not (r_take.get("item_transfers") or []))
 
-    # --- o deslocamento não contorna mais o Árbitro --------------------------- #
-    # Havia um atalho em _handle_act que resolvia `intent.movement.enter_route`
-    # direto no Motor. Ele descartava o resto da intenção: "carried_item_ids o Coppo e vai
-    # pela ladeira" virava caminhada solitária, porque `carry` nunca era oferecida.
-    # Este teste trava a remoção — uma intenção COM movement tem de chegar ao
-    # Árbitro (e uma de personagem caído continua barrada ANTES dele).
-    import threading  # noqa: E402
-    import urllib.request  # noqa: E402
-    from http.server import ThreadingHTTPServer  # noqa: E402
-
-    def post_act(port, payload):
-        # spec 022: /api/act responde em STREAM NDJSON; o desfecho é o `outcome` do
-        # evento `done` (idêntico ao corpo único de antes).
-        req = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/act",
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=10) as r:
-            outcome = {}
-            for line in r.read().decode("utf-8").splitlines():
-                line = line.strip()
-                if line:
-                    ev = json.loads(line)
-                    if ev.get("ev") == "done":
-                        outcome = ev.get("outcome") or {}
-            return outcome
-
-    consultado = {"n": 0}
-
-    def _spy(*a, **kw):
-        consultado["n"] += 1
-        raise AssertionError("Árbitro consultado (esperado)")
-
-    stand_up(ELGA); stand_up(TORVIN)
-    _real = server_app.resolve_action
-    server_app.resolve_action = _spy
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server_app.Handler)
-    porta = httpd.server_address[1]
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    try:
-        try:
-            post_act(porta, {"character_id": TORVIN,
-                             "intent": {"action": "carried_item_ids Elga e parte",
-                                        "target": ELGA,
-                                        "movement": {"enter_route": ROTA}}})
-        except Exception:
-            pass
-        check("intenção COM movement agora chega ao Árbitro (atalho removido)",
-              consultado["n"] == 1, f"consultas={consultado['n']}")
-
-        knock_down(TORVIN)
-        antes = consultado["n"]
-        r_caido = post_act(porta, {
-            "character_id": TORVIN,
-            "intent": {"action": "parte", "movement": {"enter_route": ROTA}}})
-        check("caído com movement segue barrado ANTES do Árbitro",
-              consultado["n"] == antes and r_caido.get("failed_effects")
-              and not r_caido.get("applied"))
-    finally:
-        httpd.shutdown()
-        server_app.resolve_action = _real
-        stand_up(TORVIN)
+    # --- o deslocamento não contorna mais o Árbitro (HISTÓRICO) --------------- #
+    # Este teste guardava um atalho em `_handle_act` que resolvia
+    # `intent.movement.enter_route` direto no Motor, ignorando o resto da
+    # intenção livre (`{"action": ..., "target": ..., "movement": {...}}`).
+    #
+    # Spec 045 aposentou `/api/act` e o modelo de intenção livre inteiro — no
+    # guichê único (`resolver_proposta`) não existe "uma intenção com um campo
+    # movement embutido": `enter_route` é só mais uma capacidade nomeada, sem
+    # atalho nenhum pra burlar (TODA capacidade passa pelo MESMO guard antes do
+    # Árbitro — ver `resolver_proposta`, `app.py`). O bug que este teste travava
+    # não tem mais como existir na forma antiga; a parte que ainda importa —
+    # "personagem caído com `enter_route` continua barrado ANTES do Árbitro" —
+    # já está coberta em `selftest_phase11.py` ("caído: enter_route também é
+    # abortado pela mesma guarda"), contra o guichê único de verdade.
+    stand_up(TORVIN)
 
     print()
     if FAILS:

@@ -1,6 +1,6 @@
 """Auto-teste da Fase 23 — Turno de fase única (spec 020).
 
-Dirige o `resolve_with_tools` com loops roteirizados e prova o que a fase única
+Dirige `selftest_helpers.resolve_scripted` com roteiros e prova o que a fase única
 entrega: a ORDEM das chamadas é a sequência do mundo, e a próxima tool lê o que a
 anterior mudou. Cobre:
   - atacar→pedir vs pedir→atacar: a ordem muda o que o informante lembra (US1)
@@ -27,6 +27,7 @@ os.environ["LOREFORGE_LOG"] = "0"
 sys.path.insert(0, str(SERVER_DIR))
 import motor  # noqa: E402
 import arbiter  # noqa: E402
+import selftest_helpers  # noqa: E402
 
 FAILS = []
 TOR = "torvin-ferreiro"
@@ -46,20 +47,18 @@ def limpa_memorias(cid):
             p.unlink()
 
 
-def loop(script):
-    """Loop roteirizado que CAPTURA o retorno de cada tool (para inspecionar o que
-    a tool seguinte enxergou)."""
-    capt = {}
-
-    def f(_s, _u, _t, execute, _mx):
-        for n, a in script:
-            r, done = execute(n, a)
-            capt.setdefault(n, []).append(r)
-            if done:
-                break
-        return {"stopped": "narrate", "text": None, "calls": len(script)}
-    f.capt = capt
-    return f
+def rodar(action, script):
+    """Roda o roteiro via selftest_helpers e devolve (outcome, por_nome), onde
+    por_nome[nome] é a lista de retornos daquele nome, na ordem — mesma forma
+    que o antigo `loop(script).capt` oferecia, para inspecionar o que uma tool
+    seguinte enxergou do que a anterior mudou."""
+    captured = []
+    outcome = selftest_helpers.resolve_scripted(
+        {"action": action}, motor.get_context(TOR), script, captured=captured)
+    por_nome = {}
+    for (n, _a), r in zip(script, captured):
+        por_nome.setdefault(n, []).append(r)
+    return outcome, por_nome
 
 
 motor._roll_d20 = lambda: 18  # golpes/rolagens fortes por padrão
@@ -68,11 +67,11 @@ print("--- US1: a ORDEM das chamadas é a sequência do mundo ------------------
 
 # atacar → pedir: o pedido vê o golpe do MESMO turno
 limpa_memorias(ELGA)
-lp = loop([("attack", {"alvo": ELGA, "vantagem": 5}),
-           ("ask_directions", {"quem": ELGA, "disposicao": 9}),
-           ("narrate", {"narrative_hint": "golpeia e pergunta"})])
-arbiter.resolve_with_tools({"action": "golpeia e pergunta"}, motor.get_context(TOR), lp)
-ask_ret = (lp.capt.get("ask_directions") or [{}])[0]
+_, por_nome = rodar("golpeia e pergunta", [
+    ("attack", {"alvo": ELGA, "vantagem": 5}),
+    ("ask_directions", {"quem": ELGA, "disposicao": 9}),
+    ("narrate", {"narrative_hint": "golpeia e pergunta"})])
+ask_ret = (por_nome.get("ask_directions") or [{}])[0]
 lembra = ask_ret.get("lembra_de_voce") or []
 check("atacar→pedir: o informante JÁ lembra do golpe no mesmo turno",
       any("golpeou" in (m.get("content") or "").lower() for m in lembra), str(lembra)[:120])
@@ -81,11 +80,11 @@ check("atacar→pedir: o afeto do informante já pesa contra quem golpeou",
 
 # pedir → atacar: no momento do pedido NÃO havia golpe (a ordem inverte o efeito)
 limpa_memorias(ELGA)
-lp2 = loop([("ask_directions", {"quem": ELGA}),
-            ("attack", {"alvo": ELGA, "vantagem": 5}),
-            ("narrate", {"narrative_hint": "pergunta e golpeia"})])
-arbiter.resolve_with_tools({"action": "pergunta e golpeia"}, motor.get_context(TOR), lp2)
-ask_ret2 = (lp2.capt.get("ask_directions") or [{}])[0]
+_, por_nome2 = rodar("pergunta e golpeia", [
+    ("ask_directions", {"quem": ELGA}),
+    ("attack", {"alvo": ELGA, "vantagem": 5}),
+    ("narrate", {"narrative_hint": "pergunta e golpeia"})])
+ask_ret2 = (por_nome2.get("ask_directions") or [{}])[0]
 check("pedir→atacar: no pedido NÃO havia golpe (a ordem decidiu)",
       not (ask_ret2.get("lembra_de_voce") or [])
       and ask_ret2.get("saldo_afeto") != "guarda mágoa",
@@ -110,18 +109,18 @@ print("\n--- US1: presente aplicado por-op cria afeto no mesmo turno (benigno) -
 # Torvin entrega a bolsa (que ele já tem) à Elga; o afeto dela por ele sobe NO ATO
 # — é isto que uma persuasão seguinte no mesmo turno leria (spec 016 via 020).
 limpa_memorias(ELGA)
-lp3 = loop([("give", {"item": "bolsa-de-couro", "to": ELGA}),
-            ("narrate", {"narrative_hint": "entrega a bolsa"})])
-arbiter.resolve_with_tools({"action": "entrega a bolsa à Elga"}, motor.get_context(TOR), lp3)
+rodar("entrega a bolsa à Elga", [
+    ("give", {"item": "bolsa-de-couro", "to": ELGA}),
+    ("narrate", {"narrative_hint": "entrega a bolsa"})])
 check("presente aplicado por-op: o afeto da Elga por Torvin já é positivo no turno",
       motor.sentiment_toward(ELGA, TOR) > 0, f"{motor.sentiment_toward(ELGA, TOR):+.2f}")
 
 print("\n--- US2: o feito É o aplicado (a tool muta no ato) ----------------------")
 
 tav = motor.WORLD_DIR / "taverna-do-gancho"
-lp4 = loop([("take", {"item": "calca-de-linho"}),
-            ("narrate", {"narrative_hint": "pega a calça"})])
-out4 = arbiter.resolve_with_tools({"action": "pega a calça"}, motor.get_context(TOR), lp4)
+out4, _ = rodar("pega a calça", [
+    ("take", {"item": "calca-de-linho"}),
+    ("narrate", {"narrative_hint": "pega a calça"})])
 check("a tool aplicou nos ARQUIVOS no ato (calça saiu do chão para o Torvin)",
       not (tav / "calca-de-linho").exists()
       and (motor.find_character_folder(TOR) / "calca-de-linho").exists())
@@ -132,10 +131,10 @@ check("o outcome já vem aplicado (item_transfers_applied), não uma fila a apli
 print("\n--- US2: resposta coerente com a mistura sucesso+falha (FR-013) ---------")
 
 # 1ª tool aplica (mutate mood), 2ª falha (item inexistente) — a resposta reflete AMBOS
-lp5 = loop([("mutate", {"target": TOR, "path": "status.mood", "value": "alerta"}),
-            ("take", {"item": "machado-fantasma"}),
-            ("narrate", {"narrative_hint": "fica alerta, erra o machado"})])
-out5 = arbiter.resolve_with_tools({"action": "muta e erra"}, motor.get_context(TOR), lp5)
+out5, _ = rodar("muta e erra", [
+    ("mutate", {"target": TOR, "path": "status.mood", "value": "alerta"}),
+    ("take", {"item": "machado-fantasma"}),
+    ("narrate", {"narrative_hint": "fica alerta, erra o machado"})])
 tor5, _ = motor.read_doc(motor.find_character_folder(TOR) / "character.md")
 sucesso = (tor5.get("status") or {}).get("mood") == "alerta"
 falha = any(r.get("item") == "machado-fantasma"
@@ -148,9 +147,9 @@ check("a falha NÃO desfez o sucesso (o mundo ficou coerente com a mistura, FR-0
 
 print("\n--- SC-004: turno de uma tool só — desfecho esperado --------------------")
 
-lp6 = loop([("mutate", {"target": TOR, "path": "status.mood", "value": "sereno"}),
-            ("narrate", {"narrative_hint": "respira fundo"})])
-out6 = arbiter.resolve_with_tools({"action": "respira"}, motor.get_context(TOR), lp6)
+rodar("respira", [
+    ("mutate", {"target": TOR, "path": "status.mood", "value": "sereno"}),
+    ("narrate", {"narrative_hint": "respira fundo"})])
 tor_fm, _ = motor.read_doc(motor.find_character_folder(TOR) / "character.md")
 check("mutate de uma tool aplicou (mood=sereno) e nada mais mudou de sujeito",
       (tor_fm.get("status") or {}).get("mood") == "sereno")
@@ -176,10 +175,10 @@ _antes_fad = (motor.read_doc(motor.find_character_folder(TOR) / "character.md")[
               .get("status") or {}).get("fatigue")
 for _c in _ensinaveis:
     motor._remember_route(motor.find_character_folder(TOR), _c["rota"], _c["nome"])
-_lp53 = loop([("ask_directions", {"quem": ELGA, "disposicao": 9}),
-              ("narrate", {"narrative_hint": "ia perguntar"})])
-arbiter.resolve_with_tools({"action": "pergunta o caminho"}, motor.get_context(TOR), _lp53)
-_r53 = (_lp53.capt.get("ask_directions") or [{}])[0]
+_, _por_nome53 = rodar("pergunta o caminho", [
+    ("ask_directions", {"quem": ELGA, "disposicao": 9}),
+    ("narrate", {"narrative_hint": "ia perguntar"})])
+_r53 = (_por_nome53.get("ask_directions") or [{}])[0]
 check("53.5: sabendo TODOS os caminhos dele, a pergunta não acontece",
       _r53.get("ok") is False and "já sabe" in (_r53.get("erro") or ""), str(_r53)[:150])
 _depois_fad = (motor.read_doc(motor.find_character_folder(TOR) / "character.md")[0]
@@ -192,10 +191,10 @@ for _p in _folder.glob("*.md"):
     _fm, _b = motor.read_doc(_p)
     if motor.memory_kind(_fm) == motor.ROTA:
         _p.unlink()
-_lp53b = loop([("ask_directions", {"quem": ELGA, "disposicao": 9}),
-               ("narrate", {"narrative_hint": "pergunta"})])
-arbiter.resolve_with_tools({"action": "pergunta"}, motor.get_context(TOR), _lp53b)
-_r53b = (_lp53b.capt.get("ask_directions") or [{}])[0]
+_, _por_nome53b = rodar("pergunta", [
+    ("ask_directions", {"quem": ELGA, "disposicao": 9}),
+    ("narrate", {"narrative_hint": "pergunta"})])
+_r53b = (_por_nome53b.get("ask_directions") or [{}])[0]
 check("53.5: sem saber os caminhos, a pergunta acontece normalmente",
       _r53b.get("ok") is True, str(_r53b)[:150])
 

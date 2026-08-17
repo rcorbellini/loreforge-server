@@ -1,0 +1,16 @@
+{
+  "_comment": "Árbitro no OpenRouter (API compatível com OpenAI). Copie para config.server.json e preencha api_key (openrouter.ai/keys). Use o id COMPLETO do modelo (ex.: poolside/laguna-m.1:free). Esse arquivo é do SERVER — a chave aqui é do próprio server (secreta, gitignorada) e não tem relação com a chave d'A Mente, que vive só no navegador do player. Alternativa à api_key: exportar OPENROUTER_API_KEY no ambiente. tool_calling 'auto' degrada sozinho para o modo clássico se o modelo não suportar tools. server.stream: true = turno em STREAM (progresso ao vivo); false = JSON único (Content-Length), mais confiável atrás de proxy que reseta conexão longa (ngrok).",
+  "arbiter": {
+    "runtime": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "model": "poolside/laguna-m.1:free",
+    "api_key": "sk-or-...",
+    "temperature": 0.2,
+    "max_tokens": 2048,
+    "tool_calling": "auto",
+    "max_tool_calls": 8
+  },
+  "server": {
+    "stream": true
+  }
+}

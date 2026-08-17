@@ -1,0 +1,1499 @@
+"""O Árbitro — resolve a intenção contra o estado real e as regras do mundo.
+
+Recebe a intenção estruturada (vinda d'A Mente, client-side) e o proximity_context,
+monta um prompt, chama o modelo do server e devolve uma resolução estruturada:
+
+    {
+      "narrative_hint": "<o que de fato aconteceu, in-world, curto>",
+      "mutations": [ {"target": "<char-id>", "path": "status.<campo>",
+                      "value": <novo valor>, "reason": "<por quê>"} ],
+      "memories": []   # Phase 3
+    }
+
+O Árbitro NUNCA escreve arquivos — quem aplica é o Motor. Aqui só se decide.
+O `model_fn(system, user) -> str` é injetável (facilita teste sem Ollama).
+"""
+
+from __future__ import annotations
+
+import json
+import types
+
+import arbiter_tools
+import devlog
+import motor
+import validator
+from llm import LLMError
+
+# Régua canônica da vontade (spec 007, FR-002a): SEMPRE a mesma escala, lida do ALVO
+# (corpo/personalidade, memórias, humor/ação, relação com quem pede e com o destino) —
+# nunca do interesse de quem persuade. A nota é segredo do mundo: jamais na narrativa.
+# (spec 020) SYSTEM_PROMPT, build_user_prompt e resolve() — o caminho clássico
+# do Árbitro SEM tool-calling — foram removidos: runtime sem tools deixou de ser
+# suportado (FR-011). `normalize` permanece (parseia prosa no loop de tools).
+
+
+def _pertence_a(node: dict | None) -> dict | None:
+    """spec 035: traduz a estrutura recursiva `location.pertence_a` (do Motor,
+    já na forma final — mais próximo primeiro, cada nível apontando de novo
+    pra `pertence_a` de quem o contém, MESMA chave em todo nível) pro
+    vocabulário do prompt do Árbitro. Só renomeia campos; a forma aninhada em
+    si não muda."""
+    if not node:
+        return None
+    return {
+        "nome": node.get("name"),
+        "descricao": node.get("narrative"),
+        "pertence_a": _pertence_a(node.get("pertence_a")),
+    }
+
+
+def _context_for_prompt(context: dict) -> dict:
+    self_ = context.get("self", {})
+    # destinos alcançáveis daqui, para medir o afeto de cada alvo por eles (spec 016)
+    destinos = [(r.get("destination_id"), r.get("destination_name"))
+                for r in context.get("routes", []) if r.get("destination_id")]
+    present = []
+    for c in context.get("characters_present", []):
+        if c.get("id") == self_.get("id"):
+            continue
+        # afeto do ALVO por cada destino reachable_entities — insumo da vontade de ser
+        # convencido a ir (spec 016). Só o que PESA entra, para não virar ruído;
+        # o número morre no server, sai só o rótulo. Segredo do mundo.
+        afeto_lugares = {}
+        for dest_id, dest_nome in destinos:
+            saldo = motor.sentiment_toward(c.get("id"), dest_id)
+            if abs(saldo) >= 2:
+                afeto_lugares[dest_nome or dest_id] = motor.sentiment_label(saldo)
+        entry = {
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "action": c.get("action"),
+            "mood": c.get("mood"),
+            "conditions": c.get("conditions"),
+            "carried_item_ids": c.get("carrying") or [],
+            "fisico": c.get("fisico"),
+        }
+        if afeto_lugares:
+            entry["afeto_por_lugar"] = afeto_lugares
+        # como ESTE presente se sente a respeito de QUEM AGE (spec 016): insumo
+        # da necessidade numa troca (detesta = cobra mais), e cor para a narração.
+        # Só quando pesa; número morre no server, sai só o rótulo. Segredo do mundo.
+        if self_.get("id"):
+            saldo_voce = motor.sentiment_toward(c.get("id"), self_.get("id"))
+            if abs(saldo_voce) >= 2:
+                entry["afeto_por_voce"] = motor.sentiment_label(saldo_voce)
+        present.append(entry)
+    rotas = [
+        {"id": r.get("id"), "name": r.get("name"), "para": r.get("destination_name")}
+        for r in context.get("routes", [])
+    ]
+    # objects/items presentes, com interactions consultivas quando declaradas (spec 002)
+    # e a física de cada item (spec 004): tamanho, peso, onde veste, o que guarda.
+    objetos = [
+        {"id": o.get("id"), "name": o.get("name"), "interactions": o.get("interactions"),
+         "contem": o.get("contains")}
+        for o in context.get("objects_present", [])
+    ]
+    itens = [
+        {"id": it.get("id"), "name": it.get("name"),
+         "interactions": it.get("interactions"),
+         "tamanho": it.get("size"), "peso_kg": it.get("weight_kg"),
+         "veste_em": it.get("veste_em"), "guarda": it.get("container")}
+        for it in context.get("items_present", [])
+    ]
+    return {
+        "location": {
+            "id": context.get("location", {}).get("id"),
+            "name": context.get("location", {}).get("name"),
+            "descricao": context.get("location", {}).get("narrative"),
+            # spec 035: a location que contém o lugar atual, estrutura aninhada
+            # (mais próxima primeiro, mesma chave "pertence_a" se repetindo pra
+            # quem a contém) — mesma forma do que vai pra A Mente (client/mente.js).
+            # Aqui é só GROUND TRUTH de contexto pra julgar a cena (ex.: o que é
+            # plausível num porto vs. numa vila do interior) — o Árbitro não
+            # narra atmosfera com isso; "narrate" continua exigindo resumo
+            # curto e factual, a evocação fica inteira com A Mente.
+            "pertence_a": _pertence_a(context.get("location", {}).get("pertence_a")),
+            "em_transito": context.get("in_transit", False),
+        },
+        "personagem_que_age": {
+            "id": self_.get("id"),
+            "name": self_.get("name"),
+            "attributes": self_.get("attributes"),
+            "skills": self_.get("skills"),
+            "status": self_.get("status"),
+            "personalidade": self_.get("body"),
+            "inventario": self_.get("inventory") or [],
+            "fisico": self_.get("fisico"),
+        },
+        "outros_presentes": present,
+        "rotas_disponiveis": rotas,
+        "objetos_presentes": objetos,
+        "itens_presentes": itens,
+    }
+
+
+def normalize(raw: str | dict) -> dict:
+    """Parseia e normaliza a resolução do modelo, tolerando pequenas variações."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        data = _loads_lenient(raw)
+
+    mutations = []
+    for m in data.get("mutations") or []:
+        if not isinstance(m, dict):
+            continue
+        target = m.get("target")
+        path = m.get("path")
+        if not target or not path:
+            continue
+        mutations.append({
+            "target": target,
+            "path": path,
+            "value": m.get("value"),
+            "reason": m.get("reason", ""),
+        })
+
+    movement = None
+    mv = data.get("movement")
+    if isinstance(mv, dict) and mv.get("enter_route"):
+        movement = {"enter_route": mv["enter_route"]}
+
+    item_transfers = []
+    for t in data.get("item_transfers") or []:
+        if not isinstance(t, dict):
+            continue
+        item = t.get("item")
+        to = t.get("to")
+        if not item or not to:
+            continue
+        item_transfers.append({"item": item, "to": to})
+
+    memories = []
+    for m in data.get("memories") or []:
+        if not isinstance(m, dict):
+            continue
+        target = m.get("target")
+        content = (m.get("content") or "").strip()
+        if not target or not content:
+            continue
+        memories.append({
+            "target": target,
+            "content": content,
+            "summary": m.get("summary"),
+            "intensity": m.get("intensity"),
+            "ttl_seconds": m.get("ttl_seconds"),
+        })
+
+    equip_ops = []
+    for op in data.get("equip_ops") or []:
+        if not isinstance(op, dict):
+            continue
+        kind = op.get("op")
+        item = op.get("item")
+        if kind not in ("equip", "unequip") or not item:
+            continue
+        entry = {"op": kind, "item": item}
+        if kind == "unequip" and op.get("to"):
+            entry["to"] = op["to"]
+        equip_ops.append(entry)
+
+    lock_ops = []
+    for op in data.get("lock_ops") or []:
+        if not isinstance(op, dict):
+            continue
+        if op.get("op") in ("open", "close") and op.get("target"):
+            lock_ops.append({"op": op["op"], "target": op["target"]})
+
+    persuade_ops = []
+    for op in data.get("persuade_ops") or []:
+        if not isinstance(op, dict):
+            continue
+        if op.get("personagem") and op.get("rota"):
+            persuade_ops.append({"personagem": op["personagem"],
+                                 "rota": op["rota"],
+                                 "vontade": op.get("vontade")})
+
+    attack_ops = []
+    for op in data.get("attack_ops") or []:
+        if not isinstance(op, dict):
+            continue
+        if op.get("alvo") or op.get("personagem"):
+            attack_ops.append({"alvo": op.get("alvo") or op.get("personagem"),
+                               "arma": op.get("arma"),
+                               "vantagem": op.get("vantagem")})
+
+    carry_ops = []
+    for op in data.get("carry_ops") or []:
+        if isinstance(op, dict) and (op.get("alvo") or op.get("personagem")) \
+                and op.get("rota"):
+            carry_ops.append({"alvo": op.get("alvo") or op.get("personagem"),
+                              "rota": op["rota"]})
+
+    learn_ops = []
+    for op in data.get("learn_ops") or []:
+        if not isinstance(op, dict):
+            continue
+        brutas = op.get("rotas")
+        if isinstance(brutas, list) and brutas:
+            pares = []
+            for it in brutas:
+                if isinstance(it, dict) and it.get("rota"):
+                    pares.append({"rota": it["rota"],
+                                  "trecho": (it.get("trecho") or "").strip()})
+                elif isinstance(it, str):
+                    pares.append({"rota": it, "trecho": ""})
+            if pares:
+                nova = {"rotas": [p["rota"] for p in pares], "citacoes": pares}
+                # a FONTE atravessa o fallback só para não divergir do formato:
+                # sem `ask_directions` não há fala em `lido`, a citação não
+                # confere e nada é aprendido — que já é o comportamento vigente
+                # desde a spec 014 neste caminho. Ver research.md §11.
+                if op.get("fonte"):
+                    nova.update({"fonte": op["fonte"],
+                                 "disposicao": op.get("disposicao"),
+                                 "atitude": (op.get("atitude") or "").strip()})
+                learn_ops.append(nova)
+
+    travel_ops = []
+    for op in data.get("travel_ops") or []:
+        if isinstance(op, dict) and op.get("destino"):
+            travel_ops.append({"destino": op["destino"]})
+
+    trade_ops = []
+    for op in data.get("trade_ops") or []:
+        if isinstance(op, dict) and op.get("parceiro") and op.get("dou") \
+                and op.get("recebo"):
+            trade_ops.append({"modo": "buy" if op.get("modo") == "buy" else "trade",
+                              "parceiro": op["parceiro"],
+                              "dou": list(op["dou"]), "recebo": list(op["recebo"]),
+                              "necessidade": op.get("necessidade")})
+
+    # boato (spec 017): atravessa o fallback só para não divergir do formato. Sem
+    # `ask_about`/prosa em `lido`, a citação não confere e nada é gravado — como já
+    # vale desde a 014 nesse caminho.
+    hearsay_ops = []
+    for op in data.get("hearsay_ops") or []:
+        if isinstance(op, dict) and op.get("fonte") and op.get("sobre") \
+                and (op.get("trecho") or "").strip():
+            hearsay_ops.append({"fonte": op["fonte"], "sobre": op["sobre"],
+                                "trecho": op["trecho"].strip(),
+                                "disposicao": op.get("disposicao"),
+                                "atitude": (op.get("atitude") or "").strip()})
+
+    return {
+        "narrative_hint": (data.get("narrative_hint") or "").strip(),
+        "movement": movement,
+        "mutations": mutations,
+        "item_transfers": item_transfers,
+        "equip_ops": equip_ops,
+        "lock_ops": lock_ops,
+        "persuade_ops": persuade_ops,
+        "attack_ops": attack_ops,
+        "carry_ops": carry_ops,
+        "trade_ops": trade_ops,
+        "travel_ops": travel_ops,
+        "learn_ops": learn_ops,
+        "hearsay_ops": hearsay_ops,
+        "lido": [t for t in (data.get("lido") or []) if isinstance(t, str)],
+        "memories": memories,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Modo tool calling (spec 003) — manifest por cena, fila do turno, correção
+# --------------------------------------------------------------------------- #
+
+TOOLS_SYSTEM_PROMPT = """\
+Você é O Árbitro de um mundo de RPG. Sua função é decidir o que REALMENTE acontece
+quando um personagem tenta uma ação, cruzando a intenção com os atributos, as skills,
+o status atual e o contexto. Você é justo e coerente com o estado do mundo.
+
+Você age EXCLUSIVAMENTE através das ferramentas disponíveis:
+- equip: veste um item na parte do corpo que ele declara (não escolha a parte: o item
+  sabe onde acopla). Uma parte cheia precisa ser liberada antes — para TROCAR (vestir
+  no lugar de), chame unequip e depois equip no MESMO turno.
+- unequip: tira um item vestido; "to" é para onde ele vai — o próprio personagem
+  (fica na mão), um contêiner com vaga, ou o id do local (chão).
+- take: pega um item para a mão (do chão, de dentro de algo, ou da mão de alguém).
+- give: entrega um item seu na mão de outro personagem presente.
+- stow: guarda um item dentro de um contêiner ou de um objeto da cena.
+- drop: larga no chão um item que está com o personagem.
+- shove: empurra/arrasta pelo chão um item que ninguém carried_item_ids (pesado demais para
+  erguer), até um objeto ou canto da cena. Perto do limite de força o desfecho é um
+  TESTE do corpo resolvido na aplicação: pode falhar para o forte e ceder ao fraco —
+  não narre o resultado como certo; o mundo devolve o que de fato aconteceu.
+- open / close: abre ou fecha um contêiner (baú, caixa, mochila). Fechado esconde o
+  conteúdo de todos e não recebe nem entrega itens. Abrir/fechar pode exigir chaves —
+  o mundo valida na hora de aplicar e NEGA sem elas (o motivo volta na resposta final);
+  nunca narre um baú aberto que as trancas recusariam. Abrir vale já neste turno para
+  o que for revelado; fechar acontece ao fim do turno.
+- mutate: mudança de estado — status.<campo> para personagem (action, mood, hp, hunger,
+  fatigue, conditions); state.<campo> para objeto ou item (trancado, quebrado, aceso...).
+  Identidade (nome, atributos, skills) nunca muda. Uma ação pode afetar vários presentes.
+  NÃO use mutate para "atualizar a cena" campo a campo (mood, action, hunger...): o mundo
+  cuida disso sozinho. Faça a AÇÃO (uma tool) e chame `narrate` para ENCERRAR — não fique
+  repetindo mutate. Poucas chamadas por turno: aja e encerre.
+- create_memory: registra uma lembrança em UM personagem presente, na perspectiva DELE
+  (1ª pessoa). O mundo JÁ anota sozinho tudo o que acontece — você não precisa registrar
+  nada. Use só se algo que nenhum ato capturou merecer ficar (uma ameaça velada, um
+  silêncio que pesou).
+- set_intention: registra ou atualiza um COMPROMISSO de médio/longo prazo do PRÓPRIO
+  personagem — uma promessa, um plano, um objetivo que sobrevive a esta cena. Chame
+  quando a ação ESTABELECE, ATUALIZA ou ENCERRA algo assim — inclusive quando o
+  personagem resolve algo SOZINHO, sem prometer a ninguém (ele não precisa de outra
+  pessoa envolvida). O sinal não é "ele foi fazer algo" (isso pode ser só um mandado
+  do turno, que se esgota aqui); é a fala se ler como uma DECISÃO que passa a valer
+  daqui pra frente ("resolvo que...", "decido que, a partir de agora..."). NÃO é
+  para toda ação — a maioria dos turnos não precisa desta tool, e um mandado comum
+  ("vá buscar isto", "converse com aquele") não vira intenção sozinho. Para
+  atualizar/encerrar, informe intention_id e reescreva content por inteiro; sem
+  intention_id, cria uma nova.
+- enter_route: o personagem parte por um caminho (encerra o turno; o mundo resolve a viagem).
+- persuade: convence OUTRO personagem presente a partir por um caminho. Se ele se
+  deixa convencer é o MUNDO que decide — você não pontua isso.
+- persuade_give: convence o DONO (outro presente) a ENTREGAR um item dele a alguém — a
+  quem age ou a outro presente. O item é do ALVO, não seu (para dar o SEU, use give).
+  Se o dono cede é o MUNDO que decide. Quem RECEBE ganha afeto pelo DONO.
+- steal: FURTA um item de outro presente, SEM consentimento. O risco de ser notado é
+  o MUNDO que mede, pela descrição do item e pela atenção do dono — você não pontua.
+  Se FLAGRADO, o dono guarda rancor grave (como se agredido). É crime: use com
+  intenção, não por engano de "pegar".
+- attack: golpeia OUTRO personagem presente. 'arma' é um item na mão de quem age (omita
+  para desarmado). O que a cena dá ou tira ao golpe é o MUNDO que lê.
+- buy: compra itens de outro presente pagando com moedas. O mundo compara os valores.
+- trade: troca bens por bens. O quanto o parceiro precisa do que recebe é o MUNDO
+  que mede.
+- ask_directions: pergunta a OUTRO presente por onde se vai. Devolve os caminhos que
+  ELE sabe e o que ele lembra de quem pergunta. Leitura pura, não gasta o turno —
+  use ANTES de learn_routes quando quem ensina é uma pessoa.
+- ask_wares: pergunta a OUTRO presente o que ele tem À VENDA ou para TROCAR. Devolve a
+  lista — a mercadoria pode estar guardada, e ninguém adivinha o que não viu. Leitura
+  pura, não gasta o turno. É o PRIMEIRO passo do comércio: chame-a ANTES de buy/trade.
+- ask_about: pergunta a OUTRO presente o que ele sabe de ALGUÉM. Devolve os episódios que
+  ele lembra. Leitura pura — use ANTES de hear_about (registrar o que se ouviu).
+- examine: LÊ o texto descritivo de algo percebido. Leitura pura, não gasta o turno.
+- narrate: encerra o turno com o resumo curto, factual e in-world do que aconteceu.
+
+O corpo é físico: cada parte comporta um número limitado de acoplamentos (2 mãos, 10
+dedos, 1 nas demais), contêineres têm tamanho aceito e vagas, e o peso limita o que se
+carried_item_ids (menos) e o que se empurra (mais). O mundo valida tudo isso a cada chamada e
+devolve o motivo exato quando nega ("regra" + "valores") — use o motivo para corrigir
+(outro destino, tirar algo antes, empurrar em vez de carregar) ou aceite a recusa.
+
+Regras:
+- CONSULTE ANTES DE NARRAR. Quando o sussurro PERGUNTA algo — o que alguém vende ou troca,
+  o que ele sabe de fulano, por onde se chega a um lugar, o que é aquele objeto — você DEVE
+  chamar a ferramenta consultiva certa (ask_wares, ask_about, ask_directions, examine) para
+  OBTER a resposta, e só ENTÃO narrar com ela. NUNCA narre de imaginação o que não consultou:
+  narrar "o mascate mostra suas mercadorias" sem ter chamado ask_wares é inventar o que ele
+  vende. Consultar não gasta o turno — depois dela você ainda age (buy/trade) ou narra.
+- Toda ação produz consequência: no mínimo um mutate em status.action de quem agiu.
+- Se uma chamada voltar com erro e uma lista "validos", corrija usando um id EXATO da
+  lista e chame de novo. Nunca invente ids.
+- Usar a mesma ferramenta VÁRIAS vezes para alvos/itens DIFERENTES é normal e esperado
+  (pegar duas moedas, uma memória para cada testemunha, convencer duas pessoas). O que
+  é ignorado é REPETIR uma chamada já aceita — mesma ferramenta com os MESMOS
+  argumentos, ou insistir na mesma tentativa com valores "melhorados": a primeira vale.
+  Corrija apenas o que voltou com ERRO; o que foi aceito está feito, siga em frente.
+- Termine SEMPRE chamando narrate. O resumo nunca usa termos técnicos (arquivo, campo,
+  status, state, id, slot, JSON, ferramenta) e NUNCA afirma um efeito que você não
+  conseguiu aplicar com as ferramentas — o que falhou, falhou.
+"""
+
+
+def _item_entry(it: dict, porter: str | None, in_object: str | None = None) -> dict:
+    """Ficha física de um item no índice da cena (dados vindos do contexto)."""
+    return {
+        "name": it.get("name") or "",
+        "size": it.get("size") or "P",
+        "weight": it.get("weight_kg") if isinstance(it.get("weight_kg"), (int, float))
+                  else 1.0,
+        "veste_em": it.get("veste_em"),
+        "container": it.get("container"),
+        "for_sale": it.get("for_sale"),
+        "negotiable": it.get("negotiable"),
+        "currency": it.get("currency"),
+        "value": it.get("value"),
+        "slot": it.get("slot"),
+        "estado": it.get("estado"),
+        "porter": porter,
+        "in_object": in_object,
+    }
+
+
+def _scene_index(context: dict) -> dict:
+    """Índice físico da cena, derivado do proximity_context (sem consulta nova).
+
+    items: id -> ficha física + quem porta (porter). A visibilidade já vem
+    recortada do Motor: de terceiros só chega o que está acoplado ao corpo
+    (FR-009) — o índice nunca expõe o que a cena não percebe.
+    """
+    self_ = context.get("self") or {}
+    actor_id = self_.get("id")
+    fis = self_.get("fisico") or {}
+    chars, objects, items, char_fisico = {}, {}, {}, {}
+    char_conditions = {}
+    for c in context.get("characters_present", []):
+        cid = c.get("id")
+        if not cid:
+            continue
+        chars[cid] = c.get("name") or ""
+        # derrota é pública na cena (spec 008): quem caiu, caiu à vista de todos
+        char_conditions[cid] = list(c.get("conditions") or [])
+        cf = c.get("fisico") or {}
+        char_fisico[cid] = {
+            # spec 019: a capacidade de mão vem do corpo (já derivada no summary);
+            # o fallback é conservador (0), nunca o humano global.
+            "maos_livres": cf.get("maos_livres", 0),
+            "maos_totais": cf.get("maos_totais", 0),
+            "maos_ocupadas_por": list(cf.get("maos_ocupadas_por") or []),
+            "carga_livre_kg": cf.get("carga_livre_kg", float("inf")),
+        }
+        if cid != actor_id:
+            for it in c.get("carrying") or []:
+                if it.get("id"):
+                    items[it["id"]] = _item_entry(it, porter=cid)
+    if actor_id in char_fisico:
+        char_fisico[actor_id] = {
+            "maos_livres": fis.get("maos_livres", 0),
+            "maos_totais": fis.get("maos_totais", 0),
+            # spec 019: o corpo do ator (mapa slot->capacidade) — o guard de
+            # equipar precisa da capacidade de um slot QUALQUER, não só da mão.
+            "corpo": fis.get("corpo") or {},
+            "maos_ocupadas_por": list((fis.get("slots_ocupados") or {})
+                                      .get(motor.HAND_SLOT) or []),
+            "carga_livre_kg": (fis.get("capacidade_carga_kg", float("inf"))
+                               - fis.get("peso_carregado_kg", 0.0)),
+            "capacidade_empurrar_kg": fis.get("capacidade_empurrar_kg", float("inf")),
+            "slots_ocupados": {s: list(ids) for s, ids
+                               in (fis.get("slots_ocupados") or {}).items()},
+        }
+    objects_info = {}
+    for o in context.get("objects_present", []):
+        if o.get("id"):
+            objects[o["id"]] = o.get("name") or ""
+            objects_info[o["id"]] = {"fechado": bool(o.get("fechado")),
+                                     "tem_fecho": bool(o.get("tem_fecho"))}
+        for it in o.get("contains") or []:
+            if it.get("id"):
+                items[it["id"]] = _item_entry(it, porter=None, in_object=o.get("id"))
+    for it in context.get("items_present", []):
+        if it.get("id"):
+            items[it["id"]] = _item_entry(it, porter=None)
+        for sub in it.get("contains") or []:  # contêiner aberto no chão (spec 005)
+            if sub.get("id"):
+                items[sub["id"]] = _item_entry(sub, porter=None)
+    for it in self_.get("inventory") or []:
+        if it.get("id"):
+            items[it["id"]] = _item_entry(it, porter=actor_id)
+    loc = context.get("location") or {}
+    routes = {}
+    if not context.get("in_transit"):
+        for r in context.get("routes", []):
+            if r.get("id"):
+                routes[r["id"]] = f"{r.get('name') or ''} → {r.get('destination_name') or ''}"
+    return {
+        "chars": chars, "objects": objects, "objects_info": objects_info,
+        "items": items, "char_conditions": char_conditions,
+        "char_fisico": char_fisico, "actor_id": actor_id,
+        "place_id": loc.get("id"), "place_name": loc.get("name") or "",
+        "routes": routes,
+    }
+
+
+_MEMORY_INTENSITIES = ["small", "medium", "large", "giant"]
+_INTENTION_STATUSES = ["ativa", "concluida", "abandonada"]  # spec 026
+
+
+def _verb_candidates(idx: dict) -> dict:
+    """Enums por verbo (matriz tool→eixos de contracts/equip-tools.md).
+
+    A superfície é estreita por ergonomia da LLM; TODA validação real acontece no
+    pipeline único (motor.check_*), na guarda e de novo na aplicação.
+    """
+    actor = idx["actor_id"]
+    items = idx["items"]
+    hand = motor.HAND_SLOT
+
+    def worn(e):
+        return e["porter"] == actor and e["slot"] and e["slot"] != hand
+
+    return {
+        # vestíveis ao alcance do ator (soltos, em objects, ou já com ele)
+        "equip": sorted(i for i, e in items.items()
+                        if e["veste_em"] and e["porter"] in (None, actor)),
+        # vestidos do ator
+        "unequip": sorted(i for i, e in items.items() if worn(e)),
+        # pegável: tudo ao alcance que não está já na própria mão
+        "take": sorted(i for i, e in items.items()
+                       if not (e["porter"] == actor and e["slot"] == hand)),
+        # dá-se o que está consigo (na mão ou guardado; o vestido tira-se antes)
+        "give": sorted(i for i, e in items.items()
+                       if e["porter"] == actor and not worn(e)),
+        "give_to": sorted(c for c in idx["chars"] if c != actor),
+        # guardável: qualquer item ao alcance
+        "stow": sorted(i for i, e in items.items() if not worn(e)),
+        # destinos de guarda: contêineres declarados ao alcance + objects da cena
+        "stow_in": sorted(i for i, e in items.items()
+                          if e["container"] and e["porter"] in (None, actor))
+                   + sorted(idx["objects"]),
+        # larga-se o que está consigo sem estar vestido
+        "drop": sorted(i for i, e in items.items()
+                       if e["porter"] == actor and not worn(e)),
+        # empurra-se o que ninguém carried_item_ids
+        "shove": sorted(i for i, e in items.items() if e["porter"] is None),
+        "shove_to": sorted(idx["objects"])
+                    + ([idx["place_id"]] if idx["place_id"] else []),
+        # abre-se o que está fechado; fecha-se contêiner aberto com fecho (spec 005)
+        "open": sorted(i for i, e in items.items()
+                       if e["container"] and e["container"].get("fechado")
+                       and e["porter"] in (None, actor))
+                + sorted(o for o, info in idx["objects_info"].items()
+                         if info["fechado"]),
+        "close": sorted(i for i, e in items.items()
+                        if e["container"] and not e["container"].get("fechado")
+                        and e["porter"] in (None, actor))
+                 + sorted(o for o, info in idx["objects_info"].items()
+                          if info["tem_fecho"] and not info["fechado"]),
+        # persuade-se OUTRO personagem presente a partir por uma rota (spec 007)
+        "persuade": sorted(c for c in idx["chars"] if c != actor),
+        # persuade_give (spec 023): o DONO (outro presente) cede um item DELE; o item
+        # é o que está com outro presente; o destinatário é o ator OU outro presente
+        "persuade_give_alvo": sorted(c for c in idx["chars"] if c != actor),
+        "persuade_give_item": sorted(
+            i for i, e in items.items()
+            if e["porter"] and e["porter"] != actor and e["porter"] in idx["chars"]),
+        "persuade_give_para": sorted(idx["chars"]),
+        # golpeia-se OUTRO personagem presente (spec 008); a arma é o que está na
+        # própria mão — item sem bloco `weapon` vale como improvisado
+        "attack": sorted(c for c in idx["chars"] if c != actor),
+        # leva-se OUTRO presente pela rota, à força ou por estar caído (spec 010)
+        "carry": sorted(c for c in idx["chars"] if c != actor),
+        # socorre-se OUTRO presente que esteja incapacitado (spec 032) — nunca
+        # morto (fora de escopo), nunca de pé (nada a socorrer)
+        "heal": sorted(c for c in idx["chars"] if c != actor
+                       and motor.INCAPACITATED in (idx["char_conditions"].get(c) or [])),
+        # comércio (spec 011): o PORTÃO já filtra os enums — o modelo só enxerga
+        # o que o mundo põe à mesa
+        "negociar_com": sorted(c for c in idx["chars"] if c != actor),
+        "pagar_com": sorted(i for i, e in items.items()
+                            if e["porter"] == actor and e.get("currency")),
+        "ofertar": sorted(i for i, e in items.items()
+                          if e["porter"] == actor and e.get("negotiable")),
+        # `comprar`/`pedir` NÃO saem do contexto: a mercadoria pode estar no
+        # fundo da caixa do mascate, invisível a terceiros (spec 004 FR-009).
+        # Quem enxerga é o Árbitro, lendo o mundo — consultivo de SERVER
+        # (Princípio IX). Preenchidos em build_tools.
+        "comprar": [],
+        "pedir": [],
+        "attack_with": sorted(i for i, e in items.items()
+                              if e["porter"] == actor and e["slot"] == hand),
+        # viaja-se para lugar que ele SABE alcançar (spec 012). Também não sai do
+        # contexto: o mapa do que ele sabe é memória de rota, que fica no server.
+        "viajar_para": [],
+        "ao_alcance": sorted(i for i, e in items.items()
+                             if e["porter"] in (None, actor)),
+        # examinar vale para QUALQUER coisa percebida: item, objeto, pessoa, lugar
+        "examinar": [],
+        # o enum de rotas é do MUNDO INTEIRO, não só das que partem daqui: um mapa
+        # ensina caminho distante. Consulta de server (Princípio IX).
+        "rotas_do_mundo": [],
+    }
+
+
+def scene_candidates(idx: dict) -> dict:
+    """Candidatos de cada verbo, INCLUSIVE os que vêm de consulta de server.
+
+    Extraída de `build_tools` porque as GUARDAS também precisam dela: elas
+    conferem o que o modelo pediu contra o mesmo enum que foi oferecido. Enquanto
+    isto vivia só dentro de `build_tools`, as guardas de `travel_to` e `study`
+    referenciavam um `cand` que não existia no escopo delas — NameError no
+    primeiro uso real, e nenhum teste exercitava esse caminho. Uma sondagem com o
+    modelo real foi quem descobriu.
+    """
+    cand = _verb_candidates(idx)
+
+    # O que os OUTROS oferecem é consulta de server: estar à venda não é estar à
+    # vista. Sem isto, um mercador com a caixa cheia não venderia nada.
+    a_venda, trocaveis = [], []
+    for outro in cand["negociar_com"]:
+        try:
+            oferta = motor.offered_by(outro)
+        except motor.MotorError:
+            continue
+        a_venda += [i["id"] for i in oferta["a_venda"]]
+        trocaveis += [i["id"] for i in oferta["trocaveis"]]
+    cand["comprar"] = sorted(set(a_venda))
+    cand["pedir"] = sorted(set(trocaveis))
+
+    # Destino que ele não sabe alcançar NÃO VIRA ENUM: a regra "só se sabe o
+    # caminho" é cumprida aqui, antes de qualquer guarda.
+    try:
+        cand["viajar_para"] = motor.reachable_destinations(idx["actor_id"])
+    except motor.MotorError:
+        cand["viajar_para"] = []
+
+    # examinar: tudo o que ele percebe agora, mais o próprio lugar
+    place_id = idx["place_id"]
+    # spec 034 (US2): lugares sobre os quais dá para perguntar — a cena atual
+    # + tudo que ele já conhece/reconhece (MESMA fonte que `viajar_para` já
+    # usa). Nunca texto livre: um lugar nunca visitado nem aparece como opção.
+    cand["perguntar_sobre_lugar"] = sorted(
+        ({place_id} if place_id else set()) | set(cand["viajar_para"]))
+    cand["examinar"] = sorted(set(idx["items"]) | set(idx["objects"])
+                              | set(idx["chars"])
+                              | ({place_id} if place_id else set()))
+    # aprender caminho: as rotas do MUNDO, não só as daqui (consulta de server)
+    cand["rotas_do_mundo"] = sorted(motor.all_route_ids())
+    # perguntar o caminho (spec 015): quem está presente e pode responder. Caído
+    # ou morto sai daqui, e não da guarda — a mesma disciplina do `viajar_para`,
+    # que cumpre "só se sabe o caminho" antes de qualquer validação.
+    cand["perguntar_a"] = sorted(
+        c for c in idx["chars"]
+        if c != idx["actor_id"]
+        and not (set(idx["char_conditions"].get(c) or [])
+                 & set(motor.DOWN_CONDITIONS))
+    )
+    # acusar (spec 028): só existe evidência pra brandir se o ator REALMENTE
+    # lembra de algo envolvendo o presente — consulta de server já genérica
+    # (remembered_about, spec 015), sem campo novo. Guarda id→{sobre, resumo}
+    # (não uma lista simples como os outros candidatos) porque build_tools
+    # precisa do resumo pra descrever cada memória no manifest — um enum de
+    # ids sem contexto não dá ao Árbitro como escolher com critério.
+    evidencias: dict[str, dict] = {}
+    for outro in idx["chars"]:
+        if outro == idx["actor_id"]:
+            continue
+        try:
+            mems = motor.remembered_about(idx["actor_id"], outro)
+        except motor.MotorError:
+            continue
+        for m in mems:
+            evidencias[m["id"]] = {"sobre": outro, "resumo": m.get("summary") or ""}
+    cand["acusar_memorias"] = evidencias
+    cand["acusar_alvo"] = sorted({v["sobre"] for v in evidencias.values()})
+    return cand
+
+
+def build_tools(context: dict) -> list[dict]:
+    """Manifest neutro do turno, com enums da cena — uma tool por verbo físico
+    (contracts/equip-tools.md). Tools sem candidato válido são omitidas.
+
+    Gate cosmético (spec 031): enquanto o próprio ator está descansando, o
+    manifest oferece SÓ a capacidade de acordar — o Árbitro nem vê o
+    vocabulário de outra tool (Princípio IX). Isto NÃO é a autoridade: quem
+    realmente impede a mutação é cada executor, validando com os próprios
+    meios (`fisica.is_resting`, chamado em CADA `_apply_X_ops` — spec 031,
+    research.md §3). O gate é só UX.
+
+    Item 50: este gate ESCREVIA a face de `sleep` à mão aqui — um dicionário de
+    manifest hardcoded no meio do montador. Agora ele é o filtro de uma linha lá
+    embaixo (`dormindo != spec.only_while_resting`), e a face de acordar sai do
+    registro como todas as outras. Acrescentar tool não edita mais este ponto.
+    """
+    self_status = (context.get("self") or {}).get("status") or {}
+    dormindo = motor.fisica.is_resting({"status": self_status})
+    idx = _scene_index(context)
+    cand = scene_candidates(idx)
+    chars = sorted(idx["chars"])
+    objects = sorted(idx["objects"])
+    items = sorted(idx["items"])
+    routes = sorted(idx["routes"])
+    place_id = idx["place_id"]
+    mut_targets = chars + objects + items
+    # ids das intenções ATIVAS do PRÓPRIO ator — computado uma vez (give/trade/
+    # prometer/set_intention compartilham o mesmo enum, specs 026/027).
+    active_intention_ids = [i["id"] for i in (context.get("intentions") or [])
+                            if i.get("id")]
+    # A FACE de cada tool mora com ela (arbiter_tools.MANIFESTS); aqui só se monta
+    # a CENA e itera o registro — acrescentar tool nunca edita este ponto
+    # (Open/Closed, item 31). Tool sem candidato válido devolve None e some.
+    scene = types.SimpleNamespace(
+        cand=cand, chars=chars, routes=routes, place_id=place_id,
+        mut_targets=mut_targets, active_intention_ids=active_intention_ids,
+        actor_id=idx["actor_id"],
+        MEMORY_INTENSITIES=_MEMORY_INTENSITIES,
+        INTENTION_STATUSES=_INTENTION_STATUSES,
+    )
+    # A FACE dos domínios MIGRADOS (spec 038, L2) DERIVA da declaração `ToolSpec`
+    # (motor.registro), via o builder genérico; os ainda-não-migrados seguem pelos
+    # `manifest_X` à mão. Coexistem até a migração terminar. Um nome declarado tem
+    # prioridade — o `manifest_X` legado (se sobrar) é ignorado.
+    # spec 038 (US2): o MUNDO escolhe quais tools a engine oferece (manifesto de
+    # ativação, `motor.ativacao`). None = todas as registradas (default). Filtra a
+    # FACE — a tool desativada não aparece (e o _execute também a recusa).
+    _ativas = motor.ativacao.active_tool_ids()
+    faces: list[dict] = []
+    declared: set[str] = set()
+    seen: set[int] = set()
+    for spec in motor.registro.specs().values():
+        if id(spec) in seen:
+            continue
+        seen.add(id(spec))
+        # O GATE DE DESCANSO, em uma linha e sem conhecer nome de tool nenhum
+        # (item 50): dormindo, existem SÓ as capacidades marcadas
+        # `only_while_resting`; de pé, existem todas MENOS elas. As duas metades da
+        # regra caem do mesmo booleano, que mora na declaração da tool.
+        if dormindo != spec.only_while_resting:
+            continue
+        for nm in spec.names:
+            if _ativas is not None and nm not in _ativas:
+                continue  # desativada neste mundo
+            declared.add(nm)
+            face = arbiter_tools.build_face(spec, nm, scene)
+            if face is not None:
+                faces.append(face)
+    for nm, mf in arbiter_tools.MANIFESTS.items():
+        if nm in declared:
+            continue
+        t = mf(scene)
+        if t is not None:
+            faces.append(t)
+    return faces
+
+
+def _validos(*maps: dict) -> list[dict]:
+    out = []
+    for m in maps:
+        for k, v in sorted(m.items()):
+            nome = v.get("name", "") if isinstance(v, dict) else v
+            out.append({"id": k, "nome": nome})
+    return out
+
+
+def build_tools_user_prompt(intent: dict, context: dict) -> str:
+    payload = {"intencao": intent, "contexto": _context_for_prompt(context)}
+    return (
+        "Resolva a ação abaixo usando as ferramentas. Considere atributos, skills e "
+        "status ao decidir o resultado. Termine chamando narrate.\n\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+    )
+
+
+def build_ctx(context: dict, emit=None, ask=None, prosa=None,
+              orienta_laco: bool = True):
+    """MONTA o contexto de turno (o `ctx`) a partir da CENA — spec 043, Fase A.
+
+    Extraído de `resolve_with_tools` sem alterar uma linha do que faz: a cena
+    (`_scene_index`/`scene_candidates`), o rastreio estático do turno (`loc`/`moved`/
+    `fechado_state`), a fila e os acumuladores, e os closures que as tools usam pelo
+    `ctx` (duck-typed, spec 038). NÃO conhece `loop_fn`, `intent` nem manifesto — é
+    função PURA da cena, e é isso que a torna reusável fora do laço do Árbitro.
+
+    Por que existe: a proposta que chega do client (spec 043) precisa exatamente deste
+    `ctx` para a CHECAGEM FORTE de cada capacidade, sem que exista laço de LLM nenhum.
+    Antes, montar o `ctx` era indissociável de rodar o Árbitro.
+
+    A física NÃO é espelhada aqui (spec 021, Fase B): cada op mutadora é
+    aplicada-e-registrada no ATO pelo EXECUTOR (motor.apply_resolution por-op, o
+    flip da 020), que valida com os check_* autoritativos sobre os arquivos reais.
+    A guarda só confere o ESTÁTICO da cena (ids/tipos/destinos, `loc`/`fechado_state`
+    leves para a coerência entre ops do mesmo turno) e RELATA ao chamador a rejeição
+    estruturada ({regra, valores}) que o executor devolveu.
+
+    `emit` (spec 022): callback OPCIONAL `emit(ev_type, payload)` para o streaming do
+    turno. Com `emit=None` (default) o comportamento é byte-a-byte o de hoje — nenhum
+    chamador/teste que não streama muda. O APP é dono do ciclo do stream
+    (`turn_start`/`heartbeat`/`done`); aqui só se emite `op_applied`/`failed` por efeito
+    (Fase 2). Deve tolerar exceção do sink (uma queda de conexão não aborta o turno).
+    """
+    def _emit(ev, payload=None):
+        if emit is None:
+            return
+        try:
+            emit(ev, payload or {})
+        except Exception:
+            pass  # sink caiu (conexão do cliente): o turno segue e grava no mundo
+
+    idx = _scene_index(context)
+    chars, objects, items = idx["chars"], idx["objects"], idx["items"]
+    cand = scene_candidates(idx)   # as guardas conferem contra o MESMO enum ofertado
+    place_id, routes = idx["place_id"], idx["routes"]
+    actor = idx["actor_id"]
+    fis = idx["char_fisico"]
+    # spec 019: a "mão" do ator é o slot de PEGA do corpo dele (mão/boca), não fixo.
+    hand = fis.get(actor, {}).get("pega_slot") or motor.HAND_SLOT
+
+    # spec 021 (Fase B) — o ESPELHO DA FÍSICA foi embora: a guarda não reexecuta
+    # mais check_empurrar/mao/encaixe/vaga/carga/slot contra dicts espelhados
+    # (hands/slots/carga_livre/hand_cap/actor_body/cont_count/empurrar_cap). A
+    # física mora num lugar só — o executor, chamado por-op via apply_resolution
+    # (o flip da 020). O que sobra aqui é o rastreio ESTÁTICO leve do turno, que
+    # os checks estruturais (porter/slot/já-fechado) leem entre ops do mesmo turno:
+    #   loc: item -> {porter, slot}  ·  moved: já movimentados  ·  fechado_state.
+    loc = {i: {"porter": e["porter"], "slot": e["slot"]} for i, e in items.items()}
+    moved: set = set()
+    # estado de fecho do turno (spec 005): contêineres-item e objects
+    fechado_state = {i: bool((e["container"] or {}).get("fechado"))
+                     for i, e in items.items() if e.get("container")}
+    fechado_state.update({o: info["fechado"]
+                          for o, info in idx["objects_info"].items()})
+
+    # spec 038 (L4): os canais MUTADORES não são mais lista à mão — DERIVAM do
+    # registro de handlers do Motor (`registro._HANDLERS`), + `memories` (criado à
+    # parte, sem handler). Acrescentar uma tool com canal novo já popula _MUT_CH/
+    # _ACC_CH/_BEAT_CH/queue por tabela — some o dilema "esquecer um dos ~4 lugares".
+    # Só resta editorial DO ÁRBITRO: os canais de MATERIAL consultivo (saídas que não
+    # são op mutadora) e os SILENCIOSOS (aplicam sem virar cena/beat).
+    _HANDLER_CH = tuple(motor.registro._HANDLERS)
+    _MATERIAL_CH = ("wares", "reconhecimentos", "informes", "lido", "falas")
+    _SILENT_CH = frozenset({"mutations", "intentions", "promise_ops",
+                            "accuse_ops", "rest_ops"})
+
+    queue = {"narrative_hint": "", "movement": None}
+    queue.update({ch: [] for ch in _HANDLER_CH})
+    queue.update({ch: [] for ch in _MATERIAL_CH})
+    queue["memories"] = []
+
+    # spec 020 — FASE ÚNICA: cada op é APLICADA-E-REGISTRADA por-op assim que a
+    # tool a enfileira (o `queue` vira só o LOG do que se pediu), contra os
+    # arquivos REAIS, na ordem em que o Árbitro chamou. A próxima tool lê o mundo
+    # já mudado — é o que faz o portão de violência (atacar→pedir) disparar e o
+    # afeto do presente pesar na persuasão do mesmo turno. `app` NÃO reaplica.
+    _MUT_CH = _HANDLER_CH + ("memories",)
+    _ACC_CH = ("applied", "rejected", "memories_created", "rolls",
+               "viagens_interrompidas") \
+        + tuple(ch + "_applied" for ch in _HANDLER_CH if ch != "mutations")
+    acc = {k: [] for k in _ACC_CH}
+    acc["movement"] = None
+    acc["mov_hint"] = ""
+    _seen_len = {ch: 0 for ch in _MUT_CH}
+    _mov_done = [False]
+
+    # famílias de efeito NARRÁVEIS que descem como beat `op_applied` (spec 022, Fase 2):
+    # só as que viram cena; memories_created/rolls/applied(genérico)/rejected NÃO são
+    # beat (memória e dado são internos; rejeição vai no failed_effects do `done`).
+    # spec 038 (L4): DERIVA dos canais mutadores menos os SILENCIOSOS — não é mais
+    # lista à mão (uma tool nova narrável já entra por tabela).
+    _BEAT_CH = tuple(ch + "_applied" for ch in _HANDLER_CH if ch not in _SILENT_CH)
+
+    def _inworld(kind: str, ops: list) -> list:
+        """As frases IN-WORLD das ops deste beat (spec 043) — o FATO, já em linguagem
+        de mundo, construído pela própria tool (`@registro.inworld`).
+
+        Por que sobe no beat: elas já existiam e só eram usadas no DESFECHO, ao fim do
+        turno. Mandá-las agora é o que tira a sensação de inércia — o jogador lê o que
+        aconteceu no instante em que acontece, sem esperar A Mente e sem custar uma
+        chamada de modelo. NÃO é narração: é o fato (fronteira Árbitro/Mente — o
+        server dá o fato, A Mente tece a experiência). Sem número, sem mecânica.
+        """
+        frase = motor.registro.inworld_phrases().get(kind)
+        if frase is None:
+            return []
+        ditos = []
+        for op in ops:
+            try:
+                dito = frase(op)
+            except Exception:
+                dito = None      # frase que não sabe lidar com a op não derruba o turno
+            if dito:
+                ditos.append(dito)
+        return ditos
+
+    def _merge(out: dict) -> None:
+        for k in _ACC_CH:
+            v = out.get(k)
+            if v:
+                acc[k].extend(v)
+                if k in _BEAT_CH:  # emite o beat com o MESMO shape do canal (V/IX)
+                    _emit("op_applied", {"kind": k, "data": v,
+                                         "inworld": _inworld(k, v)})
+        if out.get("movement"):
+            acc["movement"] = out["movement"]
+            _emit("op_applied", {"kind": "movement", "data": out["movement"],
+                                 "inworld": []})
+        if out.get("narrative_hint") and not acc["mov_hint"]:
+            acc["mov_hint"] = out["narrative_hint"]
+
+    def _sub(ch: str, novas: list) -> dict:
+        # a op vai junto do contexto CONSULTIVO acumulado (spec 020): learn confere
+        # a citação contra `lido` e a fonte contra `falas`; hearsay confere o trecho
+        # ouvido. Sem esse contexto, a citação verdadeira seria barrada.
+        return {ch: list(novas), "lido": list(queue["lido"]),
+                "falas": list(queue["falas"]), "informes": list(queue["informes"])}
+
+    def _apply_queued_delta() -> None:
+        """Aplica ao mundo real o que a última tool acabou de enfileirar."""
+        for ch in _MUT_CH:
+            n = len(queue[ch])
+            if n > _seen_len[ch]:
+                novas = queue[ch][_seen_len[ch]:]
+                _seen_len[ch] = n
+                _merge(motor.apply_resolution(actor, _sub(ch, novas),
+                                              ensure_action=False))
+        mov = queue.get("movement")
+        if mov and not _mov_done[0]:
+            _mov_done[0] = True
+            _merge(motor.apply_resolution(actor, {"movement": mov},
+                                          ensure_action=False))
+    lido: set = set()       # conteúdos já usados para aprender neste turno (spec 014)
+    perguntados: set = set()  # informantes já consultados neste turno (spec 015)
+    perguntados_sobre: set = set()  # (fonte, sobre) já consultados (spec 017)
+    ouvido: set = set()     # (fonte, sobre, trecho) já ouvidos neste turno (spec 017)
+    viajado: set = set()    # destinos já pedidos neste turno (spec 012)
+    persuaded: set = set()  # alvos já persuadidos neste turno (spec 007)
+    gave_asked: set = set()  # (alvo,item) já pedidos via persuade_give (spec 023)
+    stole_asked: set = set()  # (alvo,item) já tentados via steal (spec 023)
+    attacked: set = set()   # alvos já golpeados neste turno (spec 008)
+    curados: set = set()    # alvos já socorridos neste turno (spec 032)
+    carried: set = set()    # alvos já levantados neste turno (spec 010)
+    expulsos: set = set()   # alvos já postos para fora neste turno (spec 041)
+    negociados: set = set() # parceiros com quem já se negociou (spec 011)
+    rejections: dict[tuple, dict] = {}
+
+    def _err(erro: str, campo: str | None = None, validos: list | None = None,
+             rej: dict | None = None) -> dict:
+        out = {"ok": False, "erro": erro}
+        if campo:
+            out["campo"] = campo
+        if validos:
+            out["validos"] = validos
+        if rej:
+            out["regra"] = rej["regra"]
+            # SEGREDO do mundo (Princípio IX): o dado/DC/tendência/virada nunca sobem
+            # ao modelo — nem dentro da recusa que ele lê. Só o motivo estruturado. A
+            # virada/crítico narram pelo CLIENT (fate_twists), a partir de `rolls`.
+            out["valores"] = {k: v for k, v in (rej.get("valores") or {}).items()
+                              if k not in ("rolagem", "virada", "critico",
+                                           "tendencia", "resultado")}
+            if rej.get("corrigivel"):
+                # Recusa CORRIGÍVEL (item 31): erro de ESCOLHA (item/alvo errado), não
+                # veredito do mundo — o modelo DEVE corrigir e seguir. Leva os `validos`
+                # (o que é possível agora), como o porteiro fazia; sem o "não refaça".
+                if rej.get("validos"):
+                    out["validos"] = rej["validos"]
+            elif orienta_laco:
+                # Recusa do MUNDO (não é id/parâmetro a corrigir): o veredito está dado.
+                # Orienta o modelo a NÃO re-tentar a MESMA ação mexendo na régua para virar
+                # o resultado (Princípio X) — sem proibir a mesma ferramenta para OUTRO
+                # alvo/item, que é trabalho legítimo.
+                #
+                # spec 043: SÓ no caminho do Árbitro (`orienta_laco`). É instrução para
+                # uma LLM EM LAÇO, e cita "nota/régua" e "narrate" — vocabulário de
+                # mecânica. No caminho de PROPOSTA não há laço a orientar, e mandar
+                # isso à Mente vazaria mecânica (Princípios V e IX). A recusa que ela
+                # recebe é só o motivo, em linguagem de mundo.
+                out["erro"] += (" — o mundo decidiu: NÃO refaça a MESMA tentativa mudando a "
+                                "nota/régua para virar o veredito; faça OUTRA coisa (a mesma "
+                                "ferramenta vale para outro alvo/item) ou chame narrate para "
+                                "encerrar")
+        return out
+
+    def _deny(item: str, to, rej: dict) -> dict:
+        """Registra a rejeição física estruturada e devolve o erro para a LLM.
+
+        Recusa CORRIGÍVEL (posse/slot, item 31) NÃO entra no ledger físico: é erro de
+        escolha do modelo, não um fato do mundo a narrar (só o veredito do mundo vira
+        fate_twist/prosa). O `_err` já a formata com os `validos`, sem o "não refaça"."""
+        why = motor._WHY_BY_REGRA.get(rej["regra"], rej["regra"])
+        if not rej.get("corrigivel"):
+            rejections[("fis", item)] = {"item": item, "to": to, "regra": rej["regra"],
+                                         "valores": rej["valores"], "why": why}
+        return _err(why, rej=rej)
+
+    def _stow_spot_for(item_id: str):
+        """Onde ESTE item cabe, entre os contêineres abertos de quem age (item 44).
+
+        É a guarda do `stow` SEM destino: guardar é o gesto com que se libera a mão, e
+        exigir que A Mente escolha o contêiner é cobrar dela uma decisão que o corpo
+        toma sozinho. Devolve o id do contêiner, ou None se não há onde.
+
+        Roda sobre o ÍNDICE DA CENA, com os MESMOS `check_*` do pipeline físico
+        (guichê único) — o autoritativo revalida contra os arquivos em
+        `fisica.open_container_for`. Nunca devolve o chão: perder um item sem
+        perceber é pior que a recusa que este caminho evita.
+        """
+        e = items.get(item_id) or {}
+        for cont_id, ce in items.items():
+            if cont_id == item_id or ce.get("porter") != actor:
+                continue
+            c = ce.get("container")
+            if not isinstance(c, dict) or c.get("fechado"):
+                continue
+            if motor.check_encaixe(item_id, e.get("size") or "P",
+                                   cont_id, c.get("max_size")):
+                continue
+            if motor.check_vaga(cont_id, int(c.get("max_items") or 0),
+                                int(c.get("itens") or 0)):
+                continue
+            return cont_id
+        return None
+
+    def _porter_of_dest(dest_kind: str, dest_id: str | None):
+        if dest_kind == "char":
+            return dest_id
+        if dest_kind == "cont":
+            return loc.get(dest_id, {}).get("porter")
+        return None
+
+    def _track_move(item_id: str, dest_kind: str, dest_id: str | None,
+                    new_slot: str | None):
+        """Atualiza SÓ o rastreio estático (loc/moved) depois que o executor já
+        aplicou de verdade — não há mais física espelhada a manter (spec 021)."""
+        porter_d = dest_id if dest_kind == "char" else _porter_of_dest(dest_kind, dest_id)
+        loc[item_id] = {"porter": porter_d, "slot": new_slot}
+        moved.add(item_id)
+        rejections.pop(("fis", item_id), None)
+
+    def _apply_op_now(ch: str, op: dict) -> dict | None:
+        """Fase única (020) + Fase B (021): enfileira UMA op mutadora, aplica-e-
+        registra no ATO contra os arquivos reais, e devolve a rejeição ESTRUTURADA
+        do EXECUTOR ({regra, valores, why}) se ele recusou — é assim que o modelo
+        recebe o erro no mesmo turno, agora vindo da física ÚNICA (não do espelho).
+        Em recusa, desfaz o enfileiramento (a fila é o log do que foi ACEITO)."""
+        queue[ch].append(op)
+        out = motor.apply_resolution(actor, _sub(ch, [op]), ensure_action=False)
+        rej = (out.get("rejected") or [])
+        if rej:
+            queue[ch].pop()
+            # A VIRADA/crítico de uma tentativa que FALHOU também narra (skill
+            # arbitrated-action, Princípio X): o dado sobe a `acc["rolls"]` mesmo sem
+            # aplicar a op — senão persuadir/atacar/furtar que erra o teste some sem
+            # o jogador ler o momento. Só os rolls; a rejeição em si a TOOL registra
+            # (tool_rejections), para não duplicar com o `rejected` do outcome.
+            if out.get("rolls"):
+                acc["rolls"].extend(out["rolls"])
+            return rej[0]
+        _seen_len[ch] = len(queue[ch])  # já flushado: execute() não reaplica
+        _merge(out)
+        return None
+
+    def _apply_arbitrated(ch: str, op: dict) -> tuple[dict | None, bool]:
+        """Como `_apply_op_now`, mas para a família ARBITRADA: devolve (rej, rolled).
+        `rolled` = um DADO REAL foi lançado (info com `rolagem != None`) — então o
+        desfecho é SEGREDO do mundo (Princípio IX) e a tool devolve neutro ao modelo,
+        deixando o client narrar. Recusa DETERMINÍSTICA (veredito sem dado: nota 0,
+        alvo caído/morto) tem rolled=False e sobe ao modelo (narração + veredito
+        único). A virada, rolada ou não, sempre sobe a `acc["rolls"]` (fate_twists)."""
+        queue[ch].append(op)
+        out = motor.apply_resolution(actor, _sub(ch, [op]), ensure_action=False)
+        if out.get("rolls"):
+            acc["rolls"].extend(out["rolls"])
+        rej_list = out.get("rejected") or []
+        if rej_list:
+            queue[ch].pop()
+            rolled = any(r.get("rolagem") is not None for r in (out.get("rolls") or []))
+            return rej_list[0], rolled
+        _seen_len[ch] = len(queue[ch])
+        _merge(out)
+        return None, False
+
+    def _check_item(item, tool):
+        if not item:
+            return _err("informe 'item'")
+        if item not in items:
+            if item in objects:
+                # tentou carregar mobília do lugar: motivo estruturado claro,
+                # para a narração contar o porquê (spec 002/004 — objeto_fixo)
+                rej = motor._fail("objeto_fixo", objeto=item)
+                rejections[("fis", item)] = {
+                    "item": item, "regra": rej["regra"], "valores": rej["valores"],
+                    "why": motor._WHY_BY_REGRA["objeto_fixo"]}
+                return _err(f"'{item}' faz parte do lugar — não se carried_item_ids",
+                            rej=rej)
+            if item in chars:
+                # gente não é item: modelos tentam `take`/`equip` para "pegar
+                # alguém no colo". Redireciona em vez de só negar — sem a dica o
+                # modelo desiste e narra um feito que não aconteceu (spec 010).
+                return _err(f"'{item}' é uma PESSOA, não um item — para levá-la "
+                            "consigo use a ferramenta carry", "item",
+                            _validos(items))
+            rejections[("fis", item)] = {
+                "item": item,
+                "why": "item não existe na cena nem em inventário presente"}
+            return _err(f"item '{item}' não reconhecido", "item", _validos(items))
+        if item in moved:
+            return _err(f"'{item}' já foi movimentado neste turno")
+        return None
+
+    seen_calls: set = set()  # chamadas idênticas já aceitas neste turno
+
+    def execute(name: str, args: dict) -> tuple[dict, bool]:
+        devlog.log("TOOL CHAMADA PELO ÁRBITRO", {"tool": name, "args": args})
+        try:
+            key = (name, json.dumps(args or {}, sort_keys=True, ensure_ascii=False))
+        except (TypeError, ValueError):
+            key = None
+        if key is not None and key in seen_calls:
+            # anti-loop: modelo repetindo a mesma chamada não gera efeito duplicado
+            # nem "melhora" resultado — devolve ok neutro e manda seguir adiante.
+            result = {"ok": True, "nota": "chamada idêntica já registrada neste "
+                      "turno — repetição ignorada; prossiga (narrate encerra)"}
+            devlog.log("RETORNO DA VALIDAÇÃO", result)
+            return result, False
+        result, done = _execute(name, args or {})
+        # spec 020: se a tool enfileirou algo mutador, aplica-e-registra AGORA,
+        # contra os arquivos reais — a próxima tool já lê o mundo mudado.
+        if result.get("ok"):
+            _apply_queued_delta()
+        if key is not None and result.get("ok") and name != "narrate":
+            seen_calls.add(key)
+        devlog.log("RETORNO DA VALIDAÇÃO", result)
+        return result, done
+
+    ctx = types.SimpleNamespace(
+        err=_err, deny=_deny, validos=_validos, apply_op_now=_apply_op_now,
+        apply_arbitrated=_apply_arbitrated,
+        check_item=_check_item, track_move=_track_move, porter_of_dest=_porter_of_dest,
+        stow_spot_for=_stow_spot_for,
+        queue=queue, loc=loc, moved=moved, rejections=rejections,
+        fechado_state=fechado_state, chars=chars, objects=objects, items=items,
+        cand=cand, routes=routes, place_id=place_id, actor=actor, fis=fis,
+        hand=hand, idx=idx, context=context,
+        sub=_sub, seen_len=_seen_len, merge=_merge,
+        MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
+        persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
+        attacked=attacked, curados=curados, carried=carried, negociados=negociados,
+        expulsos=expulsos,
+        viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,
+        ouvido=ouvido, lido=lido,
+    )
+    # spec 038 (L2): o corpo declarado (`ToolSpec.apply`) usa a recusa arbitrada pelo
+    # `ctx` (duck-typed) — o Motor não importa o Árbitro. Liga-se aqui, fechando sobre
+    # o próprio ctx (o `_arb_deny` já toma o ctx como 1º arg).
+    ctx.arb_deny = lambda rolled, narr_key, narr_base, rej: arbiter_tools.base._arb_deny(
+        ctx, rolled, narr_key, narr_base, rej)
+
+    def _execute(name: str, args: dict) -> tuple[dict, bool]:
+        # spec 038 (L2): o Árbitro só DESPACHA. Tool MIGRADA roda o corpo declarado
+        # (`ToolSpec.apply`, co-localizado no Motor); a ainda-não-migrada segue pelo
+        # `arbiter_tools.HANDLERS` (tool_X). Os dois coexistem até a migração acabar.
+        spec = motor.registro.get_spec(name)
+        # spec 038 (US2): tool DESATIVADA neste mundo não resolve, mesmo se o modelo
+        # a nomear por prosa — a FACE já a omitiu; aqui é a guarda do despacho.
+        if spec is not None and not motor.ativacao.is_active(name):
+            return _err(f"ferramenta '{name}' não está ativa neste mundo"), False
+        if spec is not None:
+            args, ruim = _tipos_ok(spec, args)
+            if ruim:
+                return _err(ruim[0], ruim[1]), False
+        if spec is not None and spec.apply is not None:
+            return spec.apply(name, args, ctx)
+        h = arbiter_tools.HANDLERS.get(name)
+        if h is not None:
+            return h(name, args, ctx)
+        return _err(f"ferramenta '{name}' não existe"), False
+
+    # spec 043 (Fase A): o que a CAUDA do turno (o laço do Árbitro, ou o despacho de
+    # propostas do client) precisa além do que as tools já usam. Expor pelo `ctx` é o
+    # que permite `build_ctx` ser chamada sozinha, sem laço de LLM nenhum.
+    ctx.acc = acc
+    ctx.execute = execute
+    ctx.apply_queued_delta = _apply_queued_delta
+    ctx.MUT_CH = _MUT_CH
+    ctx.ACC_CH = _ACC_CH
+
+    # spec 043 — o JUÍZO, injetado. `ask` é TRANSPORTE PURO: não sabe o que é régua,
+    # nota nem capacidade. Quem monta o system/user é cada tool, porque cada régua lê
+    # coisas diferentes (a do furto lê a descrição do item; a da disposição lê o que o
+    # informante guarda de quem pergunta). Injetar em vez de importar é o que mantém
+    # `motor/` sem conhecer `llm` — a mesma fronteira de `ctx.arb_deny`.
+    def _describe(ent_id):
+        """A PROSA de uma entidade da cena — nome, descrição, e o que ela faz agora.
+
+        As réguas leem DESCRIÇÃO, não campo: a de furto pesa a vistosidade do item
+        pelo que o texto dele diz; a de vantagem lê a postura do alvo. É acesso ao que
+        já está no contexto, não dado novo.
+        """
+        if not ent_id:
+            return None
+        for chave in ("characters_present", "items_present", "objects_present"):
+            for e in (context.get(chave) or []):
+                if e.get("id") != ent_id:
+                    continue
+                out = {"nome": e.get("name"), "descricao": e.get("narrative")
+                       or e.get("description")}
+                if e.get("action"):
+                    out["fazendo"] = e["action"]
+                return {k: v for k, v in out.items() if v}
+        loc = context.get("location") or {}
+        if loc.get("id") == ent_id:
+            return {k: v for k, v in {"nome": loc.get("name"),
+                                      "descricao": loc.get("narrative")}.items() if v}
+        return {"nome": motor.name_of(ent_id)}
+
+    ctx.ask = ask if ask is not None else _sem_juizo
+    # `prosa` (FR-018): o que o personagem está fazendo e dizendo. A régua lê COMO se
+    # tentou, não só quem tentou. Vem da intenção; vazio quando não há.
+    ctx.prosa = prosa or {}
+    ctx.describe = _describe
+    return ctx
+
+
+def _sem_juizo(system: str, user: str) -> str:
+    """`ctx.ask` quando NÃO há modelo ligado (todo o selftest roda assim).
+
+    Devolve vazio de propósito: cada capacidade cai no PRÓPRIO default via
+    `juizo.nota(raw, default)` — o neutro do golpe não é o neutro da troca. Falhar
+    aqui derrubaria o turno inteiro por falta de um juízo que é, por desenho,
+    degradável.
+    """
+    return ""
+
+
+def resolve_with_tools(intent: dict, context: dict, loop_fn, max_calls: int = 8,
+                       emit=None, ask=None) -> dict:
+    """Resolve via loop de tools: valida e ENFILEIRA cada efeito (nunca escreve), devolve
+    a resolução no MESMO shape do normalize() — apply_resolution não muda.
+
+    spec 043 (Fase A): a montagem do `ctx` saiu daqui para `build_ctx` (função pura da
+    cena). Esta função é agora só o LAÇO — manifesto, prompt, `loop_fn`, degradação por
+    prosa e fecho do outcome. Comportamento byte-a-byte o de antes.
+
+    Rejeições não corrigidas voltam em "tool_rejections", para o app somá-las a
+    failed_effects. `emit` (spec 022) desce para `build_ctx`.
+    """
+    # spec 043: `ask` é o transporte do JUÍZO; a PROSA da intenção vai junto, porque
+    # é o que as réguas leem para saber COMO se tentou (FR-018).
+    prosa = {k: v for k, v in {
+        "acao": (intent or {}).get("action"),
+        "fala": (intent or {}).get("utterance"),
+    }.items() if v} if isinstance(intent, dict) else {}
+    ctx = build_ctx(context, emit=emit, ask=ask, prosa=prosa)
+    # aliases locais: a cauda abaixo é IDÊNTICA à de antes da extração (spec 043,
+    # FR-027 — a fase A não muda comportamento, e o diff tem de mostrar isso).
+    queue, acc, rejections = ctx.queue, ctx.acc, ctx.rejections
+    actor, execute = ctx.actor, ctx.execute
+    _MUT_CH, _ACC_CH = ctx.MUT_CH, ctx.ACC_CH
+    _apply_queued_delta, _merge = ctx.apply_queued_delta, ctx.merge
+
+    tools = build_tools(context)
+    user = build_tools_user_prompt(intent, context)
+    devlog.log("MANIFEST DE TOOLS DO TURNO", [
+        {"tool": t["name"],
+         "enums": {k: len(v.get("enum", []))
+                   for k, v in t["parameters"]["properties"].items() if "enum" in v}}
+        for t in tools
+    ])
+    outcome = loop_fn(TOOLS_SYSTEM_PROMPT, user, tools, execute, max_calls)
+
+    queued_something = bool(queue["mutations"] or queue["item_transfers"]
+                            or queue["equip_ops"] or queue["lock_ops"]
+                            or queue["persuade_ops"] or queue["attack_ops"]
+                            or queue["carry_ops"] or queue["expel_ops"] or queue["trade_ops"] or queue["wares"]
+                            or queue["memories"] or queue["learn_ops"] or queue["hearsay_ops"]
+                            or queue["movement"] or queue["narrative_hint"])
+    if outcome.get("stopped") == "text":
+        text = outcome.get("text") or ""
+        if not queued_something:
+            # Alguns modelos (ex.: llama3.1:8b) ignoram o tool calling nativo e
+            # DESCREVEM as chamadas em prosa, como JSONs cercados no texto.
+            # Antes de degradar ao clássico, executa essas chamadas pela MESMA
+            # guarda — o pipeline físico valida igual (nunca um caminho paralelo).
+            # JSON dentro de prosa é AMBÍGUO: pode ser um pedido do modelo ou
+            # só ele descrevendo o que poderia fazer. Já saiu daqui um `unequip`
+            # que largou o gibão de um personagem no chão da praça quando o
+            # jogador só queria perguntar o que o mascate vendia.
+            #
+            # Duas exigências, então, antes de mexer no mundo por prosa:
+            #   1. o nome tem de estar no MANIFEST DESTE TURNO — nome inventado
+            #      ou lembrado de outra cena não vira ato
+            #   2. os parâmetros obrigatórios da tool têm de estar TODOS lá —
+            #      uma menção sem argumentos é descrição, não chamada
+            por_nome = {t["name"]: t for t in tools}
+            calls = []
+            for obj in _json_objects(text):
+                if not isinstance(obj, dict) or not obj.get("name"):
+                    continue
+                nome = obj["name"]
+                spec = por_nome.get(nome)
+                if spec is None:
+                    devlog.log("PROSA IGNORADA — tool fora do manifest", nome)
+                    continue
+                args = obj.get("parameters")
+                if not isinstance(args, dict):
+                    args = obj.get("arguments")
+                if not isinstance(args, dict):
+                    args = {}
+                exigidos = spec["parameters"].get("required") or []
+                faltando = [k for k in exigidos if k not in args]
+                if faltando:
+                    devlog.log("PROSA IGNORADA — parâmetros obrigatórios ausentes",
+                               {"tool": nome, "faltando": faltando, "args": args})
+                    continue
+                calls.append((nome, args))
+            if calls:
+                # o TEXTO vai junto: sem ele não há como auditar por que a guarda
+                # executou o que executou. Um `unequip` já saiu daqui e largou o
+                # gibão de um personagem no chão, e o log não permitia saber se o
+                # modelo pedia aquilo ou só descrevia possibilidades.
+                devlog.log("TOOLS DESCRITAS EM PROSA — executando pela guarda",
+                           {"chamadas": [{"name": n, "args": a} for n, a in calls],
+                            "texto_do_modelo": text})
+                for name, args in calls:
+                    _, done = execute(name, args)
+                    if done:
+                        break
+                queued_something = bool(
+                    queue["mutations"] or queue["item_transfers"]
+                    or queue["equip_ops"] or queue["lock_ops"]
+                    or queue["persuade_ops"] or queue["attack_ops"]
+                    or queue["carry_ops"] or queue["trade_ops"] or queue["wares"]
+                    or queue["memories"] or queue["learn_ops"] or queue["hearsay_ops"]
+                    or queue["movement"] or queue["narrative_hint"])
+            if not queued_something:
+                # nada aproveitável como tool: parse leniente e APLICA no mesmo
+                # turno (spec 020 — não há mais retorno de resolução-para-aplicar)
+                devlog.log("MODELO RESPONDEU TEXTO (sem tools) — parse leniente", text)
+                res = normalize(text)
+                if not queue["narrative_hint"]:
+                    queue["narrative_hint"] = (res.get("narrative_hint") or "").strip()
+                # (spec 025) o fallback NÃO tem mais caminho próprio de aplicação: ele
+                # obtém a lista de ações e as ESCOA pela MESMA porta por-op que o
+                # tool-calling usa (_apply_queued_delta → _sub → apply_op por op), na
+                # ordem causal de _MUT_CH. Uma porta, um comportamento — sem
+                # apply_resolution-batch e sem segunda tratativa. A garantia FR-014
+                # roda uma vez no fim do turno (abaixo), como para qualquer origem.
+                for ch in _MUT_CH:
+                    if res.get(ch):
+                        queue[ch].extend(res[ch])
+                if isinstance(res.get("movement"), dict) and res["movement"].get("enter_route"):
+                    queue["movement"] = res["movement"]
+                _apply_queued_delta()
+        elif not queue["narrative_hint"]:
+            # houve tools, mas terminou em prosa em vez de narrate: usa o texto como hint
+            try:
+                data = _loads_lenient(text)
+                queue["narrative_hint"] = (data.get("narrative_hint") or "").strip()
+            except LLMError:
+                queue["narrative_hint"] = text.strip()[:300]
+
+    # narrative_hint: o do narrate; senão o da partida (movimento); senão fallback
+    return finalize_turn(ctx, acao=(intent.get("action") if isinstance(intent, dict)
+                                    else "") or "")
+
+
+def _tipos_ok(spec, args: dict):
+    """Confere o TIPO de cada argumento contra a declaração — spec 043.
+
+    A checagem forte de cada capacidade valida EXISTÊNCIA ("esse alvo está na cena?").
+    Ela pressupõe o tipo certo, e é uma suposição que quebra: um modelo pequeno manda
+    `{"route": ["ladeira-do-sal"]}` onde se espera uma string, e o corpo estoura com
+    `TypeError: unhashable type: 'list'` — 500 no server, turno perdido, e o jogador
+    lê "erro na requisição" em vez de uma recusa do mundo. Aconteceu no primeiro turno
+    da medição com llama3.1:8b.
+
+    Duas atitudes, e a diferença importa:
+      - LISTA DE UM ELEMENTO onde se espera escalar é CORRIGIDA. É o erro de
+        serialização mais comum de modelo pequeno, a intenção é inequívoca, e recusar
+        seria perder o turno por uma vírgula.
+      - Qualquer outro descasamento é RECUSA ESTRUTURADA, com o campo. Adivinhar o
+        que o modelo quis dizer, aí, seria inventar a ação do personagem.
+
+    Devolve (args_corrigidos, None) ou (args, (mensagem, campo)).
+    """
+    saida = dict(args or {})
+    for param, schema in (spec.params or {}).items():
+        if param not in saida or callable(schema):
+            continue
+        esperado = (schema or {}).get("type")
+        valor = saida[param]
+        if esperado == "array":
+            if valor is not None and not isinstance(valor, list):
+                saida[param] = [valor]      # escalar onde se espera lista: envolve
+            continue
+        if esperado in ("string", "integer", "number") and isinstance(valor, list):
+            if len(valor) == 1:
+                saida[param] = valor[0]     # o caso comum: corrige e segue
+                continue
+            return args, (f"'{param}' precisa ser um valor só, não uma lista", param)
+        if esperado == "string" and isinstance(valor, dict):
+            return args, (f"'{param}' precisa ser o id, não um objeto", param)
+    return saida, None
+
+
+def finalize_turn(ctx, acao: str = "") -> dict:
+    """FECHA o turno e monta o outcome — comum aos DOIS caminhos (spec 043).
+
+    Extraído da cauda de `resolve_with_tools` porque o despacho de PROPOSTA
+    (`/api/tools/<nome>`) precisa exatamente do mesmo fecho: o hint, o toque único da
+    ação do ator (FR-014) e a montagem do outcome. Duplicar isso seria a receita para
+    os dois caminhos divergirem no que o jogador lê.
+
+    `acao` é a prosa do que se tentou, usada como hint quando nada mais o produziu.
+    """
+    queue, acc, rejections = ctx.queue, ctx.acc, ctx.rejections
+    hint = queue["narrative_hint"] or acc["mov_hint"]
+    if not hint and not acc["movement"]:
+        algo_aplicado = any(acc[c] for c in (
+            "item_transfers_applied", "equip_ops_applied", "lock_ops_applied",
+            "attack_ops_applied", "carry_ops_applied", "trade_ops_applied",
+            "persuade_ops_applied", "persuade_give_ops_applied", "steal_ops_applied",
+            "learn_ops_applied", "hearsay_ops_applied"))
+        if rejections and not algo_aplicado:
+            hint = "tenta, mas não consegue completar o que pretendia"
+        else:
+            hint = (acao or "").strip()
+
+    # FR-014: a ação do ator é tocada UMA vez no turno (não por-op) — spec 020
+    touched = any(isinstance(a, dict) and a.get("target") == ctx.actor
+                  for a in acc["applied"])
+    if not touched:
+        ctx.merge(motor.apply_resolution(ctx.actor, {"narrative_hint": hint},
+                                         ensure_action=True))
+
+    # o OUTCOME já-aplicado (spec 020): `app` NÃO reaplica. Spec 038 (L4): o espelho
+    # dos canais aplicados DERIVA de `_ACC_CH` (não mais uma lista à mão que a 026/027
+    # já esqueceu de sincronizar uma vez) — junta o que foi aplicado (acc) com o
+    # material consultivo (queue).
+    resultado = {k: acc[k] for k in ctx.ACC_CH}
+    resultado.update({
+        "narrative_hint": hint,
+        "movement": acc["movement"],
+        "tool_rejections": list(rejections.values()),
+        "wares": queue["wares"], "lido": queue["lido"],
+        "informes": queue["informes"], "falas": queue["falas"],
+        "reconhecimentos": queue["reconhecimentos"],
+        "_applied_in_loop": True,
+    })
+    # compat: também expõe os canais de INPUT que foram enfileirados (o LOG do que
+    # se pediu), para quem lê `resultado["equip_ops"]` etc. `apply_resolution`
+    # reconhece `_applied_in_loop` e devolve isto sem reaplicar.
+    for ch in ctx.MUT_CH:
+        resultado.setdefault(ch, queue[ch])
+    devlog.log("OUTCOME (fase única)", resultado)
+    return resultado
+
+
+def _json_objects(raw: str) -> list:
+    """Todos os objetos JSON parseáveis embutidos num texto livre (prosa com
+    cercas ```json```, vários objetos separados, comentários ao redor)."""
+    objs, i, dec = [], 0, json.JSONDecoder()
+    while True:
+        start = raw.find("{", i)
+        if start == -1:
+            break
+        try:
+            obj, end = dec.raw_decode(raw, start)
+        except json.JSONDecodeError:
+            i = start + 1
+            continue
+        objs.append(obj)
+        i = end
+    return objs
+
+
+# chaves que identificam um objeto como resolução clássica (formato do SYSTEM_PROMPT)
+_RESOLUTION_KEYS = {"narrative_hint", "mutations", "item_transfers",
+                    "equip_ops", "persuade_ops", "attack_ops", "carry_ops", "trade_ops", "memories",
+                    "movement"}
+
+
+def _loads_lenient(raw: str) -> dict:
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    # tolera cercas ```json```, texto ao redor e MÚLTIPLOS objetos no texto:
+    # prefere o que tem cara de resolução; senão, o primeiro objeto válido.
+    objs = [o for o in _json_objects(raw) if isinstance(o, dict)]
+    for obj in objs:
+        if _RESOLUTION_KEYS & set(obj):
+            return obj
+    if objs:
+        return objs[0]
+    raise LLMError("resolução do Árbitro não contém JSON.")

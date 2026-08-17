@@ -1,0 +1,16 @@
+{
+  "_comment": "Árbitro no Ollama local. Copie para config.server.json. Para usar o Claude remoto, veja config.server.claude.example.json; para o OpenRouter, config.server.openrouter.example.json. tool_calling: 'auto' usa tools com correção quando o modelo suporta e degrada sozinho para o modo clássico; 'on' exige tools; 'off' desliga. max_tool_calls limita as chamadas por turno. num_ctx fixa a janela de contexto (o default 32k do Ollama incha o KV-cache e joga parte do modelo 8B na CPU numa GPU de 8 GB — 16384 costuma caber 100% na VRAM). think:false desliga o 'pensar' de modelos com CoT (qwen3): o Árbitro precisa CHAMAR tools, não escrever raciocínio. server.stream: true = resposta do turno em STREAM (progresso ao vivo); false = JSON único (Content-Length) — mais confiável atrás de proxy que reseta conexão longa (ex.: ngrok), e com o modelo quente o turno é curto e não estoura.",
+  "arbiter": {
+    "runtime": "ollama",
+    "endpoint": "http://localhost:11434",
+    "model": "qwen3:8b",
+    "temperature": 0.2,
+    "tool_calling": "auto",
+    "max_tool_calls": 8,
+    "num_ctx": 16384,
+    "think": false
+  },
+  "server": {
+    "stream": true
+  }
+}

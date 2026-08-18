@@ -564,6 +564,32 @@ def hunger_label(char_fm: dict) -> str:
     return "sem fome"
 
 
+_SEDE_CANONICA = (
+    # (marcas no texto da ficha, rótulo canônico) — mesma forma de
+    # `_FOME_CANONICA` (spec 047, `drink`): mais específico primeiro. `status.
+    # thirst` é campo NOVO (nunca existiu antes de `drink` — ao contrário de
+    # `hunger`, que já existia morto antes de `eat`), então esta função nasce
+    # sem dívida de migração — mas herda a FORMA de `hunger_label` para que a
+    # PRÓXIMA tool que precisar ler sede encontre o mesmo vocabulário livre.
+    (("desidratad", "sedenta", "sedento", "morrendo de sede"), "sedento"),
+    (("com sede", "sede"), "com sede"),
+    (("hidratad", "saciad", "satisfeit"), "sem sede"),
+)
+
+
+def thirst_label(char_fm: dict) -> str:
+    """O que ele SENTE de sede, em rótulo canônico. Ficha sem `thirst` (ou com
+    palavra que não se reconhece) lê como `sem sede` — mesmo espírito de
+    `hunger_label`: ausência não é urgência."""
+    bruto = str(((char_fm.get("status") or {}).get("thirst") or "")).strip().lower()
+    if not bruto:
+        return "sem sede"
+    for marcas, rotulo in _SEDE_CANONICA:
+        if any(m in bruto for m in marcas):
+            return rotulo
+    return "sem sede"
+
+
 def fatigue_label(char_fm: dict) -> str:
     """O que ele SENTE de cansaço, em rótulo canônico.
 

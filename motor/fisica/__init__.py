@@ -67,6 +67,7 @@ from .primitivas import (  # noqa: F401
     is_for_sale,
     is_negotiable,
     hunger_label,
+    thirst_label,
     fatigue_label,
     is_resting,
     item_own_weight,

@@ -77,6 +77,7 @@ from .primitivas import (  # noqa: F401
     _match_scene_ref,
     _set_item_slot,
     _validate_move,
+    roll_embriaguez_check,
     roll_steal_check,
     roll_toxicidade_check,
     transfer_item,
@@ -549,4 +550,115 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
 @registro.handler("eat_ops")
 def _h_eat(cid, af, res, rolls):
     applied, rejected = _apply_eat_ops(cid, af, res, rolls)
+    return applied, rejected, []  # memória (ator, applied E rejected) via react_actor_memory
+
+
+# --------------------------------------------------------------------------- #
+# Beber (spec 047) — consumir líquido de um item OU de uma fonte ambiental,
+# julgado por CINCO réguas já resolvidas pela guarda (`itens/declaracao._drink`):
+# bebibilidade, hidratação, embriaguez, toxicidade, e (só para item) consumo+
+# nova_descricao. Este executor VALIDA e APLICA; as ÚNICAS decisões não-
+# determinísticas são os testes de embriaguez e toxicidade (INDEPENDENTES um do
+# outro — o mesmo alvo pode falhar nos dois). Diverge de `eat` em UM ponto
+# central (R3 do plano): NUNCA chama `io.remove_entity`, mesmo em consumo 0 —
+# sempre `io.rewrite_description`, porque bebida quase sempre tem um
+# RECIPIENTE reutilizável que a comida não tem. Um alvo `object` (fonte
+# ambiental) NUNCA sofre escrita nenhuma — é inesgotável por definição.
+# --------------------------------------------------------------------------- #
+
+def _apply_drink_ops(character_id: str, actor_folder: Path, resolution: dict,
+                     rolls: list | None = None) -> tuple[list, list]:
+    """Beber de um item ou de uma fonte ambiental (spec 047). Bebibilidade 0
+    rejeita — COM memória embutida (small/negativa, mesmo padrão de `eat`).
+    Bebibilidade > 0 aplica: hidratação -> rótulo de status.thirst; embriaguez
+    -> teste de resistência (mod CON vs alcohol_dc) -> condição 'bêbado' se
+    falhar; toxicidade -> MESMO teste (mod CON vs toxin_dc) -> condição
+    'doente' se falhar, INDEPENDENTE do de embriaguez; consumo (só ITEM) ->
+    `io.rewrite_description` SEMPRE (nunca remove_entity — R3); alvo OBJECT
+    (fonte ambiental) nunca sofre escrita nenhuma."""
+    applied, rejected = [], []
+    if not resolution.get("drink_ops"):
+        return applied, rejected
+    present_chars, present_objects, present_items = io._scene_entities(actor_folder.parent)  # cena fresca (025)
+    actor_fm, _ = io.read_doc(actor_folder / "character.md")
+    for op in resolution.get("drink_ops") or []:
+        alvo_id = op.get("alvo")
+        base = {"beber": alvo_id}
+        item_folder = present_items.get(alvo_id)
+        object_folder = present_objects.get(alvo_id) if item_folder is None else None
+        if item_folder is None and object_folder is None:
+            rejected.append(io._rejection(base, io._fail("alvo_inacessivel", alvo=alvo_id)))
+            continue
+        e_item = item_folder is not None
+        if int(op.get("bebibilidade") or 0) <= 0:
+            rejected.append({
+                **base, "regra": "nao_bebivel", "valores": {"alvo": alvo_id},
+                "why": io._WHY_BY_REGRA["nao_bebivel"],
+                "memory": {
+                    "content": f"Tentei beber de {io.name_of(alvo_id)}, mas não era bebida.",
+                    "intensity": "small", "involved": [alvo_id],
+                    "valence": {alvo_id: memoria.NEGATIVA}, "event": "drink_refused"}})
+            continue
+        hidratacao = int(op.get("hidratacao") or 0)
+        embriaguez = int(op.get("embriaguez") or 0)
+        toxicidade = int(op.get("toxicidade") or 0)
+        embebedou, roll_emb = roll_embriaguez_check(
+            actor_fm, character_id, alvo_id, embriaguez, rolls)
+        adoeceu, roll_tox = roll_toxicidade_check(
+            actor_fm, character_id, alvo_id, toxicidade, rolls)
+        if embebedou:
+            estado._set_condition(actor_folder, "bêbado")
+        if adoeceu:
+            estado._set_condition(actor_folder, "doente")
+        rotulo_sede = ("com sede" if hidratacao <= 2 else
+                       "hidratado" if hidratacao >= 7 else "sem sede")
+        _set_field(actor_folder, "status.thirst", rotulo_sede)
+        # capturado ANTES de qualquer reescrita, no mesmo espírito de `eat`
+        # (ainda que aqui o alvo NUNCA seja removido — R3 — o nome vem do
+        # frontmatter atual, não do id cru).
+        if e_item:
+            item_fm, _ = io.read_doc(item_folder / "item.md")
+            nome_alvo = item_fm.get("name") or io.name_of(alvo_id)
+            consumo = int(op.get("consumo") or 0)
+            nova_descricao = (op.get("nova_descricao") or "").strip()
+            # texto sem número correspondente não pode virar "vazio" calado —
+            # mesmo achado que `eat` já registrou para a régua de consumo.
+            texto_novo = nova_descricao or f"{nome_alvo}, vazio."
+            io.rewrite_description(item_folder, "item.md", texto_novo)
+        else:
+            nome_alvo = io.name_of(alvo_id)
+            consumo = None  # fonte ambiental: régua de consumo não existe (R1/R4)
+        extremo_bom = hidratacao >= 7
+        valence = ({alvo_id: memoria.NEGATIVA} if (adoeceu or embebedou) else
+                   {alvo_id: memoria.POSITIVA} if extremo_bom else None)
+        intensity = "medium" if (adoeceu or embebedou or extremo_bom) else "small"
+        # memória COMBINADA quando os dois testes falham no mesmo consumo —
+        # nunca duas memórias do mesmo ato (FR-014/R9).
+        if adoeceu and embebedou:
+            content = f"Bebi de {nome_alvo}, fiquei bêbado e passei mal."
+            event = "drink_sick_drunk"
+        elif adoeceu:
+            content = f"Bebi de {nome_alvo} e passei mal."
+            event = "drink_sick"
+        elif embebedou:
+            content = f"Bebi de {nome_alvo} e fiquei bêbado."
+            event = "drink_drunk"
+        elif extremo_bom:
+            content = f"Bebi de {nome_alvo} e me senti ótimo."
+            event = "drink_sated"
+        else:
+            content = f"Bebi de {nome_alvo}."
+            event = "drink"
+        applied.append({
+            "alvo": alvo_id, "adoeceu": adoeceu, "embebedou": embebedou,
+            "hidratacao": hidratacao, "consumo": consumo,
+            "virada": bool(roll_tox.get("virada") or roll_emb.get("virada")),
+            "memory": {"content": content, "intensity": intensity,
+                       "involved": [alvo_id], "valence": valence, "event": event}})
+    return applied, rejected
+
+
+@registro.handler("drink_ops")
+def _h_drink(cid, af, res, rolls):
+    applied, rejected = _apply_drink_ops(cid, af, res, rolls)
     return applied, rejected, []  # memória (ator, applied E rejected) via react_actor_memory

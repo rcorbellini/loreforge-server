@@ -523,3 +523,45 @@ def roll_toxicidade_check(actor_fm: dict, char_id: str, item_id: str,
     return adoeceu, info
 
 
+def roll_embriaguez_check(actor_fm: dict, char_id: str, alvo_id: str,
+                          embriaguez: int, rolls: list | None = None) -> tuple[bool, dict]:
+    """Devolve (embebedou, roll_info) — o teste de resistência de `drink` (spec
+    047), INDEPENDENTE de `roll_toxicidade_check` (o mesmo item/fonte pode falhar
+    nos dois testes ao mesmo tempo — R9 do research).
+
+    MESMA forma de `roll_toxicidade_check`: `rolagem.alcohol_dc`, UMA rolagem
+    `d20 + mod(CON)` vs DC. Extremos deterministas: embriaguez 0 = nunca embebeda
+    (sem dado); 10 = sempre embebeda (sem dado). `alvo_id` é o id de um ITEM ou de
+    um OBJECT (fonte ambiental) — a função não distingue, o teste é o mesmo."""
+    embriaguez = int(embriaguez)
+    if embriaguez <= 0:
+        info = {"tipo": "embriaguez", "personagem": char_id, "alvo": alvo_id,
+                "embebedou": False, "virada": False, "critico": None, "rolagem": None}
+        if rolls is not None:
+            rolls.append(info)
+        return False, info
+    if embriaguez >= 10:
+        info = {"tipo": "embriaguez", "personagem": char_id, "alvo": alvo_id,
+                "embebedou": True, "virada": False, "critico": None, "rolagem": None}
+        if rolls is not None:
+            rolls.append(info)
+        return True, info
+    d20 = rolagem._roll_d20()
+    mod = rolagem.attr_modifier((actor_fm.get("attributes") or {}).get("CON", 10))
+    dc = rolagem.alcohol_dc(embriaguez)
+    total = d20 + mod
+    embebedou = total < dc
+    info = {
+        "tipo": "embriaguez", "personagem": char_id, "alvo": alvo_id,
+        "embebedou": embebedou,
+        # virada: a nota dizia forte (>=6) e resistiu, ou dizia fraca (<=4) e embebedou
+        "virada": (embriaguez >= 6 and not embebedou) or (embriaguez <= 4 and embebedou),
+        "critico": ("sucesso" if (d20 == 20 and not embebedou)
+                    else "falha" if (d20 == 1 and embebedou) else None),
+        "rolagem": {"d20": d20, "mod": mod, "total": total, "dc": dc},
+    }
+    if rolls is not None:
+        rolls.append(info)
+    return embebedou, info
+
+

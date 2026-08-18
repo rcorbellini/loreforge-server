@@ -444,6 +444,13 @@ def _verb_candidates(idx: dict) -> dict:
         # come-se o que está ao alcance (na mão OU ainda solto na cena), nunca
         # vestido (spec 046) — mesma régua de alcance de `stow`
         "eat": sorted(i for i, e in items.items() if not worn(e)),
+        # bebe-se o que está ao alcance (mesmo filtro de `eat`) OU direto de
+        # QUALQUER object presente (fonte ambiental — rio, poço; sem conceito
+        # de alcance/porte, mesmo universo cru que `examinar`/`stow_in`/
+        # `shove_to` já usam — spec 047). A régua de BEBIBILIDADE, não um
+        # filtro aqui, decide quem realmente é fonte de líquido.
+        "drink": sorted(set(i for i, e in items.items() if not worn(e))
+                        | set(idx["objects"])),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
@@ -830,6 +837,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     gave_asked: set = set()  # (alvo,item) já pedidos via persuade_give (spec 023)
     stole_asked: set = set()  # (alvo,item) já tentados via steal (spec 023)
     eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
+    drunk_asked: set = set()  # alvo (item ou object) já tentado via drink (spec 047)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1039,7 +1047,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         sub=_sub, seen_len=_seen_len, merge=_merge,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
-        eaten_asked=eaten_asked,
+        eaten_asked=eaten_asked, drunk_asked=drunk_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

@@ -22,6 +22,7 @@ from ..deslocamento import (
 )
 from ..fisica import (
     hunger_label,
+    thirst_label,
     fatigue_label,
     _inside_closed,
     _direct_items,
@@ -495,6 +496,7 @@ def get_context(character_id: str) -> dict:
             # está com fome. Ver `fisica.hunger_label`.
             "necessidade": {
                 "fome": hunger_label(self_fm),
+                "sede": thirst_label(self_fm),
                 "cansaco": fatigue_label(self_fm),
             },
             "body": self_body,

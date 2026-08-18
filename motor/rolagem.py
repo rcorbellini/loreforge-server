@@ -136,6 +136,18 @@ def toxin_dc(toxicidade: int) -> int:
     return 2 * int(toxicidade)
 
 
+def alcohol_dc(embriaguez: int) -> int:
+    """Dificuldade do teste de resistência a uma bebida forte (spec 047, `drink`).
+
+    MESMA forma linear de `toxin_dc` (nota ALTA = DC ALTA), mas função PRÓPRIA:
+    embriaguez e toxicidade são riscos fisiologicamente distintos que hoje
+    colapsam na mesma fórmula — nomear como duas funções deixa o teste honesto
+    sobre QUAL risco está sendo medido, e não amarra os dois ao mesmo destino se
+    um dia divergirem (ex.: resistência a álcool separada de constituição geral).
+    """
+    return 2 * int(embriaguez)
+
+
 def persuade_tendencia(vontade: int) -> str:
     """Tendência natural do alvo: base da VIRADA social (clarificação Q1 da spec)."""
     v = int(vontade)

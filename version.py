@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.13.1"
+__version__ = "2.14.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -50,6 +50,30 @@ __version__ = "2.13.1"
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
 HISTORY = {
+    "2.14.0": "spec 047 — BEBER. Tool nova `drink`: bebe de um item (cantil, copo, "
+              "garrafa) OU direto de uma FONTE AMBIENTAL presente (`object` como um "
+              "rio/poço, inesgotável) — julgada por até CINCO réguas (bebibilidade, "
+              "hidratação, embriaguez, toxicidade, consumo — a última só para item). "
+              "Revisão por casos de uso REAIS antes do plano (rio na descrição da "
+              "location; cantil ambíguo; copo; garrafa no chão) achou dois buracos "
+              "no desenho inicial e os fechou na própria spec: (1) o alvo pode ser "
+              "um `item` finito OU um `object` ambiental — a MESMA régua de "
+              "bebibilidade decide os dois, sem nenhum campo novo em nenhum schema; "
+              "(2) `drink` NUNCA chama `io.remove_entity` — mesmo em consumo 0, "
+              "SEMPRE reescreve a descrição para um estado vazio, porque bebida "
+              "quase sempre tem um RECIPIENTE reutilizável que a exceção do "
+              "Princípio IV (aberta por `eat`) nunca foi desenhada para proteger. "
+              "Embriaguez é eixo PRÓPRIO, independente de toxicidade — o mesmo gole "
+              "pode falhar nos dois testes e aplicar `bêbado` E `doente` juntos, "
+              "numa ÚNICA memória combinada (nunca duas do mesmo ato). "
+              "`status.thirst` é campo NOVO (ao contrário de `status.hunger`, que "
+              "já existia morto antes de `eat`) e sobe ao contexto da Mente em "
+              "`self.necessidade.sede`, ao lado de `fome`/`cansaco` — sem isso "
+              "repetiria o bug que o item 51 já corrigiu (campo que muda mas "
+              "ninguém sabe que sente). ZERO extensão de arquitetura: `ToolSpec."
+              "juizo` multi-par e `react_actor_memory` em `rejected` já existiam, "
+              "prontos, desde `eat` — `drink` só consome infraestrutura genérica. "
+              "MINOR: tool nova. Ver specs/047-drink-item/",
     "2.13.0": "spec 046 — COMER. Tool nova `eat`: consome um item comestível julgado "
               "por QUATRO réguas dedicadas (comestibilidade, saciedade, toxicidade, "
               "consumo) — a primeira capacidade a pedir mais de uma nota, o que "

@@ -291,6 +291,8 @@ _WHY_BY_REGRA = {
     "item_alheio": "isso está com outra pessoa — pegue antes de vestir",
     "nao_vestido_em_voce": "isso não está vestido em quem age — não há o que tirar",
     "nao_comestivel": "isso não é algo que se coma",
+    "nao_bebivel": "isso não é algo que se beba",
+    "alvo_inacessivel": "não está ao alcance para beber",
 }
 
 

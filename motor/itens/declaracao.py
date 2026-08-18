@@ -583,3 +583,250 @@ EAT = tool_spec(ToolSpec(
     enum_sources={"item": "eat"},
     apply=_eat,
 ))
+
+
+# --- As réguas de `drink` (spec 047) ----------------------------------------- #
+# Espelham as de `eat`, com DUAS diferenças: um eixo a mais (embriaguez, com
+# condição PRÓPRIA `bêbado`, separada de `doente`) e um alvo a mais (fonte
+# ambiental — `object` não-portável, inesgotável). A régua de BEBIBILIDADE
+# funciona para os dois tipos de alvo: a MESMA leitura decide se um item é
+# líquido ou se um object é fonte de água — nenhum campo novo em nenhum schema.
+
+REGUA_BEBIBILIDADE = """\
+Régua da BEBIBILIDADE (o quanto, PELA DESCRIÇÃO do alvo — um item OU uma fonte
+ambiental como um rio/poço —, ele é algo que se poderia beber — não o quanto é
+saboroso, só se É líquido bebível):
+  0  claramente NÃO é bebível — objeto sólido, material bruto, ou algo
+     fabricado que só IMITA a forma (uma garrafa de decoração vazia, uma
+     estátua de fonte sem água de verdade) (sem teste)
+  1  quase certamente não — nada na descrição sugere líquido, só a forma engana
+  2  muito improvável — algo pastoso ou sólido demais para se beber
+  3  duvidoso — bebível só em desespero, sem confirmação de líquido de verdade
+  4  incerto — serviria em desespero, mas a descrição não confirma
+  5  ambíguo — a descrição não decide; tanto pode ter líquido quanto não (ex.:
+     um cantil ou copo cuja descrição não diz se está cheio)
+  6  provável — tem cara de bebida, mas falta um detalhe que confirme
+  7  bastante provável — claramente algo que se bebe, mesmo cru ou impróprio
+  8  bebida reconhecível — água, vinho, cerveja, claramente identificável
+  9  bebida óbvia e fresca/farta
+  10 bebida perfeita e evidente — não há dúvida nenhuma (sem teste)
+Um cantil/copo/garrafa cuja descrição NÃO diz se tem líquido não é 0 automático
+— é ambíguo (em torno de 5): a régua resolve como CLASSIFICAÇÃO, não travando a
+ação. Objeto decorativo que IMITA bebida puxa a nota para 0. A nota é segredo do
+mundo: nunca o número na narrativa; nota 0 recusa a tentativa, mesmo que as
+outras notas venham preenchidas."""
+
+REGUA_HIDRATACAO = """\
+Régua da HIDRATAÇÃO (o quanto o ato satisfaz a sede, pela quantidade e tipo do
+líquido DESCRITO — nunca a vontade de quem bebe):
+  0  zero valor hidratante — a ação não mata a sede em nada
+  1  gole ínfimo — uma gota, um resquício
+  2  quase nada — um gole minúsculo
+  3  pouco — um gole comum
+  4  um pouco — alguns goles
+  5  quantidade módica — meio copo, um cantil pela metade
+  6  quantidade média — um copo cheio, um cantil razoável
+  7  quantidade boa — uma bebida completa comum
+  8  fartura — um cantil cheio, uma jarra
+  9  banquete líquido — muito mais que uma pessoa precisa de uma vez
+  10 hidratação extrema/mágica — fartura fora do comum, ou uma fonte inesgotável
+A nota é segredo do mundo: nunca o número na narrativa. O Motor converte a nota
+num RÓTULO de sede (nunca grava o número na ficha)."""
+
+REGUA_EMBRIAGUEZ = """\
+Régua da EMBRIAGUEZ (o quanto, PELA DESCRIÇÃO, o líquido é ALCOÓLICO/forte —
+não o risco de contaminação, isso é outra régua):
+  0  sem álcool nenhum — água, suco, chá (sem teste)
+  1  traço mínimo — quase nada, mal se sente
+  2  muito fraco — uma cerveja leve, bem aguada
+  3  fraco — uma cerveja ou sidra comum
+  4  moderado-baixo — uma cerveja forte, um vinho leve
+  5  moderado — um vinho comum
+  6  moderado-alto — um vinho forte, uma cerveja bem forte
+  7  forte — destilado leve, ou vinho de alta graduação
+  8  muito forte — aguardente, destilado comum
+  9  quase certo de embriagar — destilado forte, feito para derrubar
+  10 extremo — puro/reforçado a ponto de embriagar qualquer um (sem teste)
+A nota é segredo do mundo: nunca o número na narrativa; 1–9 têm UM teste de
+resistência na aplicação — não narre a bebedeira como certa nem como evitada."""
+
+REGUA_TOXICIDADE_BEBIDA = """\
+Régua da TOXICIDADE (o quanto o líquido, PELA DESCRIÇÃO, é arriscado por
+contaminação/veneno — parado, turvo, contaminado pesam diferente de límpido e
+fresco; INDEPENDENTE da força alcoólica):
+  0  inofensivo — nada na descrição sugere risco (sem teste)
+  1  risco mínimo — levemente parado, mal chega a incomodar
+  2  risco baixo — desconfortável no máximo
+  3  risco leve — pode embrulhar o estômago de quem for sensível
+  4  risco moderado-baixo — parado ou mal conservado, mas não flagrante
+  5  risco moderado — claramente não é o ideal, mas não é óbvio o perigo
+  6  risco moderado-alto — sinais de contaminação/estagnação visíveis
+  7  risco alto — cheiro/aparência que qualquer um reconheceria como ruim
+  8  risco muito alto — claramente estragado ou com sinais de veneno
+  9  quase certo — a descrição deixa pouca dúvida do perigo
+  10 mortal — veneno declarado ou contaminação extrema (sem teste)
+A nota é segredo do mundo: nunca o número na narrativa; 1–9 têm UM teste de
+resistência na aplicação, INDEPENDENTE do teste de embriaguez — os dois podem
+falhar juntos no mesmo gole."""
+
+REGUA_CONSUMO_BEBIDA = """\
+Régua do CONSUMO (o quanto do LÍQUIDO resta depois do ato — nunca o recipiente
+em si, que NUNCA desaparece: um copo/cantil/garrafa esvaziado continua existindo,
+só muda de "cheio" para "vazio"):
+  0  nada resta — bebeu tudo, o recipiente fica vazio
+  1  quase nada — um resíduo irrisório no fundo
+  2  muito pouco resta
+  3  pouco resta
+  4  perto da metade resta
+  5  metade resta
+  6  um pouco mais da metade resta
+  7  a maior parte resta
+  8  quase tudo resta — só um gole a menos
+  9  quase intacto — um traço mínimo de uso
+  10 praticamente intacto
+Junto da nota, escreva um texto CURTO e FACTUAL descrevendo o novo estado físico
+do RECIPIENTE (o que qualquer um veria olhando para ele — nunca o sabor, a
+ardência ou o alívio de quem bebeu), preservando as qualidades da descrição
+original (ex.: "cantil de couro cheio" -> "cantil de couro, quase vazio"). A
+nota é segredo do mundo; o TEXTO da nova descrição é o único elemento desta
+régua que vira estado do mundo — e só existe para ITEM, nunca para uma fonte
+ambiental (que não muda por ter sido usada)."""
+
+# spec 047 — mesma correção de custo/latência que `eat` (spec 046) já fechou:
+# UMA chamada combinada, JSON com schema explícito. DOIS prompts — um alvo
+# ITEM pede também consumo+descrição; uma FONTE AMBIENTAL nunca pede isso (ela
+# é inesgotável e nunca muda de estado — pedir a nota seria perguntar algo sem
+# sentido, e arriscaria uma resposta estranha à toa).
+REGUA_BEBER_ITEM = f"""\
+Você vai julgar UMA tentativa de beber de um ITEM (algo portátil — cantil,
+copo, garrafa), em CINCO eixos independentes. Leia a descrição do item com
+cuidado antes de responder.
+
+{REGUA_BEBIBILIDADE}
+
+{REGUA_HIDRATACAO}
+
+{REGUA_EMBRIAGUEZ}
+
+{REGUA_TOXICIDADE_BEBIDA}
+
+{REGUA_CONSUMO_BEBIDA}
+
+Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de explicação,
+EXATAMENTE com estas seis chaves (os quatro números são OBRIGATÓRIOS, mesmo que
+bebibilidade seja 0):
+
+{{"bebibilidade": <inteiro 0-10>, "hidratacao": <inteiro 0-10>, "embriaguez": <inteiro 0-10>, "toxicidade": <inteiro 0-10>, "consumo": <inteiro 0-10>, "descricao": "<texto curto e factual do novo estado físico do recipiente>"}}"""
+
+REGUA_BEBER_FONTE = f"""\
+Você vai julgar UMA tentativa de beber direto de uma FONTE AMBIENTAL (um
+`object` não-portável presente na cena — rio, poço, riacho —, NUNCA um item que
+se carregue), em QUATRO eixos independentes. Esta fonte é INESGOTÁVEL por
+definição — NÃO existe régua de "quanto resta"; ela nunca muda de estado por
+ter sido usada. Leia a descrição da fonte com cuidado antes de responder.
+
+{REGUA_BEBIBILIDADE}
+
+{REGUA_HIDRATACAO}
+
+{REGUA_EMBRIAGUEZ}
+
+{REGUA_TOXICIDADE_BEBIDA}
+
+Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de explicação,
+EXATAMENTE com estas quatro chaves (todas OBRIGATÓRIAS, mesmo que bebibilidade
+seja 0):
+
+{{"bebibilidade": <inteiro 0-10>, "hidratacao": <inteiro 0-10>, "embriaguez": <inteiro 0-10>, "toxicidade": <inteiro 0-10>}}"""
+
+_CAMPOS_BEBER_COMUM = {"bebibilidade": 5, "hidratacao": 5, "embriaguez": 0, "toxicidade": 0}
+_CAMPOS_BEBER_ITEM = {**_CAMPOS_BEBER_COMUM, "consumo": 0}
+
+
+@inworld("drink_ops_applied")
+def _iw_drink(op):
+    alvo = name_of(op.get("alvo"))
+    if op.get("embebedou") and op.get("adoeceu"):
+        return f"bebeu de {alvo}, ficou bêbado e passou mal"
+    if op.get("embebedou"):
+        return f"bebeu de {alvo} e ficou bêbado"
+    if op.get("adoeceu"):
+        return f"bebeu de {alvo} e passou mal"
+    return f"bebeu de {alvo}"
+
+
+def _drink(name: str, args: dict, ctx) -> tuple[dict, bool]:
+    alvo = args.get("alvo")
+    if not alvo:
+        return ctx.err("informe 'alvo'"), False
+    e_item = alvo in ctx.items
+    if not e_item and alvo not in ctx.objects:
+        return ctx.err(f"'{alvo}' não reconhecido", "alvo",
+                       ctx.validos(ctx.items, ctx.objects)), False
+    if alvo in ctx.drunk_asked:
+        return ctx.err(f"beber de '{alvo}' já foi tentado neste turno — "
+                       "o desfecho sai na aplicação; NÃO repita: siga para outra ação ou narrate"), False
+    # spec 047 — o TIPO do alvo escolhe o prompt: só um ITEM pede consumo (uma
+    # fonte ambiental nunca se esgota, R1/R4 do research).
+    regua = REGUA_BEBER_ITEM if e_item else REGUA_BEBER_FONTE
+    campos = _CAMPOS_BEBER_ITEM if e_item else _CAMPOS_BEBER_COMUM
+    julgado = juizo.julgamento(
+        ctx.ask(regua, json.dumps({"alvo": ctx.describe(alvo)},
+                                  ensure_ascii=False, indent=2)),
+        campos=campos, texto_campo=("descricao" if e_item else None), texto_default="")
+    ctx.drunk_asked.add(alvo)
+    bebibilidade = julgado["bebibilidade"]
+    if bebibilidade == 0:
+        rej, rolled = ctx.apply_arbitrated("drink_ops", {"alvo": alvo, "bebibilidade": 0})
+        if rej:
+            return ctx.arb_deny(rolled, ("drink", alvo), {"alvo": alvo}, rej)
+        return {"ok": True, "aplicado": {"alvo": alvo,
+                                         "nota": "o desfecho sai na aplicação"}}, False
+    payload = {"alvo": alvo, "bebibilidade": bebibilidade,
+               "hidratacao": julgado["hidratacao"], "embriaguez": julgado["embriaguez"],
+               "toxicidade": julgado["toxicidade"]}
+    if e_item:
+        consumo, nova_descricao = julgado["consumo"], julgado["descricao"]
+        # texto sem número correspondente não pode virar "nada resta" calado —
+        # mesmo achado que `eat` já registrou para a régua de consumo.
+        if consumo == 0 and nova_descricao:
+            consumo = 5
+        payload["consumo"] = consumo
+        payload["nova_descricao"] = nova_descricao
+    rej, rolled = ctx.apply_arbitrated("drink_ops", payload)
+    if rej:
+        return ctx.arb_deny(rolled, ("drink", alvo), {"alvo": alvo}, rej)
+    return {"ok": True, "aplicado": {"alvo": alvo,
+                                     "nota": "o desfecho sai na aplicação"}}, False
+
+
+DRINK = tool_spec(ToolSpec(
+    names=("drink",),
+    # spec 047 — os seis pares possíveis (mesmo quando o alvo é fonte ambiental
+    # e só quatro são de fato perguntados, R4 do research: o `juizo` só serve
+    # para esconder os params da FACE, nunca obriga o corpo a perguntar todos).
+    juizo=(
+        ("bebibilidade", REGUA_BEBER_ITEM),
+        ("hidratacao", REGUA_BEBER_ITEM),
+        ("embriaguez", REGUA_BEBER_ITEM),
+        ("toxicidade", REGUA_BEBER_ITEM),
+        ("consumo", REGUA_BEBER_ITEM),
+        ("nova_descricao", REGUA_BEBER_ITEM),
+    ),
+    description=("Bebe de um item (cantil, copo, garrafa) presente/na sua mão, "
+     "OU direto de uma fonte ambiental presente (rio, poço) — o mundo decide, "
+     "lendo a descrição, se é bebível, o quanto hidrata, o quanto embriaga e o "
+     "quanto arrisca. Um alvo claramente não-bebível é recusado. Uma fonte "
+     "ambiental nunca se esgota."),
+    params={"alvo": _STR,
+            "bebibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
+            "hidratacao": {"type": "integer", "minimum": 0, "maximum": 10},
+            "embriaguez": {"type": "integer", "minimum": 0, "maximum": 10},
+            "toxicidade": {"type": "integer", "minimum": 0, "maximum": 10},
+            "consumo": {"type": "integer", "minimum": 0, "maximum": 10},
+            "nova_descricao": _STR},
+    required=("alvo", "bebibilidade", "hidratacao", "embriaguez", "toxicidade",
+             "consumo", "nova_descricao"),
+    enum_sources={"alvo": "drink"},
+    apply=_drink,
+))

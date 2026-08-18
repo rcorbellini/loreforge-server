@@ -78,6 +78,7 @@ from .primitivas import (  # noqa: F401
     _set_item_slot,
     _validate_move,
     roll_steal_check,
+    roll_toxicidade_check,
     transfer_item,
 )
 
@@ -463,3 +464,82 @@ def _h_transfer(cid, af, res, rolls):
 def _h_steal(cid, af, res, rolls):
     applied, rejected = _apply_steal_ops(cid, af, res, rolls)
     return applied, rejected, []  # memória (ladrão e dono flagrado) via react_actor_memory (spec 038)
+
+
+# --------------------------------------------------------------------------- #
+# Comer (spec 046) — consumir um item comestível, julgado por QUATRO réguas já
+# resolvidas pela guarda (`itens/declaracao._eat`): comestibilidade, saciedade,
+# toxicidade, consumo+nova_descricao. Este executor VALIDA e APLICA; a ÚNICA
+# decisão não-determinística é o teste de toxicidade (roll_toxicidade_check) — o
+# Árbitro julgou o RISCO, o Motor decide se de fato adoeceu.
+# --------------------------------------------------------------------------- #
+
+def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
+                   rolls: list | None = None) -> tuple[list, list]:
+    """Comer um item (spec 046). Comestibilidade 0 rejeita — COM memória embutida
+    (`op["memory"]`, small/negativa — a correção do mantenedor: recusa de mérito
+    também vira lembrança, ou a Mente re-tenta em loop sem saber que já tentou).
+    Comestibilidade > 0 aplica: saciedade -> rótulo de status.hunger; toxicidade ->
+    teste de resistência (mod CON vs toxin_dc) -> condição 'doente' se falhar;
+    consumo -> state.consumido (nota 0, NUNCA deleta arquivo — Princípio IV) ou
+    description reescrita em lugar (nota 1-9)."""
+    applied, rejected = [], []
+    if not resolution.get("eat_ops"):
+        return applied, rejected
+    _, _, present_items = io._scene_entities(actor_folder.parent)  # cena fresca (025)
+    actor_fm, _ = io.read_doc(actor_folder / "character.md")
+    for op in resolution.get("eat_ops") or []:
+        item_id = op.get("item")
+        base = {"comer": item_id}
+        item_folder = present_items.get(item_id)
+        if item_folder is None:
+            rejected.append(io._rejection(base, io._fail("item_inacessivel", item=item_id)))
+            continue
+        if int(op.get("comestibilidade") or 0) <= 0:
+            rejected.append({
+                **base, "regra": "nao_comestivel", "valores": {"item": item_id},
+                "why": io._WHY_BY_REGRA["nao_comestivel"],
+                "memory": {
+                    "content": f"Tentei comer {io.name_of(item_id)}, mas não era comida.",
+                    "intensity": "small", "involved": [item_id],
+                    "valence": {item_id: memoria.NEGATIVA}, "event": "eat_refused"}})
+            continue
+        saciedade = int(op.get("saciedade") or 0)
+        toxicidade = int(op.get("toxicidade") or 0)
+        consumo = int(op.get("consumo") or 0)
+        nova_descricao = (op.get("nova_descricao") or "").strip()
+        adoeceu, roll_info = roll_toxicidade_check(
+            actor_fm, character_id, item_id, toxicidade, rolls)
+        if adoeceu:
+            estado._set_condition(actor_folder, "doente")
+        rotulo_fome = ("com fome" if saciedade <= 2 else
+                       "saciado" if saciedade >= 7 else "sem fome")
+        _set_field(actor_folder, "status.hunger", rotulo_fome)
+        item_fm, item_body = io.read_doc(item_folder / "item.md")
+        if consumo <= 0:
+            state = dict(item_fm.get("state") or {})
+            state["consumido"] = True
+            item_fm["state"] = state
+            io.write_doc(item_folder / "item.md", item_fm, item_body)
+        elif nova_descricao:
+            io.rewrite_description(item_folder, "item.md", nova_descricao)
+        extremo_bom = saciedade >= 7
+        valence = ({item_id: memoria.NEGATIVA} if adoeceu else
+                   {item_id: memoria.POSITIVA} if extremo_bom else None)
+        intensity = "medium" if (adoeceu or extremo_bom) else "small"
+        content = (f"Comi {io.name_of(item_id)} e fiquei doente." if adoeceu else
+                   f"Comi {io.name_of(item_id)} e fiquei bem satisfeito." if extremo_bom else
+                   f"Comi {io.name_of(item_id)}.")
+        applied.append({
+            "item": item_id, "adoeceu": adoeceu, "saciedade": saciedade,
+            "consumo": consumo, "virada": bool(roll_info.get("virada")),
+            "memory": {"content": content, "intensity": intensity,
+                       "involved": [item_id], "valence": valence,
+                       "event": "eat_sick" if adoeceu else "eat"}})
+    return applied, rejected
+
+
+@registro.handler("eat_ops")
+def _h_eat(cid, af, res, rolls):
+    applied, rejected = _apply_eat_ops(cid, af, res, rolls)
+    return applied, rejected, []  # memória (ator, applied E rejected) via react_actor_memory

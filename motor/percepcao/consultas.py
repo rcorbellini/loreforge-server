@@ -54,6 +54,7 @@ from ..io import (
     _is_valid,
     find_character_folder,
     find_entity,
+    is_consumed,
     read_doc,
 )
 from ..memoria import (
@@ -442,7 +443,7 @@ def get_context(character_id: str) -> dict:
             })
         elif (child / "item.md").exists():
             item_fm, _ = read_doc(child / "item.md")
-            if not _is_valid(item_fm):
+            if not _is_valid(item_fm) or is_consumed(item_fm):
                 continue
             entry = {
                 "id": item_fm.get("id"),

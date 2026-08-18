@@ -125,6 +125,15 @@ def write_doc(path: Path, frontmatter_data: dict, body: str) -> None:
     os.replace(tmp, path)
 
 
+def rewrite_description(entity_folder: Path, filename: str, texto: str) -> None:
+    """Reescreve o BODY (a descrição diegética) de uma entidade, no PRÓPRIO arquivo —
+    mesmo id, mesma pasta (spec 046, `eat`, consumo parcial). Nunca cria arquivo novo
+    nem move pasta: é a mesma disciplina de `_set_condition`/`_set_field` (mutação de
+    campo em lugar), só que no BODY em vez do frontmatter."""
+    fm, _ = read_doc(entity_folder / filename)
+    write_doc(entity_folder / filename, fm, texto)
+
+
 def move_entity(src: Path, dest: Path) -> None:
     """Move a pasta de uma entidade inteira (rename atômico) — a ÚNICA primitiva
     que desloca pasta no mundo (spec 037, Princípio XII): mover pasta é ESTRUTURA,
@@ -280,6 +289,7 @@ _WHY_BY_REGRA = {
     "item_carregado": "isso está com alguém — empurra-se só o que ninguém carrega",
     "item_alheio": "isso está com outra pessoa — pegue antes de vestir",
     "nao_vestido_em_voce": "isso não está vestido em quem age — não há o que tirar",
+    "nao_comestivel": "isso não é algo que se coma",
 }
 
 
@@ -287,6 +297,18 @@ def _rejection(base: dict, rej: dict) -> dict:
     """Anexa o motivo estruturado (regra + valores) e o `why` em prosa curta."""
     return {**base, "regra": rej["regra"], "valores": rej["valores"],
             "why": _WHY_BY_REGRA.get(rej["regra"], rej["regra"])}
+
+
+def is_consumed(fm: dict) -> bool:
+    """`state.consumido: true` (spec 046, `eat`) — o item foi comido por completo.
+
+    Princípio IV proíbe deletar arquivo: um item devorado NÃO desaparece do disco,
+    só ganha esta marca (mesmo desenho de memória `state: expired`). Todo ponto que
+    ENUMERA itens para o jogo (cena, inventário, contêiner) filtra por isto — o
+    item some do jogo sem sumir do mundo. `state` ausente/não-mapa ⇒ não consumido
+    (mundo antigo continua íntegro, como `fechado` ausente ⇒ aberto)."""
+    state = fm.get("state")
+    return isinstance(state, dict) and state.get("consumido") is True
 
 
 def _iter_within_location(location_folder: Path, filename: str):
@@ -337,6 +359,6 @@ def _scene_entities(location_folder: Path) -> tuple[dict, dict, dict]:
     items = {}
     for path in _iter_within_location(location_folder, "item.md"):
         fm, _ = read_doc(path)
-        if fm.get("id"):
+        if fm.get("id") and not is_consumed(fm):
             items[fm["id"]] = path.parent
     return characters, objects, items

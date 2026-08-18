@@ -25,13 +25,14 @@ from version import __version__
 def _classe(tool: str, param: str, spec) -> str:
     """ESCOLHA · VOZ · JUIZO · SISTEMA — as quatro classes da spec 043.
 
-    O JUÍZO sai da DECLARAÇÃO da capacidade (`juizo=(param, RÉGUA)`), não de uma
-    lista de nomes nem da forma do schema: é o mesmo dado que faz o parâmetro sumir
-    da face e a capacidade pedir a nota ao mundo. Uma fonte, três consequências.
+    O JUÍZO sai da DECLARAÇÃO da capacidade (`juizo=((param, RÉGUA), ...)`, spec 046),
+    não de uma lista de nomes nem da forma do schema: é o mesmo dado que faz o
+    parâmetro sumir da face e a capacidade pedir a nota ao mundo. Uma fonte, três
+    consequências.
     """
     if spec.interna:
         return "sistema"
-    if spec.juizo and spec.juizo[0] == param:
+    if any(p == param for p, _ in spec.juizo):
         return "juizo"
     if param in ("content", "summary", "expectativa", "reason", "narrative_hint",
                  "trecho", "sobre"):

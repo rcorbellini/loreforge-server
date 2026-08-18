@@ -24,6 +24,12 @@ NOTA_0_10 = "\n\nResponda APENAS com um número inteiro de 0 a 10, nada mais."
 
 _PRIMEIRO_NUMERO = re.compile(r"-?\d+")
 
+# spec 046 (`eat`, régua de CONSUMO): a ÚNICA régua do projeto que pede DUAS coisas
+# na mesma resposta — a nota E o texto da nova descrição do item. Frase canônica
+# própria (não reusa NOTA_0_10 sozinha) para o parse de duas linhas ser previsível.
+NOTA_0_10_E_TEXTO = ("\n\nResponda em DUAS linhas: a primeira só com um número inteiro "
+                     "de 0 a 10, nada mais; a segunda com o texto pedido, nada mais.")
+
 
 def nota(raw: str, default: int) -> int:
     """A nota que o mundo leu, grampeada em 0-10.
@@ -44,3 +50,14 @@ def nota(raw: str, default: int) -> int:
         return max(0, min(10, int(achado.group())))
     except ValueError:            # inteiro absurdamente grande
         return default
+
+
+def nota_e_texto(raw: str, default_nota: int, default_texto: str = "") -> tuple[int, str]:
+    """Como `nota`, mas para a régua que também pede um TEXTO (spec 046, `eat`): a
+    1ª linha vira a nota (via `nota()`, mesmo grampeamento/default); o RESTO da
+    resposta vira o texto, tal como veio — sem resumir. Resposta sem 2ª linha cai
+    no `default_texto` (mesma disciplina de robustez do `nota()`)."""
+    linhas = (raw or "").splitlines()
+    primeira = linhas[0] if linhas else ""
+    resto = "\n".join(linhas[1:]).strip()
+    return nota(primeira, default_nota), (resto or default_texto)

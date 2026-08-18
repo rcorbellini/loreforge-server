@@ -216,7 +216,7 @@ ENTER_ROUTE = tool_spec(ToolSpec(
 
 PERSUADE = tool_spec(ToolSpec(
     names=("persuade",),
-    juizo=("vontade", REGUA_VONTADE),
+    juizo=(("vontade", REGUA_VONTADE),),
     description=("Convence OUTRO personagem a partir por um caminho, enquanto QUEM AGE "
      "FICA. Nunca use para deslocar quem age — se é ele que vai andar, use "
      "enter_route. Se a pessoa se deixa convencer é ela quem decide, pelo "

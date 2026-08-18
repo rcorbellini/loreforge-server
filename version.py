@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.12.0"
+__version__ = "2.13.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -50,6 +50,27 @@ __version__ = "2.12.0"
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
 HISTORY = {
+    "2.13.0": "spec 046 — COMER. Tool nova `eat`: consome um item comestível julgado "
+              "por QUATRO réguas dedicadas (comestibilidade, saciedade, toxicidade, "
+              "consumo) — a primeira capacidade a pedir mais de uma nota, o que "
+              "estendeu `ToolSpec.juizo` de par único para tupla de pares (migrando as "
+              "8 tools que já usavam a forma antiga, no mesmo passo — nenhuma convive "
+              "em duas formas). Comestibilidade preenche a lacuna que o Motor "
+              "estruturalmente não valida sozinho (ele sabe presença/alcance; não sabe "
+              "que uma bota não é comida); nota 0 recusa SEM gastar as outras três. "
+              "Saciedade escreve `status.hunger` em RÓTULO pela primeira vez (o campo "
+              "já existia, mas nenhuma tool o escrevia). Toxicidade separa o RISCO que "
+              "o Árbitro julga do TESTE que o Motor resolve (`toxin_dc`, curva nova — "
+              "inclinação inversa de `persuade_dc`, porque nota alta aqui significa "
+              "mais perigoso, não mais fácil). Consumo decide entre marcar "
+              "`state.consumido: true` (o item some do jogo, mas o ARQUIVO NUNCA é "
+              "deletado — Princípio IV) ou reescrever a `description` em lugar. "
+              "Correção do mantenedor durante o planejamento: uma recusa de MÉRITO "
+              "(comestibilidade 0) também vira memória — não é caso especial, é a "
+              "regra geral (o que só sai em narração efêmera some do que o personagem "
+              "'sabe' no próximo tick), o que abriu `react_actor_memory` para também "
+              "ler `op[\"memory\"]` em fatos `rejected`, não só `applied` — peça "
+              "reusável para a próxima tool. MINOR: tool nova.",
     "2.12.0": "item 51, fatia 1 — A NECESSIDADE CHEGA À MENTE, em RÓTULO. A segunda "
               "bússola do tick autônomo estava desligada: o prompt de autonomia lia "
               "`status_sobrevivencia` numa 'escala de 0 a 10' e o conector a "

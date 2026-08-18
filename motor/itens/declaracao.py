@@ -50,6 +50,86 @@ Item DISCRETO/preso ao corpo puxa a nota PARA BAIXO mesmo com o dono distraído 
 é a leitura da prosa que manda. A nota é segredo do mundo: nunca o número na
 narrativa; 1–9 têm teste de furtividade na aplicação — não narre o desfecho como certo."""
 
+# --- As quatro réguas de `eat` (spec 046) ----------------------------------- #
+# `eat` é a primeira capacidade com MAIS de uma régua — cada uma cobre um eixo
+# que o Motor não consegue validar sozinho (ele sabe presença/alcance; não sabe
+# o que a descrição SIGNIFICA). Comestibilidade é perguntada PRIMEIRO e SEMPRE;
+# as outras três só quando ela não for 0 (curto-circuito, research R1).
+
+REGUA_COMESTIBILIDADE = """\
+Régua da COMESTIBILIDADE (o quanto, PELA DESCRIÇÃO do item, ele é algo que se
+poderia comer — não o quanto é gostoso, só se É comida):
+  0  claramente NÃO é comida — objeto, material bruto, ou algo fabricado que só
+     IMITA o formato (uma fruta de cera, um sabão em forma de maçã) (sem teste)
+  1  quase certamente não — nada na descrição sugere nutrição, só a forma engana
+  2  muito improvável — um material bruto (couro, madeira, pedra, metal)
+  3  duvidoso — comestível só em teoria, sem preparo nenhum (casca crua, folha)
+  4  incerto — serviria em desespero, mas a descrição não confirma nutrição
+  5  ambíguo — a descrição não decide; tanto pode ser alimento quanto não
+  6  provável — tem cara de comida, mas falta um detalhe que confirme
+  7  bastante provável — claramente algo que se come, mesmo cru ou sem preparo
+  8  comida reconhecível — fruta, carne, pão, claramente identificável como tal
+  9  comida óbvia e fresca
+  10 comida perfeita e evidente — não há dúvida nenhuma (sem teste)
+Objeto decorativo ou fabricado que IMITA comida puxa a nota para 0, mesmo que a
+aparência engane — a descrição costuma denunciar (frio demais, sem cheiro, cor
+parada demais). A nota é segredo do mundo: nunca o número na narrativa; nota 0
+encerra a tentativa SEM gastar as outras três réguas."""
+
+REGUA_SACIEDADE = """\
+Régua da SACIEDADE (o quanto o ato satisfaz a fome, pelo tamanho e tipo do
+alimento DESCRITO — nunca a vontade de quem come):
+  0  zero valor nutricional — a ação não alimenta em nada
+  1  belisco ínfimo — uma amora, uma migalha
+  2  quase nada — um gole, um pedaço minúsculo
+  3  lanche leve — uma fruta pequena
+  4  lanche — uma fruta média, um punhado
+  5  refeição módica — um pedaço de pão, uma porção pequena
+  6  refeição média — um prato de sopa, uma fatia farta
+  7  refeição boa — uma refeição completa comum
+  8  refeição farta — uma perna de carneiro, um prato fartíssimo
+  9  banquete — muito mais que uma pessoa precisa numa refeição
+  10 saciedade extrema/mágica — fartura fora do comum
+A nota é segredo do mundo: nunca o número na narrativa. O Motor converte a nota
+num RÓTULO de fome (nunca grava o número na ficha)."""
+
+REGUA_TOXICIDADE = """\
+Régua da TOXICIDADE (o quanto o item, PELA DESCRIÇÃO, é arriscado — cru,
+estragado, contaminado ou venenoso pesam diferente de fresco e eram próprio):
+  0  inofensivo — nada na descrição sugere risco (sem teste)
+  1  risco mínimo — levemente cru ou não ideal, mal chega a incomodar
+  2  risco baixo — desconfortável no máximo
+  3  risco leve — pode embrulhar o estômago de quem for sensível
+  4  risco moderado-baixo — cru ou mal conservado, mas não flagrante
+  5  risco moderado — claramente não é o ideal, mas não é óbvio o perigo
+  6  risco moderado-alto — sinais de deterioração ou contaminação visíveis
+  7  risco alto — cheiro/aparência que qualquer um reconheceria como ruim
+  8  risco muito alto — claramente estragado ou com sinais de veneno
+  9  quase certo — a descrição deixa pouca dúvida do perigo
+  10 mortal — veneno declarado ou deterioração extrema (sem teste)
+A nota é segredo do mundo: nunca o número na narrativa; 1–9 têm UM teste de
+resistência na aplicação — não narre o adoecimento como certo nem como evitado."""
+
+REGUA_CONSUMO = """\
+Régua do CONSUMO (o quanto do item RESTA depois do ato — não se foi gostoso):
+  0  nada resta — devorado por completo
+  1  quase nada — uma migalha, um resto irrisório
+  2  muito pouco resta
+  3  pouco resta
+  4  perto da metade resta
+  5  metade resta
+  6  um pouco mais da metade resta
+  7  a maior parte resta
+  8  quase tudo resta — só uma mordida
+  9  quase intacto — um traço mínimo de uso
+  10 praticamente intacto
+Junto da nota, escreva um texto CURTO e FACTUAL descrevendo o novo estado físico
+do item (o que qualquer um veria olhando para ele — nunca o sabor, o nojo ou a
+satisfação de quem comeu), preservando as qualidades da descrição original (ex.:
+"maçã vermelha grande" -> "maçã vermelha, com a metade comida"). A nota é
+segredo do mundo; o TEXTO da nova descrição é o único elemento desta régua que
+vira estado do mundo."""
+
 _STR = {"type": "string"}
 
 
@@ -81,6 +161,14 @@ def _iw_transfer(op):
         else:
             frase += f", que guardou em {abrigo} por não ter mão livre"
     return frase
+
+
+@inworld("eat_ops_applied")
+def _iw_eat(op):
+    item = name_of(op.get("item"))
+    if op.get("adoeceu"):
+        return f"comeu {item} e passou mal"
+    return f"comeu {item}"
 
 
 @inworld("steal_ops_applied")
@@ -186,6 +274,41 @@ def _drop(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return ctx.deny(item, ctx.place_id, rej), False
     ctx.track_move(item, "place", ctx.place_id, None)
     return {"ok": True, "aplicado": {"item": item, "to": ctx.place_id}}, False
+
+
+def _eat(name: str, args: dict, ctx) -> tuple[dict, bool]:
+    item, e, st = _item_setup(name, args, ctx)
+    if st is None:
+        return item, False
+    if item in ctx.eaten_asked:
+        return ctx.err(f"comer '{item}' já foi tentado neste turno — o desfecho "
+                       "sai na aplicação; NÃO repita: siga para outra ação ou narrate"), False
+    # spec 046 — CURTO-CIRCUITO (research R1): comestibilidade é perguntada SEMPRE
+    # primeiro; nota 0 encerra aqui, sem gastar as outras três réguas.
+    comestibilidade = juizo.nota(
+        ctx.ask(REGUA_COMESTIBILIDADE + juizo.NOTA_0_10,
+                json.dumps({"item": ctx.describe(item)}, ensure_ascii=False, indent=2)),
+        default=5)
+    ctx.eaten_asked.add(item)
+    if comestibilidade == 0:
+        rej, rolled = ctx.apply_arbitrated("eat_ops", {"item": item, "comestibilidade": 0})
+        if rej:
+            return ctx.arb_deny(rolled, ("eat", item), {"item": item}, rej)
+        return {"ok": True, "aplicado": {"item": item,
+                                         "nota": "o desfecho sai na aplicação"}}, False
+    payload = json.dumps({"item": ctx.describe(item)}, ensure_ascii=False, indent=2)
+    saciedade = juizo.nota(ctx.ask(REGUA_SACIEDADE + juizo.NOTA_0_10, payload), default=5)
+    toxicidade = juizo.nota(ctx.ask(REGUA_TOXICIDADE + juizo.NOTA_0_10, payload), default=0)
+    consumo, nova_descricao = juizo.nota_e_texto(
+        ctx.ask(REGUA_CONSUMO + juizo.NOTA_0_10_E_TEXTO, payload),
+        default_nota=0, default_texto="")
+    rej, rolled = ctx.apply_arbitrated("eat_ops", {
+        "item": item, "comestibilidade": comestibilidade, "saciedade": saciedade,
+        "toxicidade": toxicidade, "consumo": consumo, "nova_descricao": nova_descricao})
+    if rej:
+        return ctx.arb_deny(rolled, ("eat", item), {"item": item}, rej)
+    return {"ok": True, "aplicado": {"item": item,
+                                     "nota": "o desfecho sai na aplicação"}}, False
 
 
 def _shove(name: str, args: dict, ctx) -> tuple[dict, bool]:
@@ -395,7 +518,7 @@ UNEQUIP = tool_spec(ToolSpec(
 
 STEAL = tool_spec(ToolSpec(
     names=("steal",),
-    juizo=("exposicao", REGUA_FURTO),
+    juizo=(("exposicao", REGUA_FURTO),),
     description=("FURTA um item de outro presente, SEM consentimento — o item é do "
      "ALVO. O que é vistoso e o que está preso ao corpo não se tiram do "
      "mesmo jeito, e um dono atento não é um dono distraído: o mundo lê a "
@@ -406,4 +529,30 @@ STEAL = tool_spec(ToolSpec(
     required=("alvo", "item", "exposicao"),
     enum_sources={"alvo": "persuade_give_alvo", "item": "persuade_give_item"},
     apply=_steal,
+))
+
+
+EAT = tool_spec(ToolSpec(
+    names=("eat",),
+    juizo=(
+        ("comestibilidade", REGUA_COMESTIBILIDADE),
+        ("saciedade", REGUA_SACIEDADE),
+        ("toxicidade", REGUA_TOXICIDADE),
+        ("consumo", REGUA_CONSUMO),
+        ("nova_descricao", REGUA_CONSUMO),
+    ),
+    description=("Come um item comestível presente ou na sua mão. O mundo julga, "
+     "lendo a DESCRIÇÃO do item — nunca um campo —, se ele é comida, o quanto "
+     "sacia, o quanto é arriscado, e o quanto sobra. Um item claramente "
+     "não-alimentar (uma bota, um objeto decorativo) é recusado."),
+    params={"item": _STR,
+            "comestibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
+            "saciedade": {"type": "integer", "minimum": 0, "maximum": 10},
+            "toxicidade": {"type": "integer", "minimum": 0, "maximum": 10},
+            "consumo": {"type": "integer", "minimum": 0, "maximum": 10},
+            "nova_descricao": _STR},
+    required=("item", "comestibilidade", "saciedade", "toxicidade", "consumo",
+             "nova_descricao"),
+    enum_sources={"item": "eat"},
+    apply=_eat,
 ))

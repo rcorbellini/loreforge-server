@@ -441,6 +441,9 @@ def _verb_candidates(idx: dict) -> dict:
         # larga-se o que está consigo sem estar vestido
         "drop": sorted(i for i, e in items.items()
                        if e["porter"] == actor and not worn(e)),
+        # come-se o que está ao alcance (na mão OU ainda solto na cena), nunca
+        # vestido (spec 046) — mesma régua de alcance de `stow`
+        "eat": sorted(i for i, e in items.items() if not worn(e)),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
@@ -826,6 +829,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     persuaded: set = set()  # alvos já persuadidos neste turno (spec 007)
     gave_asked: set = set()  # (alvo,item) já pedidos via persuade_give (spec 023)
     stole_asked: set = set()  # (alvo,item) já tentados via steal (spec 023)
+    eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1035,6 +1039,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         sub=_sub, seen_len=_seen_len, merge=_merge,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
+        eaten_asked=eaten_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

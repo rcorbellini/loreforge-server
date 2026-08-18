@@ -17,13 +17,16 @@ from .primitivas import (  # noqa: F401
     _validate_move,
     has_accessible_item,
     roll_steal_check,
+    roll_toxicidade_check,
     transfer_item,
 )
 from .executores import (  # noqa: F401
+    _apply_eat_ops,
     _apply_equip_ops,
     _apply_item_transfers,
     _apply_movement,
     _apply_steal_ops,
+    _h_eat,
     _h_equip,
     _h_steal,
     _h_transfer,

@@ -231,7 +231,7 @@ ASK_WARES = tool_spec(ToolSpec(
 
 PERSUADE_GIVE = tool_spec(ToolSpec(
     names=("persuade_give",),
-    juizo=("disposicao", REGUA_DISPOSICAO_CEDER),
+    juizo=(("disposicao", REGUA_DISPOSICAO_CEDER),),
     description=("Convence o DONO (outro presente) a ENTREGAR um item DELE a alguém — "
      "a QUEM AGE ou a outro presente ('para'). O item é do ALVO, não seu; "
      "para dar o que é SEU use give. Ceder um bem não é favor pequeno, e "
@@ -265,7 +265,7 @@ BUY = tool_spec(ToolSpec(
 
 TRADE = tool_spec(ToolSpec(
     names=("trade",),
-    juizo=("necessidade", REGUA_NECESSIDADE),
+    juizo=(("necessidade", REGUA_NECESSIDADE),),
     description=("Troca bens por bens com OUTRO personagem presente, sem dinheiro. Só "
      "aparecem aqui os itens que o mundo marca como negociáveis. Ninguém "
      "entrega o que é seu sem precisar do que recebe: o parceiro pesa o "

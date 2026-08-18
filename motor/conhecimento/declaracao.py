@@ -519,7 +519,7 @@ EXAMINE = tool_spec(ToolSpec(
 
 ASK_DIRECTIONS = tool_spec(ToolSpec(
     names=("ask_directions",),
-    juizo=("disposicao", REGUA_DISPOSICAO),
+    juizo=(("disposicao", REGUA_DISPOSICAO),),
     description=("Pergunta a OUTRO personagem presente por onde se vai — como "
                  "se chega a algum lugar, que caminhos existem, o que ele "
                  "conhece da região. Se ele responde depende dele: de quem é, "
@@ -536,7 +536,7 @@ ASK_DIRECTIONS = tool_spec(ToolSpec(
 
 ASK_ABOUT = tool_spec(ToolSpec(
     names=("ask_about",),
-    juizo=("disposicao", REGUA_CONFIDENCIA),
+    juizo=(("disposicao", REGUA_CONFIDENCIA),),
     description=("Pergunta a OUTRO presente o que ele sabe ou lembra de ALGUÉM "
                  "(presente ou ausente) OU de um LUGAR (a cena atual, ou um "
                  "lugar que o próprio personagem já conhece — nunca invente um "

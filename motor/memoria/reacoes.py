@@ -64,14 +64,20 @@ def react_actor_memory(fato, actor_folder, present) -> list:
       sempre, com a op ÚNICA do fato (o golpe que ERRA é o único rejeitado que vira
       memória — a (des)confiança na arma, spec 016).
     - GENÉRICO (spec 038, US1): a tool nova EMBUTE o próprio contrato de memória no
-      applied (`op["memory"] = {content, valence, intensity, involved, event,
-      domain, summary}`), e a reação o consome via o sink `remember` — sem canal
-      hardcoded aqui, sem entrada em tabela — uma tool NOVA grava a própria memória
-      sem editar esta reação (SC-003)."""
+      applied OU no rejected (`op["memory"] = {content, valence, intensity, involved,
+      event, domain, summary}`), e a reação o consome via o sink `remember` — sem
+      canal hardcoded aqui, sem entrada em tabela — uma tool NOVA grava a própria
+      memória sem editar esta reação (SC-003). Lê `rejected` também (spec 046,
+      `eat`): uma recusa de MÉRITO (não um erro corrigível de id/alcance, que nunca
+      chega a virar fato) é um evento que aconteceu e pode merecer lembrança — o
+      mesmo padrão que `attack` já dava ao golpe que erra, agora disponível para
+      qualquer tool nova sem precisar entrar no caminho LEGADO."""
     cid, op, canal = fato.actor, fato.payload, fato.canal
     if canal not in _ACTOR_CANAIS:
-        # GENÉRICO: o contrato viaja no fato; a reação não conhece a tool.
-        if fato.status != "applied" or not isinstance(op, dict):
+        # GENÉRICO: o contrato viaja no fato; a reação não conhece a tool. Lê
+        # applied E rejected — quem decide se uma recusa vira memória é a TOOL,
+        # embutindo (ou não) `op["memory"]` no payload que ela mesma constrói.
+        if fato.status not in ("applied", "rejected") or not isinstance(op, dict):
             return []
         mem = op.get("memory")
         if not isinstance(mem, dict) or not mem.get("content"):

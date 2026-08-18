@@ -126,6 +126,16 @@ def persuade_dc(vontade: int) -> int:
     return 20 - 2 * int(vontade)
 
 
+def toxin_dc(toxicidade: int) -> int:
+    """Dificuldade do teste de resistência a um item arriscado (spec 046, `eat`):
+    monotônica na TOXICIDADE do item — inclinação INVERSA de `persuade_dc`, porque o
+    significado da nota é o oposto (aqui, nota ALTA = mais perigoso = mais difícil
+    resistir, não mais fácil). Toxicidade 5 (moderado) = DC 10; 9 (quase certo) = DC
+    18; 1 (risco mínimo) = DC 2. Não reusa `persuade_dc` — a mesma fórmula aplicada
+    aqui inverteria o risco (item mais tóxico ficaria mais fácil de resistir)."""
+    return 2 * int(toxicidade)
+
+
 def persuade_tendencia(vontade: int) -> str:
     """Tendência natural do alvo: base da VIRADA social (clarificação Q1 da spec)."""
     v = int(vontade)

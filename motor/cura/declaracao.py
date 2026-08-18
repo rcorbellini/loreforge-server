@@ -82,7 +82,7 @@ def _heal(name: str, args: dict, ctx) -> tuple[dict, bool]:
 
 HEAL = tool_spec(ToolSpec(
     names=("heal",),
-    juizo=("vantagem", REGUA_SOCORRO),
+    juizo=(("vantagem", REGUA_SOCORRO),),
     description=("Tenta socorrer OUTRO personagem presente que está incapacitado "
      "(caído) — nunca quem já morreu, nunca a si mesmo. Se o socorro pega, "
      "e o quanto recupera, quem decide é o mundo. Reerguer sempre custa "

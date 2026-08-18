@@ -926,9 +926,10 @@ class Handler(BaseHTTPRequestHandler):
         args = {k: v for k, v in payload.items()
                 if k not in ("character_id", "prosa", "origem", "turno_id")}
         # FR-005: nota vinda de fora é DESCARTADA em silêncio (ruído de transporte,
-        # não erro do jogador). A capacidade pergunta a sua ao mundo.
-        if spec.juizo:
-            args.pop(spec.juizo[0], None)
+        # não erro do jogador). A capacidade pergunta a sua ao mundo — todas as
+        # notas de julgamento, se houver mais de uma (spec 046).
+        for p, _ in spec.juizo:
+            args.pop(p, None)
 
         if not _claim_turn(character_id):
             return {"ok": False, "_status": 409,

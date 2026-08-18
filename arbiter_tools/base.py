@@ -54,13 +54,14 @@ def build_face(spec, name: str, scene):
     for pname in spec.required:
         if pname in enums and not enums[pname]:
             return None
-    # spec 043: o parâmetro de JUÍZO some da FACE. Ninguém de fora o preenche — nem A
-    # Mente nem o Árbitro: a capacidade pergunta a nota ao mundo, com a régua que mora
-    # ao lado dela (`ctx.ask`). O que sobra na face é ESCOLHA e VOZ.
-    juizo_param = spec.juizo[0] if spec.juizo else None
+    # spec 043/046: os parâmetros de JUÍZO somem da FACE (podem ser vários — `eat`
+    # pede quatro). Ninguém de fora os preenche — nem A Mente nem o Árbitro: a
+    # capacidade pergunta cada nota ao mundo, com a régua que mora ao lado dela
+    # (`ctx.ask`). O que sobra na face é ESCOLHA e VOZ.
+    juizo_params = {p for p, _ in spec.juizo}
     props: dict = {}
     for pname, pschema in spec.params.items():
-        if pname == juizo_param:
+        if pname in juizo_params:
             continue
         if callable(pschema):
             props[pname] = pschema(scene)     # schema pronto (enum já embutido, fundo)
@@ -79,7 +80,7 @@ def build_face(spec, name: str, scene):
     return {
         "name": name, "description": desc,
         "parameters": {"type": "object", "properties": props,
-                       "required": [r for r in spec.required if r != juizo_param]},
+                       "required": [r for r in spec.required if r not in juizo_params]},
     }
 
 

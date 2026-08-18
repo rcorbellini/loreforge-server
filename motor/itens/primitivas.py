@@ -482,3 +482,44 @@ def roll_steal_check(actor_fm: dict, char_id: str, alvo_id: str, item_id: str,
     return desfecho, info
 
 
+def roll_toxicidade_check(actor_fm: dict, char_id: str, item_id: str,
+                          toxicidade: int, rolls: list | None = None) -> tuple[bool, dict]:
+    """Devolve (adoeceu, roll_info) — o teste de resistência de `eat` (spec 046).
+
+    Curva PRÓPRIA (`rolagem.toxin_dc`, inclinação inversa de `persuade_dc`: nota
+    ALTA = mais arriscado = DC mais alta). UMA rolagem: d20 + mod(CON) vs DC.
+    Extremos deterministas: toxicidade 0 = nunca adoece (sem dado); 10 = sempre
+    adoece (sem dado). O Árbitro só julgou O RISCO; quem decide se o personagem
+    de fato adoeceu é este teste — nunca a nota sozinha."""
+    toxicidade = int(toxicidade)
+    if toxicidade <= 0:
+        info = {"tipo": "toxicidade", "personagem": char_id, "item": item_id,
+                "adoeceu": False, "virada": False, "critico": None, "rolagem": None}
+        if rolls is not None:
+            rolls.append(info)
+        return False, info
+    if toxicidade >= 10:
+        info = {"tipo": "toxicidade", "personagem": char_id, "item": item_id,
+                "adoeceu": True, "virada": False, "critico": None, "rolagem": None}
+        if rolls is not None:
+            rolls.append(info)
+        return True, info
+    d20 = rolagem._roll_d20()
+    mod = rolagem.attr_modifier((actor_fm.get("attributes") or {}).get("CON", 10))
+    dc = rolagem.toxin_dc(toxicidade)
+    total = d20 + mod
+    adoeceu = total < dc
+    info = {
+        "tipo": "toxicidade", "personagem": char_id, "item": item_id,
+        "adoeceu": adoeceu,
+        # virada: a nota dizia arriscado (>=6) e resistiu, ou dizia seguro (<=4) e adoeceu
+        "virada": (toxicidade >= 6 and not adoeceu) or (toxicidade <= 4 and adoeceu),
+        "critico": ("sucesso" if (d20 == 20 and not adoeceu)
+                    else "falha" if (d20 == 1 and adoeceu) else None),
+        "rolagem": {"d20": d20, "mod": mod, "total": total, "dc": dc},
+    }
+    if rolls is not None:
+        rolls.append(info)
+    return adoeceu, info
+
+

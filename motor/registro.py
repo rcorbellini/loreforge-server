@@ -60,9 +60,13 @@ class ToolSpec:
     enum_sources: dict = field(default_factory=dict)   # {param: key-str | callable}
     omit_if_empty: tuple[str, ...] = ()                # param OPCIONAL some se enum vazio
     apply: object = None                               # callable(name, args, ctx)
-    # spec 043 — O JUÍZO: (param, régua-em-prosa). Declarar isto diz DUAS coisas de
-    # uma vez, e é por isso que é UM campo e não dois: que a capacidade tem desfecho
-    # lido de um texto, e QUAL parâmetro esse texto preenche.
+    # spec 043 — O JUÍZO: tupla de (param, régua-em-prosa). Declarar isto diz DUAS
+    # coisas de uma vez por par, e é por isso que cada par é UM elemento e não dois:
+    # que a capacidade tem (aquele) desfecho lido de um texto, e QUAL parâmetro esse
+    # texto preenche. SEMPRE uma tupla de pares — mesmo com um só (spec 046, `eat`
+    # migrou `HEAL`/`STEAL` para a forma nova no mesmo passo: uma forma só, nunca
+    # par solto E tupla convivendo, para os 3 pontos que leem isto não precisarem
+    # checar "é par ou é lista de pares?" para sempre).
     #
     # A classificação do parâmetro CAI daqui — não existe campo de visibilidade em
     # lugar nenhum (Princípio XI, e o veredito "Estruturado vs Descritivo" da spec).
@@ -70,11 +74,11 @@ class ToolSpec:
     # sobre o mesmo fato, e no dia em que divergisse venceria calado — deixando uma
     # nota descer à Mente, que é exatamente o que o Princípio IX existe para impedir.
     #
-    # Consequências, todas derivadas:
+    # Consequências, todas derivadas, por PAR:
     #   - o param SOME da face (ninguém de fora o preenche — nem a Mente, nem o Árbitro);
     #   - o corpo pede a nota ao mundo (`ctx.ask` + a régua que mora aqui do lado);
     #   - valor que chegue de fora é DESCARTADO, sem erro ao jogador.
-    juizo: tuple = ()                                  # () | (param, REGUA)
+    juizo: tuple = ()                     # () | ((param, REGUA), (param, REGUA), ...)
     # spec 043 — A CANETA DO MUNDO. Capacidade que fixa o PESO e a DURAÇÃO do que fica
     # gravado, ou que escreve estado direto. Não é agência de personagem: é o mundo
     # registrando. Fica INTEIRA fora do que desce (Princípio IX, classe 2).

@@ -90,7 +90,7 @@ def _attack(name: str, args: dict, ctx) -> tuple[dict, bool]:
 
 ATTACK = tool_spec(ToolSpec(
     names=("attack",),
-    juizo=("vantagem", REGUA_VANTAGEM),
+    juizo=(("vantagem", REGUA_VANTAGEM),),
     description=("Golpeia OUTRO personagem presente. 'alvo' é QUEM APANHA — nunca quem "
      "age. 'arma' é um item na mão de quem age (omita para golpe "
      "desarmado; item que não é arma serve como improvisado). Se acertou, "

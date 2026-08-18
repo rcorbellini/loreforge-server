@@ -687,10 +687,16 @@ só muda de "cheio" para "vazio"):
 Junto da nota, escreva um texto CURTO e FACTUAL descrevendo o novo estado físico
 do RECIPIENTE (o que qualquer um veria olhando para ele — nunca o sabor, a
 ardência ou o alívio de quem bebeu), preservando as qualidades da descrição
-original (ex.: "cantil de couro cheio" -> "cantil de couro, quase vazio"). A
-nota é segredo do mundo; o TEXTO da nova descrição é o único elemento desta
-régua que vira estado do mundo — e só existe para ITEM, nunca para uma fonte
-ambiental (que não muda por ter sido usada)."""
+original (ex.: "cantil de couro cheio" -> "cantil de couro, quase vazio").
+O TEXTO precisa ser COERENTE com a PRÓPRIA nota de consumo que você acabou de
+dar nesta resposta, palavra por palavra: nota 4 ou mais NUNCA pode conter
+"vazio"/"seco"/"nada resta"/"acabou" — nota 2 ou menos NUNCA pode conter
+"cheio"/"intacto"/"corrente". Antes de escrever o texto, releia o NÚMERO que
+você mesmo escolheu para "consumo" nesta mesma resposta e confira se o texto
+contradiz esse número — se contradizer, reescreva o texto. A nota é segredo
+do mundo; o TEXTO da nova descrição é o único elemento desta régua que vira
+estado do mundo — e só existe para ITEM, nunca para uma fonte ambiental (que
+não muda por ter sido usada)."""
 
 # spec 047 — mesma correção de custo/latência que `eat` (spec 046) já fechou:
 # UMA chamada combinada, JSON com schema explícito. DOIS prompts — um alvo

@@ -481,8 +481,9 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
     também vira lembrança, ou a Mente re-tenta em loop sem saber que já tentou).
     Comestibilidade > 0 aplica: saciedade -> rótulo de status.hunger; toxicidade ->
     teste de resistência (mod CON vs toxin_dc) -> condição 'doente' se falhar;
-    consumo -> state.consumido (nota 0, NUNCA deleta arquivo — Princípio IV) ou
-    description reescrita em lugar (nota 1-9)."""
+    consumo -> `io.remove_entity` (nota 0, item devorado por completo — exceção
+    escopada ao Princípio IV, emenda 2.1.0) ou description reescrita em lugar
+    (nota 1-9)."""
     applied, rejected = [], []
     if not resolution.get("eat_ops"):
         return applied, rejected
@@ -515,21 +516,27 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
         rotulo_fome = ("com fome" if saciedade <= 2 else
                        "saciado" if saciedade >= 7 else "sem fome")
         _set_field(actor_folder, "status.hunger", rotulo_fome)
-        item_fm, item_body = io.read_doc(item_folder / "item.md")
+        item_fm, _ = io.read_doc(item_folder / "item.md")
+        # capturado ANTES de possivelmente apagar o arquivo (emenda 2.1.0 ao
+        # Princípio IV): depois de `remove_entity`, `io.name_of(item_id)` não
+        # acha mais o item e cairia no id cru ("maca-03") na memória.
+        nome_item = item_fm.get("name") or io.name_of(item_id)
         if consumo <= 0:
-            state = dict(item_fm.get("state") or {})
-            state["consumido"] = True
-            item_fm["state"] = state
-            io.write_doc(item_folder / "item.md", item_fm, item_body)
-        elif nova_descricao:
-            io.rewrite_description(item_folder, "item.md", nova_descricao)
+            io.remove_entity(item_folder)
+        else:
+            # nova_descricao pode vir vazia (raro: a resposta combinada pode
+            # falhar em dar o texto mesmo com a nota certa). Sem fallback, o
+            # item ficaria sem NENHUM sinal de ter sido mordido — silencioso,
+            # o que o Princípio X proíbe.
+            texto_novo = nova_descricao or f"{nome_item}, parcialmente consumida."
+            io.rewrite_description(item_folder, "item.md", texto_novo)
         extremo_bom = saciedade >= 7
         valence = ({item_id: memoria.NEGATIVA} if adoeceu else
                    {item_id: memoria.POSITIVA} if extremo_bom else None)
         intensity = "medium" if (adoeceu or extremo_bom) else "small"
-        content = (f"Comi {io.name_of(item_id)} e fiquei doente." if adoeceu else
-                   f"Comi {io.name_of(item_id)} e fiquei bem satisfeito." if extremo_bom else
-                   f"Comi {io.name_of(item_id)}.")
+        content = (f"Comi {nome_item} e fiquei doente." if adoeceu else
+                   f"Comi {nome_item} e fiquei bem satisfeito." if extremo_bom else
+                   f"Comi {nome_item}.")
         applied.append({
             "item": item_id, "adoeceu": adoeceu, "saciedade": saciedade,
             "consumo": consumo, "virada": bool(roll_info.get("virada")),

@@ -15,6 +15,7 @@ que é o motivo de o transporte (`ctx.ask`) ser injetado e não importado.
 """
 from __future__ import annotations
 
+import json as _json
 import re
 
 # A frase canônica. Toda capacidade julgada compõe a SUA régua com esta — se cada uma
@@ -23,12 +24,6 @@ import re
 NOTA_0_10 = "\n\nResponda APENAS com um número inteiro de 0 a 10, nada mais."
 
 _PRIMEIRO_NUMERO = re.compile(r"-?\d+")
-
-# spec 046 (`eat`, régua de CONSUMO): a ÚNICA régua do projeto que pede DUAS coisas
-# na mesma resposta — a nota E o texto da nova descrição do item. Frase canônica
-# própria (não reusa NOTA_0_10 sozinha) para o parse de duas linhas ser previsível.
-NOTA_0_10_E_TEXTO = ("\n\nResponda em DUAS linhas: a primeira só com um número inteiro "
-                     "de 0 a 10, nada mais; a segunda com o texto pedido, nada mais.")
 
 
 def nota(raw: str, default: int) -> int:
@@ -52,12 +47,42 @@ def nota(raw: str, default: int) -> int:
         return default
 
 
-def nota_e_texto(raw: str, default_nota: int, default_texto: str = "") -> tuple[int, str]:
-    """Como `nota`, mas para a régua que também pede um TEXTO (spec 046, `eat`): a
-    1ª linha vira a nota (via `nota()`, mesmo grampeamento/default); o RESTO da
-    resposta vira o texto, tal como veio — sem resumir. Resposta sem 2ª linha cai
-    no `default_texto` (mesma disciplina de robustez do `nota()`)."""
-    linhas = (raw or "").splitlines()
-    primeira = linhas[0] if linhas else ""
-    resto = "\n".join(linhas[1:]).strip()
-    return nota(primeira, default_nota), (resto or default_texto)
+def julgamento(raw: str, campos: dict, texto_campo: str | None = None,
+              texto_default: str = "") -> dict:
+    """Várias notas NOMEADAS (e, opcionalmente, um texto) na MESMA resposta —
+    UMA chamada ao modelo em vez de uma por eixo (spec 046, `eat`: quatro
+    julgamentos independentes por ato tornavam a ação lenta e cara; o custo é a
+    prioridade sobre isolar cada régua na própria chamada).
+
+    `campos` = `{chave: default}` — cada valor sai grampeado em 0-10, ou cai no
+    PRÓPRIO default se ausente/ilegível (mesma disciplina do `nota()`, por
+    campo). `texto_campo` é o nome da chave de texto livre, se houver.
+
+    Formato canônico: JSON com as chaves exatas de `campos` (+ `texto_campo`,
+    se houver) — pedido explicitamente no prompt da capacidade. MEDIDO (spec
+    046, sondagem real): pedir ao modelo pra responder um formato livre (nota
+    numa linha, texto na outra) é o que falha — o modelo já quer responder em
+    JSON por conta própria; brigar com isso é que quebra. Pedindo o JSON com o
+    schema explícito, a taxa de acerto medida foi 9 de 9."""
+    resultado = dict(campos)
+    if texto_campo is not None:
+        resultado[texto_campo] = texto_default
+    bruto = (raw or "").strip()
+    inicio, fim = bruto.find("{"), bruto.rfind("}")
+    if inicio == -1 or fim <= inicio:
+        return resultado
+    try:
+        obj = _json.loads(bruto[inicio:fim + 1])
+    except ValueError:
+        return resultado
+    if not isinstance(obj, dict):
+        return resultado
+    for chave, default in campos.items():
+        v = obj.get(chave)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            resultado[chave] = max(0, min(10, int(v)))
+    if texto_campo is not None:
+        v = obj.get(texto_campo)
+        if isinstance(v, str) and v.strip():
+            resultado[texto_campo] = v.strip()
+    return resultado

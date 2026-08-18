@@ -74,7 +74,7 @@ poderia comer — não o quanto é gostoso, só se É comida):
 Objeto decorativo ou fabricado que IMITA comida puxa a nota para 0, mesmo que a
 aparência engane — a descrição costuma denunciar (frio demais, sem cheiro, cor
 parada demais). A nota é segredo do mundo: nunca o número na narrativa; nota 0
-encerra a tentativa SEM gastar as outras três réguas."""
+faz a tentativa ser recusada, mesmo que as outras três notas venham preenchidas."""
 
 REGUA_SACIEDADE = """\
 Régua da SACIEDADE (o quanto o ato satisfaz a fome, pelo tamanho e tipo do
@@ -129,6 +129,30 @@ satisfação de quem comeu), preservando as qualidades da descrição original (
 "maçã vermelha grande" -> "maçã vermelha, com a metade comida"). A nota é
 segredo do mundo; o TEXTO da nova descrição é o único elemento desta régua que
 vira estado do mundo."""
+
+# spec 046 — CORRIGIDO em campo (custo/latência, decisão do mantenedor): os
+# quatro eixos são julgados numa ÚNICA chamada ao modelo, não uma por régua —
+# quatro chamadas por mordida deixava a ação lenta e cara. Pedir o JSON com o
+# schema EXPLÍCITO (em vez de um formato livre tipo "duas linhas") é o que
+# funciona: o modelo já quer responder em JSON por conta própria (medido em
+# toda sondagem real deste projeto); brigar com esse hábito é que quebrava.
+REGUA_COMER = f"""\
+Você vai julgar UMA tentativa de comer um item, em QUATRO eixos independentes.
+Leia a descrição do item com cuidado antes de responder.
+
+{REGUA_COMESTIBILIDADE}
+
+{REGUA_SACIEDADE}
+
+{REGUA_TOXICIDADE}
+
+{REGUA_CONSUMO}
+
+Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de explicação,
+EXATAMENTE com estas cinco chaves (os quatro números são OBRIGATÓRIOS, mesmo
+que comestibilidade seja 0):
+
+{{"comestibilidade": <inteiro 0-10>, "saciedade": <inteiro 0-10>, "toxicidade": <inteiro 0-10>, "consumo": <inteiro 0-10>, "descricao": "<texto curto e factual do novo estado físico do item>"}}"""
 
 _STR = {"type": "string"}
 
@@ -283,28 +307,30 @@ def _eat(name: str, args: dict, ctx) -> tuple[dict, bool]:
     if item in ctx.eaten_asked:
         return ctx.err(f"comer '{item}' já foi tentado neste turno — o desfecho "
                        "sai na aplicação; NÃO repita: siga para outra ação ou narrate"), False
-    # spec 046 — CURTO-CIRCUITO (research R1): comestibilidade é perguntada SEMPRE
-    # primeiro; nota 0 encerra aqui, sem gastar as outras três réguas.
-    comestibilidade = juizo.nota(
-        ctx.ask(REGUA_COMESTIBILIDADE + juizo.NOTA_0_10,
-                json.dumps({"item": ctx.describe(item)}, ensure_ascii=False, indent=2)),
-        default=5)
+    # spec 046 — UMA chamada só (custo, decisão do mantenedor): os quatro eixos
+    # (comestibilidade/saciedade/toxicidade/consumo) + o texto da nova descrição
+    # saem da MESMA resposta, via REGUA_COMER (JSON com schema explícito).
+    julgado = juizo.julgamento(
+        ctx.ask(REGUA_COMER, json.dumps({"item": ctx.describe(item)},
+                                        ensure_ascii=False, indent=2)),
+        campos={"comestibilidade": 5, "saciedade": 5, "toxicidade": 0, "consumo": 0},
+        texto_campo="descricao", texto_default="")
     ctx.eaten_asked.add(item)
+    comestibilidade = julgado["comestibilidade"]
     if comestibilidade == 0:
         rej, rolled = ctx.apply_arbitrated("eat_ops", {"item": item, "comestibilidade": 0})
         if rej:
             return ctx.arb_deny(rolled, ("eat", item), {"item": item}, rej)
         return {"ok": True, "aplicado": {"item": item,
                                          "nota": "o desfecho sai na aplicação"}}, False
-    payload = json.dumps({"item": ctx.describe(item)}, ensure_ascii=False, indent=2)
-    saciedade = juizo.nota(ctx.ask(REGUA_SACIEDADE + juizo.NOTA_0_10, payload), default=5)
-    toxicidade = juizo.nota(ctx.ask(REGUA_TOXICIDADE + juizo.NOTA_0_10, payload), default=0)
-    consumo, nova_descricao = juizo.nota_e_texto(
-        ctx.ask(REGUA_CONSUMO + juizo.NOTA_0_10_E_TEXTO, payload),
-        default_nota=0, default_texto="")
+    consumo, nova_descricao = julgado["consumo"], julgado["descricao"]
+    # texto sem número correspondente não pode virar "nada resta" calado — ver
+    # a régua de consumo (o mesmo achado da sondagem real segue valendo aqui).
+    if consumo == 0 and nova_descricao:
+        consumo = 5
     rej, rolled = ctx.apply_arbitrated("eat_ops", {
-        "item": item, "comestibilidade": comestibilidade, "saciedade": saciedade,
-        "toxicidade": toxicidade, "consumo": consumo, "nova_descricao": nova_descricao})
+        "item": item, "comestibilidade": comestibilidade, "saciedade": julgado["saciedade"],
+        "toxicidade": julgado["toxicidade"], "consumo": consumo, "nova_descricao": nova_descricao})
     if rej:
         return ctx.arb_deny(rolled, ("eat", item), {"item": item}, rej)
     return {"ok": True, "aplicado": {"item": item,
@@ -534,17 +560,18 @@ STEAL = tool_spec(ToolSpec(
 
 EAT = tool_spec(ToolSpec(
     names=("eat",),
+    # spec 046 — os cinco (quatro notas + o texto) saem da MESMA chamada
+    # (`REGUA_COMER`, uma resposta JSON só — custo, decisão do mantenedor).
     juizo=(
-        ("comestibilidade", REGUA_COMESTIBILIDADE),
-        ("saciedade", REGUA_SACIEDADE),
-        ("toxicidade", REGUA_TOXICIDADE),
-        ("consumo", REGUA_CONSUMO),
-        ("nova_descricao", REGUA_CONSUMO),
+        ("comestibilidade", REGUA_COMER),
+        ("saciedade", REGUA_COMER),
+        ("toxicidade", REGUA_COMER),
+        ("consumo", REGUA_COMER),
+        ("nova_descricao", REGUA_COMER),
     ),
-    description=("Come um item comestível presente ou na sua mão. O mundo julga, "
-     "lendo a DESCRIÇÃO do item — nunca um campo —, se ele é comida, o quanto "
-     "sacia, o quanto é arriscado, e o quanto sobra. Um item claramente "
-     "não-alimentar (uma bota, um objeto decorativo) é recusado."),
+    description=("Come um item comestível presente ou na sua mão — o mundo decide "
+     "se é comida, quanto sacia e quanto arrisca. Recusado se não for algo que "
+     "se coma."),
     params={"item": _STR,
             "comestibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "saciedade": {"type": "integer", "minimum": 0, "maximum": 10},

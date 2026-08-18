@@ -83,17 +83,12 @@ def push_capacity(char_fm: dict) -> float:
 
 
 def _direct_items(folder: Path):
-    """(pasta, frontmatter) de cada item filho DIRETO de `folder`.
-
-    Item `state.consumido` (spec 046, `eat`) fica de fora — comido por completo,
-    some do jogo (peso, slot, inventário, contêiner) sem o arquivo sumir do disco
-    (Princípio IV). É o choke-point: `_walk_open_items`/pesos/vagas herdam de graça."""
+    """(pasta, frontmatter) de cada item filho DIRETO de `folder`."""
     out = []
     for child in sorted(folder.iterdir()):
         if child.is_dir() and (child / "item.md").exists():
             fm, _ = read_doc(child / "item.md")
-            if not io.is_consumed(fm):
-                out.append((child, fm))
+            out.append((child, fm))
     return out
 
 

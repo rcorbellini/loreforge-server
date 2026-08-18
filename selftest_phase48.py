@@ -4,9 +4,10 @@ Sem modelo/LLM ligado — exercita o Motor direto (`motor.apply_resolution`) par
 comportamento DETERMINÍSTICO do executor, e `arbiter.build_ctx`/`execute` (com
 `ask` forçado) para o comportamento da GUARDA (curto-circuito, dedup). Cobre:
 
-  - US1: saciedade -> rótulo de status.hunger; consumo -> state.consumido
-    (NUNCA deleta arquivo, Princípio IV) ou description reescrita; memória de
-    rotina (small) e de saciedade extrema (medium/positiva)
+  - US1: saciedade -> rótulo de status.hunger; consumo -> io.remove_entity
+    (item devorado por completo — exceção escopada ao Princípio IV, emenda
+    2.1.0) ou description reescrita; memória de rotina (small) e de saciedade
+    extrema (medium/positiva)
   - US2: toxicidade -> extremos deterministas, faixa 1-9 com UMA rolagem
     (d20+mod(CON) vs toxin_dc); falha -> condição 'doente' + memória negativa;
     segredo das notas
@@ -84,10 +85,51 @@ def memorias_evento(cid: str, evento: str) -> list:
     return [fm for fm in motor.memoria._iter_memories(cid) if fm.get("evento") == evento]
 
 
+def memoria_texto(cid: str, mem_id: str) -> str:
+    folder = motor.find_character_folder(cid)
+    _, body = motor.read_doc(folder / "memories" / f"{mem_id}.md")
+    return body.strip()
+
+
 def eat_op(item, comestibilidade=5, saciedade=5, toxicidade=0, consumo=5, nova_descricao="resto"):
     return {"item": item, "comestibilidade": comestibilidade, "saciedade": saciedade,
             "toxicidade": toxicidade, "consumo": consumo, "nova_descricao": nova_descricao}
 
+
+# =========================================================================== #
+# juizo.julgamento — UMA chamada, cinco chaves (spec 046, decisão do
+# mantenedor: custo/latência de 4 chamadas por mordida era inaceitável).
+# Formato canônico VALIDADO por POST direto ao llama3.1:8b: JSON com schema
+# explícito, 9 de 9 respostas limpas nos três casos testados (maçã/bota/peixe).
+# =========================================================================== #
+
+CAMPOS_EAT = {"comestibilidade": 5, "saciedade": 5, "toxicidade": 0, "consumo": 0}
+
+j1 = motor.juizo.julgamento(
+    '{"comestibilidade": 10, "saciedade": 6, "toxicidade": 0, "consumo": 5, '
+    '"descricao": "restos da maçã, com uma pequena parte mordida"}',
+    campos=CAMPOS_EAT, texto_campo="descricao")
+check("julgamento: as cinco chaves do formato validado saem todas certas",
+      j1 == {"comestibilidade": 10, "saciedade": 6, "toxicidade": 0, "consumo": 5,
+            "descricao": "restos da maçã, com uma pequena parte mordida"},
+      str(j1))
+
+j2 = motor.juizo.julgamento("blablabla, sem json nenhum aqui",
+                            campos=CAMPOS_EAT, texto_campo="descricao",
+                            texto_default="")
+check("julgamento: resposta ilegível cai TODA nos defaults, sem estourar",
+      j2 == {**CAMPOS_EAT, "descricao": ""}, str(j2))
+
+j3 = motor.juizo.julgamento('{"comestibilidade": 15, "saciedade": -3}',
+                            campos=CAMPOS_EAT, texto_campo="descricao")
+check("julgamento: valores fora de 0-10 são grampeados",
+      j3["comestibilidade"] == 10 and j3["saciedade"] == 0, str(j3))
+
+j4 = motor.juizo.julgamento('{"comestibilidade": 0}',
+                            campos=CAMPOS_EAT, texto_campo="descricao")
+check("julgamento: chave ausente cai no PRÓPRIO default (saciedade=5, não 0)",
+      j4["comestibilidade"] == 0 and j4["saciedade"] == 5 and j4["consumo"] == 0,
+      str(j4))
 
 # =========================================================================== #
 # US1 — saciedade -> rótulo de fome; consumo -> marcador ou reescrita; memória
@@ -115,16 +157,22 @@ check("US1: saciedade extrema (9) -> rótulo 'saciado'", hunger_de(COM) == "saci
 check("US1: nenhum número de saciedade vaza para o status",
       hunger_de(COM) in ("com fome", "sem fome", "saciado"))
 
-# T017 — consumo: nota 0 marca (NUNCA deleta); nota 1-9 reescreve em lugar
+# T017 — consumo: nota 0 DELETA o arquivo por completo (exceção escopada ao
+# Princípio IV, emenda 2.1.0 — decisão do mantenedor: marcar+filtrar exigia
+# ensinar o mesmo filtro a cinco pontos de enumeração de item independentes,
+# e um já tinha sido esquecido de verdade: `/api/inventory`); nota 1-9
+# reescreve em lugar.
 _mk_item(com_folder, "tudo-p48", "Coisa Toda", "Descrição original A.")
 motor.apply_resolution(COM, {"eat_ops": [eat_op("tudo-p48", consumo=0)]})
-fm_tudo, _ = item_fm_body(com_folder, "tudo-p48")
-check("US1: consumo 0 -> state.consumido true, arquivo PRESERVADO (Princípio IV)",
-      (com_folder / "tudo-p48" / "item.md").exists()
-      and (fm_tudo.get("state") or {}).get("consumido") is True)
+check("US1: consumo 0 -> arquivo DELETADO por completo",
+      not (com_folder / "tudo-p48" / "item.md").exists()
+      and not (com_folder / "tudo-p48").exists())
 _, _, presentes_apos = motor.io._scene_entities(com_folder.parent)
-check("US1: item consumido some de io._scene_entities",
+check("US1: item devorado some de io._scene_entities (não existe mais)",
       "tudo-p48" not in presentes_apos, str(list(presentes_apos)))
+ids_inventario = {n["id"] for n in motor.get_inventory(COM)["children"]}
+check("US1: item devorado some de get_inventory (/api/inventory)",
+      "tudo-p48" not in ids_inventario, str(ids_inventario))
 
 _mk_item(com_folder, "sobra-p48", "Sobra", "Descrição original B.")
 motor.apply_resolution(COM, {"eat_ops": [eat_op("sobra-p48", consumo=5,
@@ -136,6 +184,19 @@ check("US1: consumo 1-9 -> description reescrita em lugar, MESMO id",
 _, _, presentes_sobra = motor.io._scene_entities(com_folder.parent)
 check("US1: item parcialmente consumido CONTINUA visível",
       "sobra-p48" in presentes_sobra)
+
+# REGRESSÃO: a resposta combinada pode dar a nota de consumo certa (>0) mas
+# falhar em dar o texto — o item NÃO pode ficar sem nenhum sinal de ter sido
+# mordido (Princípio X); o fallback usa o próprio nome do item.
+_mk_item(com_folder, "sem-texto-p48", "Sem Texto", "Descrição original C.")
+motor.apply_resolution(COM, {"eat_ops": [eat_op("sem-texto-p48", consumo=5,
+                                                nova_descricao="")]})
+check("US1 (regressão): consumo>0 com nova_descricao VAZIA ainda existe (não "
+     "foi deletado) e reescreve via fallback, nunca fica calado",
+      (com_folder / "sem-texto-p48" / "item.md").exists())
+_, body_sem_texto = item_fm_body(com_folder, "sem-texto-p48")
+check("US1 (regressão): a description mudou mesmo sem o texto do modelo",
+      body_sem_texto.strip() != "Descrição original C.", body_sem_texto)
 
 # T018 — memória: rotina (small) vs saciedade extrema (medium/positiva)
 _mk_item(com_folder, "rotina-p48", "Coisa Rotina", "Um pedaço comum de pão.")
@@ -158,6 +219,13 @@ check("US1: saciedade extrema grava memória 'eat' intensidade medium",
 check("US1: saciedade extrema grava valência POSITIVA dirigida ao ITEM",
       mem_extremo and mem_extremo[0].get("valence", {}).get("extremo-p48") == "positiva",
       str(mem_extremo))
+# REGRESSÃO: o item foi DELETADO (consumo=0) antes da memória ser composta — o
+# nome precisa vir do que foi capturado ANTES de apagar, senão a memória lê
+# "Comi extremo-p48." (o id cru) em vez de "Comi Extremo." (io.name_of de um
+# item que não existe mais cai no id, silenciosamente pior).
+txt_extremo = memoria_texto(COM, mem_extremo[0]["id"]) if mem_extremo else ""
+check("US1 (regressão): a memória do item DELETADO usa o NOME, não o id cru",
+      "Extremo" in txt_extremo and "extremo-p48" not in txt_extremo, txt_extremo)
 
 # =========================================================================== #
 # US2 — toxicidade: extremos deterministas, faixa com UMA rolagem, condição
@@ -253,7 +321,9 @@ rep_folder = motor.find_character_folder(REP)
 _mk_item(rep_folder, "chinelo-p48", "Chinelo", "Um chinelo velho, claramente não é comida.")
 ctx48 = motor.get_context(REP)
 _cap48: list = []
-_ctx_escape48 = arbiter.build_ctx(ctx48, ask=lambda _s, _u: "0",
+_json_comestibilidade_0 = ('{"comestibilidade": 0, "saciedade": 0, "toxicidade": 0, '
+                          '"consumo": 0, "descricao": ""}')
+_ctx_escape48 = arbiter.build_ctx(ctx48, ask=lambda _s, _u: _json_comestibilidade_0,
                                   prosa={"acao": "insiste em comer o chinelo"})
 _cap48.append(_ctx_escape48.execute("eat", {"item": "chinelo-p48"}))
 _cap48.append(_ctx_escape48.execute("eat", {"item": "chinelo-p48"}))
@@ -273,6 +343,62 @@ _mk_item(rep_folder, "sandalia-p48", "Sandália", "Outra peça de calçado, tamb
 _cap48.append(_ctx_escape48.execute("eat", {"item": "sandalia-p48"}))
 check("US3: item DIFERENTE no mesmo contexto NÃO é barrado pelo dedup",
       "já foi tentado" not in (_cap48[2][0].get("erro") or ""), str(_cap48[2][0]))
+
+# =========================================================================== #
+# REGRESSÃO PONTA-A-PONTA — spec 046, chamada ÚNICA (custo, decisão do
+# mantenedor: 4 chamadas por mordida era lento e caro). O JSON abaixo é o
+# FORMATO validado por POST direto ao llama3.1:8b (9/9 respostas limpas com o
+# schema explícito) — cobre o caso "consumo 0 mas com descrição de sobra"
+# (a mesma contradição medida em campo antes da correção: quem descreve um
+# resto não quis dizer 'nada resta'). Passa pela GUARDA de verdade (`_eat`,
+# via `execute()`), não só pelo parser isolado.
+# =========================================================================== #
+_mk_char("elga-p48", "Elga de Teste")
+ELGA48 = "elga-p48"
+elga48_folder = motor.find_character_folder(ELGA48)
+_mk_item(elga48_folder, "maca-real-p48", "Maçã",
+        "Uma maçã vermelha, firme e brilhante, ainda pendurada entre as "
+        "folhas — o tipo de fruta que qualquer um arrancaria sem pensar "
+        "duas vezes.")
+_resposta_combinada = (
+    '{"comestibilidade": 8, "saciedade": 3, "toxicidade": 0, "consumo": 0, '
+    '"descricao": "maçã vermelha, com uma pequena mordida na casca"}')
+ctx_elga48 = motor.get_context(ELGA48)
+ctx_real = arbiter.build_ctx(ctx_elga48, ask=lambda _s, _u: _resposta_combinada,
+                             prosa={"acao": "comer a maçã"})
+resultado_real = ctx_real.execute("eat", {"item": "maca-real-p48"})
+check("REGRESSÃO PONTA-A-PONTA: a chamada foi aceita (não recusada)",
+      resultado_real[0].get("ok") is True, str(resultado_real[0]))
+check("REGRESSÃO PONTA-A-PONTA: NÃO foi deletado — a descrição dizia "
+     "'com uma mordida', não 'nada resta' (mesmo com nota consumo=0)",
+      (elga48_folder / "maca-real-p48" / "item.md").exists())
+_, body_real = item_fm_body(elga48_folder, "maca-real-p48")
+check("REGRESSÃO PONTA-A-PONTA: a description FOI reescrita com o texto que "
+     "o modelo deu, na MESMA resposta que as quatro notas",
+      "mordida" in body_real and body_real.strip() != (
+          "Uma maçã vermelha, firme e brilhante, ainda pendurada entre as "
+          "folhas — o tipo de fruta que qualquer um arrancaria sem pensar "
+          "duas vezes."),
+      body_real)
+
+# happy path — formato real validado por POST direto ao modelo (a maçã,
+# comestibilidade/saciedade/toxicidade/consumo todos preenchidos de uma vez)
+_mk_char("provador2-p48", "Provador2")
+PROV2 = "provador2-p48"
+prov2_folder = motor.find_character_folder(PROV2)
+_mk_item(prov2_folder, "maca-feliz-p48", "Maçã",
+        "Uma maçã vermelha, firme e brilhante, ainda pendurada entre as "
+        "folhas — o tipo de fruta que qualquer um arrancaria sem pensar "
+        "duas vezes.")
+_resposta_feliz = ('{"comestibilidade":10,"saciedade":6,"toxicidade":0,'
+                   '"consumo":5,"descricao":"restos da maçã, com uma pequena '
+                   'parte mordida e algumas folhas caídas"}')
+ctx_prov2 = arbiter.build_ctx(motor.get_context(PROV2), ask=lambda _s, _u: _resposta_feliz,
+                              prosa={"acao": "comer a maçã"})
+resultado_feliz = ctx_prov2.execute("eat", {"item": "maca-feliz-p48"})
+check("REGRESSÃO (happy path, UMA chamada): aceito, hunger mudou, description reescrita",
+      resultado_feliz[0].get("ok") is True and hunger_de(PROV2) == "sem fome",
+      f"{resultado_feliz[0]} hunger={hunger_de(PROV2)!r}")
 
 print()
 if FAILS:

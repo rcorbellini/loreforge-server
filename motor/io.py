@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import random
+import shutil
 import threading
 import time
 import uuid
@@ -299,16 +300,15 @@ def _rejection(base: dict, rej: dict) -> dict:
             "why": _WHY_BY_REGRA.get(rej["regra"], rej["regra"])}
 
 
-def is_consumed(fm: dict) -> bool:
-    """`state.consumido: true` (spec 046, `eat`) — o item foi comido por completo.
-
-    Princípio IV proíbe deletar arquivo: um item devorado NÃO desaparece do disco,
-    só ganha esta marca (mesmo desenho de memória `state: expired`). Todo ponto que
-    ENUMERA itens para o jogo (cena, inventário, contêiner) filtra por isto — o
-    item some do jogo sem sumir do mundo. `state` ausente/não-mapa ⇒ não consumido
-    (mundo antigo continua íntegro, como `fechado` ausente ⇒ aberto)."""
-    state = fm.get("state")
-    return isinstance(state, dict) and state.get("consumido") is True
+def remove_entity(folder: Path) -> None:
+    """Apaga a pasta de uma entidade por completo (spec 046, `eat`: item
+    totalmente consumido). É a EXCEÇÃO escopada ao Princípio IV (emenda
+    2.1.0): só item, só consumo total, só por capacidade que declare essa
+    consequência de propósito — personagens e memórias seguem sem exceção
+    nenhuma. Remove árvore inteira (item aninhado dentro de item some junto,
+    como um bolso costurado na peça)."""
+    if folder.exists():
+        shutil.rmtree(folder)
 
 
 def _iter_within_location(location_folder: Path, filename: str):
@@ -359,6 +359,6 @@ def _scene_entities(location_folder: Path) -> tuple[dict, dict, dict]:
     items = {}
     for path in _iter_within_location(location_folder, "item.md"):
         fm, _ = read_doc(path)
-        if fm.get("id") and not is_consumed(fm):
+        if fm.get("id"):
             items[fm["id"]] = path.parent
     return characters, objects, items

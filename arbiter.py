@@ -451,6 +451,13 @@ def _verb_candidates(idx: dict) -> dict:
         # filtro aqui, decide quem realmente é fonte de líquido.
         "drink": sorted(set(i for i, e in items.items() if not worn(e))
                         | set(idx["objects"])),
+        # cozinha-se com ingredientes ao alcance (mesmo filtro de `eat` — mão,
+        # chão, dentro de contêiner aberto, em qualquer lugar) sobre uma fonte
+        # de calor presente na cena (mesmo universo cru de `shove_to`/`open` —
+        # spec 048). As réguas de FONTE_DE_CALOR/COZINHABILIDADE, não um filtro
+        # aqui, decidem se o object fornece calor e se os itens combinam.
+        "cook_ingredientes": sorted(i for i, e in items.items() if not worn(e)),
+        "cook_fonte": sorted(idx["objects"]),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
@@ -604,6 +611,11 @@ def build_tools(context: dict) -> list[dict]:
     """
     self_status = (context.get("self") or {}).get("status") or {}
     dormindo = motor.fisica.is_resting({"status": self_status})
+    # spec 048: mesmo gate cosmético do descanso, generalizado — enquanto o
+    # prato está no fogo, NENHUMA tool de mutação aparece (diferente de
+    # `sleep`, `cook` não tem uma tool-contraparte tipo `wake_up` a manter
+    # visível: a materialização é preguiçosa, não uma segunda ação do ator).
+    cozinhando = motor.fisica.is_cooking({"status": self_status})
     idx = _scene_index(context)
     cand = scene_candidates(idx)
     chars = sorted(idx["chars"])
@@ -641,6 +653,10 @@ def build_tools(context: dict) -> list[dict]:
         if id(spec) in seen:
             continue
         seen.add(id(spec))
+        # spec 048: ocupado cozinhando, NENHUMA tool de mutação aparece — sem
+        # exceção (não há `only_while_cooking`, ao contrário do descanso).
+        if cozinhando:
+            continue
         # O GATE DE DESCANSO, em uma linha e sem conhecer nome de tool nenhum
         # (item 50): dormindo, existem SÓ as capacidades marcadas
         # `only_while_resting`; de pé, existem todas MENOS elas. As duas metades da
@@ -838,6 +854,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     stole_asked: set = set()  # (alvo,item) já tentados via steal (spec 023)
     eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
     drunk_asked: set = set()  # alvo (item ou object) já tentado via drink (spec 047)
+    cooked_asked: set = set()  # (ingredientes, fonte_calor) já tentado via cook (spec 048)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1047,7 +1064,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         sub=_sub, seen_len=_seen_len, merge=_merge,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
-        eaten_asked=eaten_asked, drunk_asked=drunk_asked,
+        eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

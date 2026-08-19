@@ -140,6 +140,10 @@ _DOMAIN_BY_EVENT = {
     "witness_departure": "deslocamento", "witness_arrival": "deslocamento",
     # cura (spec 032) — primeiro domínio de fase 2
     "heal": "cura", "healed": "cura", "witness_heal": "cura",
+    # cozinha (spec 048) — segundo domínio de fase 2. Só prato CRIADO
+    # carimba (qualquer banda); as recusas de mérito (cook_refused_*) ficam
+    # DE FORA de propósito — não alimentam a proficiência.
+    "cook": "cozinha", "cook_otimo": "cozinha", "cook_ruim": "cozinha",
 }
 
 
@@ -182,14 +186,15 @@ _FADIGA_CORTES = (0.25, 0.5, 0.75, 1.0)
 _FADIGA_PENALIDADES = (0, 1, 2, 4)
 
 
-_PROFICIENCY_LEVELS = [
-    (0, 0.0),
-    (1, 3.0),
-    (2, 8.0),
-    (3, 16.0),
-    (4, 32.0),
-    (5, 64.0),
-]
+# Curva ASSINTÓTICA de proficiência (spec 048, research R12 — substitui a antiga
+# tabela de degraus, nível inteiro 0-5 com teto duro em peso>=64). Sem teto de
+# PESO de entrada: o personagem pode acumular peso infinito, e cada unidade nova
+# vale cada vez MENOS (derivada decrescente) — nunca zero, nunca trava. Retrofit
+# de `cura` (spec 032, já em produção): os dois pontos que ela consome o valor já
+# clampam o resultado (`_recovery_fraction`/`_forgotten_percent`), então nenhuma
+# linha muda lá — só a FORMA da curva compartilhada.
+_PROFICIENCY_TETO = 10.0   # nunca alcançado, só aproximado
+_PROFICIENCY_K = 16.0      # peso no qual o fator atinge metade do teto (calibrável)
 
 
 def memory_kind(fm: dict) -> str:
@@ -1862,21 +1867,19 @@ def fatigue_label(fadiga: int, fatigue_max: int) -> str:
     return "exausto"
 
 
-# Proficiência por domínio (spec 029, item 9/16/18 do backlog): mesma curva
-# exponencial de calibração que `sentiment_label`/`familiarity_label` já
-# usam, aqui convertendo peso acumulado em nível inteiro. Calibrável — não é
-# balanceamento final (research.md §4); fica pra quando specs de consumo
-# (`curar`, `forjar`) puderem testar contra jogo real.
-def _proficiency_level(peso: float) -> int:
-    nivel = 0
-    for n, limiar in _PROFICIENCY_LEVELS:
-        if peso >= limiar:
-            nivel = n
-    return nivel
+# Proficiência por domínio (spec 029, item 9/16/18 do backlog; curva assintótica
+# desde spec 048, R12): converte peso acumulado num FATOR contínuo 0 -> TETO,
+# nunca um nível inteiro travado. Calibrável — não é balanceamento final
+# (research.md §4 da 029; R12 da 048); fica pra quando specs de consumo (`cura`,
+# `cozinha`, `forjar`) puderem testar contra jogo real.
+def _proficiency_factor(peso: float) -> float:
+    if peso <= 0:
+        return 0.0
+    return _PROFICIENCY_TETO * peso / (peso + _PROFICIENCY_K)
 
 
-def proficiencies_for(character_id: str) -> dict[str, int]:
-    """Nível de proficiência por domínio — consulta de CLIENT (Princípio IX).
+def proficiencies_for(character_id: str) -> dict[str, float]:
+    """Fator de proficiência por domínio — consulta de CLIENT (Princípio IX).
 
     Não é persistido: recalculado sob demanda, mesmo espírito de
     `familiarity_with`/`sentiment_toward` (spec 016). Reusa a MESMA fórmula
@@ -1909,4 +1912,4 @@ def proficiencies_for(character_id: str) -> dict[str, int]:
         if not _is_alive(fm):
             p *= 0.25
         pesos[dominio] += p
-    return {d: _proficiency_level(p) for d, p in pesos.items()}
+    return {d: _proficiency_factor(p) for d, p in pesos.items()}

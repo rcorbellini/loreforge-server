@@ -293,6 +293,11 @@ _WHY_BY_REGRA = {
     "nao_comestivel": "isso não é algo que se coma",
     "nao_bebivel": "isso não é algo que se beba",
     "alvo_inacessivel": "não está ao alcance para beber",
+    "ingrediente_inacessivel": "esse ingrediente não está ao alcance",
+    "fonte_calor_inacessivel": "essa fonte de calor não está ao alcance",
+    "sem_calor": "isso não fornece calor nenhum para cozinhar",
+    "nao_cozinhavel": "isso não forma prato nenhum",
+    "ja_cozinhando": "já está ocupado com outra coisa no fogo",
 }
 
 
@@ -311,6 +316,21 @@ def remove_entity(folder: Path) -> None:
     como um bolso costurado na peça)."""
     if folder.exists():
         shutil.rmtree(folder)
+
+
+def create_entity(parent_folder: Path, entity_id: str, filename: str,
+                  frontmatter_data: dict, body: str) -> Path:
+    """Cria uma entidade NOVA (pasta + `.md`) sob `parent_folder` — primeira
+    primitiva do projeto que INSTANCIA em vez de mover/consumir/reescrever
+    (spec 048, `cook`), simétrica a `remove_entity`. Passa pelo MESMO
+    `write_doc` que qualquer outra escrita usa (Princípio VI: mesmo World
+    Validator, sem atalho). `entity_id` já vem resolvido pelo CHAMADOR
+    (`new_id`, tipicamente) — esta primitiva não inventa id nenhum."""
+    dest = parent_folder / entity_id
+    if dest.exists():
+        raise FileExistsError(f"destino de create_entity já existe: {dest}")
+    write_doc(dest / filename, frontmatter_data, body)
+    return dest
 
 
 def _iter_within_location(location_folder: Path, filename: str):

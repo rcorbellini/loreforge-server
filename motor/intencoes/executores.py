@@ -50,7 +50,7 @@ def _h_intentions(character_id, actor_folder, res, rolls):
     if not res.get("intentions"):
         return applied, rejected, []
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected, []
     for op in res.get("intentions") or []:

@@ -232,14 +232,16 @@ check("proficiencia: personagem sem nenhuma memória tem todos os domínios em n
       motor.proficiencies_for(PROF) == {
           "combate": 0, "crime": 0, "comercio": 0, "social": 0, "deslocamento": 0,
           "cura": 0,  # spec 032: 1º domínio de fase 2
+          "cozinha": 0,  # spec 048: 2º domínio de fase 2
       }, str(motor.proficiencies_for(PROF)))
 
-# uma memória VIVA 'giant' em crime (peso 8.0) cruza o limiar do nível 2 (>=8)
+# uma memória VIVA 'giant' em crime (peso 8.0) sobe o fator pela curva
+# assintótica (spec 048, R12): TETO·peso/(peso+K) = 10·8/(8+16) = 3.333...
 motor.memoria._write_memory(
     motor.find_character_folder(PROF), "um furto e tanto",
     intensity="giant", domain="crime", involved=[PROF])
-check("proficiencia: memória viva 'giant' em crime (peso 8.0) dá nível 2",
-      motor.proficiencies_for(PROF)["crime"] == 2,
+check("proficiencia: memória viva 'giant' em crime (peso 8.0) dá fator ~3.33 (curva sem teto)",
+      abs(motor.proficiencies_for(PROF)["crime"] - (10.0 * 8.0 / (8.0 + 16.0))) < 1e-9,
       str(motor.proficiencies_for(PROF)))
 check("proficiencia: os demais domínios continuam em 0 (não vaza entre domínios)",
       all(v == 0 for k, v in motor.proficiencies_for(PROF).items() if k != "crime"))
@@ -253,16 +255,18 @@ vfolder = motor.find_character_folder(VENC) / "memories" / f"{mid_vencida}.md"
 vfm, vbody = motor.read_doc(vfolder)
 vfm["timestamp_end"] = int(time.time()) - 10
 motor.write_doc(vfolder, vfm, vbody)
-check("proficiencia: a MESMA memória 'giant', VENCIDA (peso 8.0×¼=2.0), fica no nível 0",
-      motor.proficiencies_for(VENC)["crime"] == 0,
+check("proficiencia: a MESMA memória 'giant', VENCIDA (peso 8.0×¼=2.0), cai pra ~1.11 — "
+     "menos, nunca zero (a curva não trava em degrau)",
+      abs(motor.proficiencies_for(VENC)["crime"] - (10.0 * 2.0 / (2.0 + 16.0))) < 1e-9,
       str(motor.proficiencies_for(VENC)))
 
 check("proficiencia: determinismo — duas chamadas seguidas sem mutação são idênticas",
       motor.proficiencies_for(PROF) == motor.proficiencies_for(PROF))
 
-check("proficiencia: as chaves de domínio estão sempre presentes (5 de fase 1 + cura, spec 032)",
+check("proficiencia: as chaves de domínio estão sempre presentes "
+     "(5 de fase 1 + cura/032 + cozinha/048)",
       set(motor.proficiencies_for(PROF).keys()) ==
-      {"combate", "crime", "comercio", "social", "deslocamento", "cura"})
+      {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha"})
 
 # achado da validação manual (T017, quickstart contra servidor real): um
 # personagem INEXISTENTE devolvia 200 com zeros, silenciosamente, porque

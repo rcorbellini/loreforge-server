@@ -47,26 +47,32 @@ def nota(raw: str, default: int) -> int:
         return default
 
 
-def julgamento(raw: str, campos: dict, texto_campo: str | None = None,
-              texto_default: str = "") -> dict:
-    """Várias notas NOMEADAS (e, opcionalmente, um texto) na MESMA resposta —
-    UMA chamada ao modelo em vez de uma por eixo (spec 046, `eat`: quatro
-    julgamentos independentes por ato tornavam a ação lenta e cara; o custo é a
-    prioridade sobre isolar cada régua na própria chamada).
+def julgamento(raw: str, campos: dict, texto_campos: dict[str, str] | None = None) -> dict:
+    """Várias notas NOMEADAS (e, opcionalmente, um ou mais textos) na MESMA
+    resposta — UMA chamada ao modelo em vez de uma por eixo (spec 046, `eat`:
+    quatro julgamentos independentes por ato tornavam a ação lenta e cara; o
+    custo é a prioridade sobre isolar cada régua na própria chamada).
 
     `campos` = `{chave: default}` — cada valor sai grampeado em 0-10, ou cai no
     PRÓPRIO default se ausente/ilegível (mesma disciplina do `nota()`, por
-    campo). `texto_campo` é o nome da chave de texto livre, se houver.
+    campo). `texto_campos` = `{chave: default}` de texto livre, se houver —
+    generalizado de um texto único (spec 046/047) para VÁRIOS (spec 048,
+    `cook`: três descriptions candidatas, uma por banda, porque a banda só se
+    decide DEPOIS da rolagem — nenhuma sabida no momento desta chamada).
+    `eat`/`drink` migraram para a forma nova no mesmo commit (mesmo espírito da
+    migração de `ToolSpec.juizo` para tupla de pares, spec 046 R2): uma forma
+    só, nunca um texto singular E um dict convivendo.
 
-    Formato canônico: JSON com as chaves exatas de `campos` (+ `texto_campo`,
-    se houver) — pedido explicitamente no prompt da capacidade. MEDIDO (spec
-    046, sondagem real): pedir ao modelo pra responder um formato livre (nota
-    numa linha, texto na outra) é o que falha — o modelo já quer responder em
-    JSON por conta própria; brigar com isso é que quebra. Pedindo o JSON com o
-    schema explícito, a taxa de acerto medida foi 9 de 9."""
+    Formato canônico: JSON com as chaves exatas de `campos`/`texto_campos` —
+    pedido explicitamente no prompt da capacidade. MEDIDO (spec 046, sondagem
+    real): pedir ao modelo pra responder um formato livre (nota numa linha,
+    texto na outra) é o que falha — o modelo já quer responder em JSON por
+    conta própria; brigar com isso é que quebra. Pedindo o JSON com o schema
+    explícito, a taxa de acerto medida foi 9 de 9 (e, para 3 textos candidatos
+    na mesma resposta — spec 048 — 3 de 3 na sondagem real)."""
+    campos_texto = texto_campos or {}
     resultado = dict(campos)
-    if texto_campo is not None:
-        resultado[texto_campo] = texto_default
+    resultado.update(campos_texto)
     bruto = (raw or "").strip()
     inicio, fim = bruto.find("{"), bruto.rfind("}")
     if inicio == -1 or fim <= inicio:
@@ -81,8 +87,8 @@ def julgamento(raw: str, campos: dict, texto_campo: str | None = None,
         v = obj.get(chave)
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             resultado[chave] = max(0, min(10, int(v)))
-    if texto_campo is not None:
-        v = obj.get(texto_campo)
+    for chave in campos_texto:
+        v = obj.get(chave)
         if isinstance(v, str) and v.strip():
-            resultado[texto_campo] = v.strip()
+            resultado[chave] = v.strip()
     return resultado

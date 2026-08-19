@@ -16,7 +16,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import deslocamento, fisica, intencoes, io, memoria, registro, rotas
+from .. import cozinha, deslocamento, fisica, intencoes, io, memoria, registro, rotas
 from ..deslocamento import (
     lazy_evaluate,
 )
@@ -397,8 +397,12 @@ def get_context(character_id: str) -> dict:
     casos, quem estiver na mesma pasta coexiste e pode interagir (FR-021).
 
     Roda a avaliação preguiçosa antes de montar o bundle (FR-020, FR-022, FR-028).
+    Spec 048: a resolução preguiçosa de `cook` (prato pendente -> materializado
+    quando o tempo real se cumpre) roda no MESMO ponto, segunda família a usar
+    o padrão que `deslocamento.lazy_evaluate` já estabeleceu.
     """
     lazy_evaluate()
+    cozinha.lazy_evaluate()
 
     char_folder = find_character_folder(character_id)
     place_folder = char_folder.parent

@@ -314,7 +314,7 @@ def _eat(name: str, args: dict, ctx) -> tuple[dict, bool]:
         ctx.ask(REGUA_COMER, json.dumps({"item": ctx.describe(item)},
                                         ensure_ascii=False, indent=2)),
         campos={"comestibilidade": 5, "saciedade": 5, "toxicidade": 0, "consumo": 0},
-        texto_campo="descricao", texto_default="")
+        texto_campos={"descricao": ""})
     ctx.eaten_asked.add(item)
     comestibilidade = julgado["comestibilidade"]
     if comestibilidade == 0:
@@ -779,7 +779,7 @@ def _drink(name: str, args: dict, ctx) -> tuple[dict, bool]:
     julgado = juizo.julgamento(
         ctx.ask(regua, json.dumps({"alvo": ctx.describe(alvo)},
                                   ensure_ascii=False, indent=2)),
-        campos=campos, texto_campo=("descricao" if e_item else None), texto_default="")
+        campos=campos, texto_campos=({"descricao": ""} if e_item else None))
     ctx.drunk_asked.add(alvo)
     bebibilidade = julgado["bebibilidade"]
     if bebibilidade == 0:

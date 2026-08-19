@@ -198,7 +198,8 @@ from .memoria import (  # noqa: F401
     _DAY,
     _DEFAULT_TTL_SECONDS,
     _DOMAIN_BY_EVENT,
-    _PROFICIENCY_LEVELS,
+    _PROFICIENCY_TETO,
+    _PROFICIENCY_K,
     _FAMILIARIDADE_PISO,
     _INTENSITY_ORDER,
     _MEMORY_CONTEXT_CAP,
@@ -287,6 +288,15 @@ from .cura import (  # noqa: F401
 )
 
 
+# --- motor/cozinha.py (spec 048) ---
+from .cozinha import (  # noqa: F401
+    _apply_cozinha_ops,
+    _h_cozinha,
+    duracao_segundos,
+    roll_cook_check,
+)
+
+
 # --- extraído para motor/fisica.py (spec 021) ---
 from .fisica import (  # noqa: F401
     CARRY_KG_PER_STR,
@@ -328,6 +338,7 @@ from .fisica import (  # noqa: F401
     effective_weight,
     ensure_fatigue,
     ensure_hp,
+    is_cooking,
     is_resting,
     fatigue_max,
     porter_of,
@@ -356,7 +367,7 @@ from .fisica import (  # noqa: F401
     weapon_of,
 )
 
-from . import ativacao, fatos, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
+from . import ativacao, cozinha, fatos, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
 from .registro import ConsultSpec, consult_spec, consult_specs  # noqa: F401  (spec 040: lane de consulta)
 from .tempo import current_moment  # noqa: F401  (spec 040)
 from .percepcao import recall  # noqa: F401  (spec 040: consultar_memoria; reúso pelo Árbitro em US3)

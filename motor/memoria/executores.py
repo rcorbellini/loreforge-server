@@ -156,17 +156,6 @@ _FADIGA_CORTES = (0.25, 0.5, 0.75, 1.0)
 _FADIGA_PENALIDADES = (0, 1, 2, 4)
 
 
-_PROFICIENCY_LEVELS = [
-    (0, 0.0),
-    (1, 3.0),
-    (2, 8.0),
-    (3, 16.0),
-    (4, 32.0),
-    (5, 64.0),
-]
-
-
-
 from .primitivas import (  # noqa: F401
     _char_name,
     _create_memories,
@@ -181,7 +170,7 @@ from .primitivas import (  # noqa: F401
     _lower_intensity,
     _memory_salience,
     _perceive_dc,
-    _proficiency_level,
+    _proficiency_factor,
     _raise_intensity,
     _rec,
     _recency_label,
@@ -241,7 +230,7 @@ def _apply_accuse(character_id: str, actor_folder: Path,
     if not res.get("accuse_ops"):
         return applied, rejected, created
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(io._fail("descansando"))
         return applied, rejected, created
     now = time.time()

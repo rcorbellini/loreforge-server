@@ -43,7 +43,7 @@ def _apply_mutations(character_id: str, actor_folder: Path,
     if not resolution.get("mutations"):
         return applied, rejected, touched_actor
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(io._fail("descansando"))
         return applied, rejected, touched_actor
     present_chars, present_objects, present_items = io._scene_entities(actor_folder.parent)

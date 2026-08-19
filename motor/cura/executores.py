@@ -27,7 +27,7 @@ def _apply_cura_ops(character_id: str, actor_folder: Path, resolution: dict,
     if not resolution.get("cura_ops"):
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     present_chars, _, _ = io._scene_entities(actor_folder.parent)  # cena fresca (025)

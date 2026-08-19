@@ -104,7 +104,7 @@ def _apply_learn_ops(character_id: str, actor_folder: Path, resolution: dict,
     except MotorError:
         return applied, rejected, []
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected, []
     # o portão de disposição é resolvido UMA VEZ POR INFORMANTE POR TURNO, nunca
@@ -240,7 +240,7 @@ def _apply_hearsay_ops(character_id: str, actor_folder: Path, resolution: dict,
     except MotorError:
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     portoes: dict[str, bool] = {}

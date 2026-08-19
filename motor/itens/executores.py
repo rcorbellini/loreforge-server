@@ -153,7 +153,7 @@ def _apply_equip_ops(
     location_folder = actor_folder.parent
     present_chars, present_objects, present_items = io._scene_entities(location_folder)  # cena fresca (025)
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
 
@@ -277,7 +277,7 @@ def _apply_item_transfers(
     if not resolution.get("item_transfers"):
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     location_folder = actor_folder.parent
@@ -391,7 +391,7 @@ def _apply_steal_ops(character_id: str, actor_folder: Path, resolution: dict,
         return applied, rejected
     present_chars, present_objects, present_items = io._scene_entities(actor_folder.parent)  # cena fresca (025)
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     for op in resolution.get("steal_ops") or []:

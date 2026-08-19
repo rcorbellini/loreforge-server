@@ -32,7 +32,7 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # "nenhuma" (a resposta explícita para memórias sem prática nenhuma
 # associada). "cura" (spec 032) é o primeiro domínio de fase 2 — a tool
 # `curar` é a primeira a CONSUMIR proficiencies_for como modificador real.
-DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "nenhuma"}
+DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.

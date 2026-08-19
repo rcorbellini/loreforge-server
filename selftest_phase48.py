@@ -108,25 +108,24 @@ CAMPOS_EAT = {"comestibilidade": 5, "saciedade": 5, "toxicidade": 0, "consumo": 
 j1 = motor.juizo.julgamento(
     '{"comestibilidade": 10, "saciedade": 6, "toxicidade": 0, "consumo": 5, '
     '"descricao": "restos da maçã, com uma pequena parte mordida"}',
-    campos=CAMPOS_EAT, texto_campo="descricao")
+    campos=CAMPOS_EAT, texto_campos={"descricao": ""})
 check("julgamento: as cinco chaves do formato validado saem todas certas",
       j1 == {"comestibilidade": 10, "saciedade": 6, "toxicidade": 0, "consumo": 5,
             "descricao": "restos da maçã, com uma pequena parte mordida"},
       str(j1))
 
 j2 = motor.juizo.julgamento("blablabla, sem json nenhum aqui",
-                            campos=CAMPOS_EAT, texto_campo="descricao",
-                            texto_default="")
+                            campos=CAMPOS_EAT, texto_campos={"descricao": ""})
 check("julgamento: resposta ilegível cai TODA nos defaults, sem estourar",
       j2 == {**CAMPOS_EAT, "descricao": ""}, str(j2))
 
 j3 = motor.juizo.julgamento('{"comestibilidade": 15, "saciedade": -3}',
-                            campos=CAMPOS_EAT, texto_campo="descricao")
+                            campos=CAMPOS_EAT, texto_campos={"descricao": ""})
 check("julgamento: valores fora de 0-10 são grampeados",
       j3["comestibilidade"] == 10 and j3["saciedade"] == 0, str(j3))
 
 j4 = motor.juizo.julgamento('{"comestibilidade": 0}',
-                            campos=CAMPOS_EAT, texto_campo="descricao")
+                            campos=CAMPOS_EAT, texto_campos={"descricao": ""})
 check("julgamento: chave ausente cai no PRÓPRIO default (saciedade=5, não 0)",
       j4["comestibilidade"] == 0 and j4["saciedade"] == 5 and j4["consumo"] == 0,
       str(j4))

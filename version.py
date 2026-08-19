@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.14.0"
+__version__ = "2.15.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -50,6 +50,41 @@ __version__ = "2.14.0"
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
 HISTORY = {
+    "2.15.0": "spec 048 — COZINHAR. Tool nova `cook`: combina N ingredientes (em "
+              "qualquer lugar ao alcance) sobre uma fonte de calor presente, julgada "
+              "por QUATRO réguas (fonte de calor, cozinhabilidade, favorabilidade, "
+              "duração) numa chamada só. Três primeiras estreias do projeto de uma "
+              "vez: (1) `io.create_entity`, primeira primitiva que INSTANCIA entidade "
+              "nova em vez de mover/consumir/reescrever — simétrica a "
+              "`io.remove_entity` (spec 046); (2) materialização PREGUIÇOSA — os "
+              "ingredientes somem no ATO, mas o prato só existe quando o tempo real "
+              "de preparo se cumpre, resolvido em `get_context` no MESMO mecanismo "
+              "que já resolve chegada de rota (`deslocamento._resolve_arrivals`), "
+              "segunda família a usá-lo; (3) `fisica.is_cooking`, molde exato de "
+              "`is_resting` — enquanto um prato está pendente, nenhuma outra tool do "
+              "ator é aceita, e o manifest do turno some de mutação (mesmo gate "
+              "cosmético do descanso, generalizado). Banda RUIM nunca é falha total: "
+              "sempre nasce um prato, comprometido — a punição é inteiramente "
+              "deferida para quando `eat`/`drink` julgar essa description depois "
+              "(medido por sondagem real: toxicidade 6–9 em 9/9 tentativas sobre "
+              "descriptions de banda ruim, 0/0/0 na banda ótima da mesma cena). "
+              "Porque a banda só existe DEPOIS da rolagem, a mesma chamada pede TRÊS "
+              "descriptions candidatas (uma por banda) — achado de sequência que não "
+              "tinha precedente em `eat`/`drink` (cuja prosa nunca dependia de dado). "
+              "RETROFIT que atravessa a fronteira da spec: `memoria.proficiencies_for` "
+              "deixou de devolver um NÍVEL INTEIRO 0–5 com teto duro (peso≥64) e "
+              "passou a devolver um FATOR contínuo, assintótico, sem teto de peso "
+              "acumulado (`TETO·peso/(peso+K)`) — pedido do mantenedor para valer "
+              "em QUALQUER proficiência; `cura` (spec 032) não precisou de nenhuma "
+              "linha de código alterada (os dois pontos onde consome o valor já "
+              "grampeavam o resultado). A proficiência em `cozinha` soma DIRETO no "
+              "total da rolagem de favorabilidade — decide a própria banda —, "
+              "divergência DELIBERADA do papel que a mesma proficiência cumpre em "
+              "`cura` (lá só ajusta magnitude depois da banda decidida): o projeto "
+              "não impõe um único papel para \"como perícia entra\", cada capacidade "
+              "escolhe o que faz sentido pro que está em jogo. `julgamento()` "
+              "generalizado de um texto único pra VÁRIOS textos candidatos na mesma "
+              "resposta (`eat`/`drink` migrados no mesmo passo, byte-equivalentes).",
     "2.14.0": "spec 047 — BEBER. Tool nova `drink`: bebe de um item (cantil, copo, "
               "garrafa) OU direto de uma FONTE AMBIENTAL presente (`object` como um "
               "rio/poço, inesgotável) — julgada por até CINCO réguas (bebibilidade, "

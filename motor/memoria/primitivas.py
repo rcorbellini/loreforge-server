@@ -144,6 +144,11 @@ _DOMAIN_BY_EVENT = {
     # carimba (qualquer banda); as recusas de mérito (cook_refused_*) ficam
     # DE FORA de propósito — não alimentam a proficiência.
     "cook": "cozinha", "cook_otimo": "cozinha", "cook_ruim": "cozinha",
+    # acougue (spec 050) — terceiro domínio de fase 2. Só carne CRIADA
+    # carimba (qualquer banda); as recusas de mérito (butcher_refused_*)
+    # ficam DE FORA de propósito — não alimentam a proficiência.
+    "butcher_farto": "acougue", "butcher_medio": "acougue",
+    "butcher_fraco": "acougue",
 }
 
 

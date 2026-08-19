@@ -297,6 +297,15 @@ from .cozinha import (  # noqa: F401
 )
 
 
+# --- motor/acougue.py (spec 050) ---
+from .acougue import (  # noqa: F401
+    _apply_esquartejar_ops,
+    _h_esquartejar,
+    porcoes_de_carne,
+    roll_esquartejar_check,
+)
+
+
 # --- extraído para motor/fisica.py (spec 021) ---
 from .fisica import (  # noqa: F401
     CARRY_KG_PER_STR,
@@ -367,7 +376,7 @@ from .fisica import (  # noqa: F401
     weapon_of,
 )
 
-from . import ativacao, cozinha, fatos, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
+from . import acougue, ativacao, cozinha, fatos, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
 from .registro import ConsultSpec, consult_spec, consult_specs  # noqa: F401  (spec 040: lane de consulta)
 from .tempo import current_moment  # noqa: F401  (spec 040)
 from .percepcao import recall  # noqa: F401  (spec 040: consultar_memoria; reúso pelo Árbitro em US3)

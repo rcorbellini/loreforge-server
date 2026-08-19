@@ -15,7 +15,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from . import combate, comercio, conhecimento, conteiner, cozinha, cura, deslocamento, estado, fatos, intencoes, io, itens, memoria, narrate, percepcao, registro
+from . import acougue, combate, comercio, conhecimento, conteiner, cozinha, cura, deslocamento, estado, fatos, intencoes, io, itens, memoria, narrate, percepcao, registro
 # os executores não são mais importados AQUI: cada tool registra o próprio handler no
 # seu módulo (spec 025). O despachante (apply_op) só consulta `registro`; importar os
 # módulos acima já popula a tabela. O turno só usa os helpers de FINALIZAÇÃO abaixo.

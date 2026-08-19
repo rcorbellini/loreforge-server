@@ -298,6 +298,11 @@ _WHY_BY_REGRA = {
     "sem_calor": "isso não fornece calor nenhum para cozinhar",
     "nao_cozinhavel": "isso não forma prato nenhum",
     "ja_cozinhando": "já está ocupado com outra coisa no fogo",
+    "alvo_inacessivel": "não está ao alcance para esquartejar",
+    "alvo_nao_morto": "não há como esquartejar quem ainda pode se mexer",
+    "ja_esquartejado": "esse corpo já foi todo revirado; não sobrou nada a tirar",
+    "sem_carne": "aquilo não é feito de carne",
+    "nada_a_aproveitar": "não sobrou nada aproveitável ali",
 }
 
 

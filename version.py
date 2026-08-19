@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.16.0"
+__version__ = "2.17.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -50,6 +50,35 @@ __version__ = "2.16.0"
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
 HISTORY = {
+    "2.17.0": "spec 050 — ESQUARTEJAR. Tool nova `butcher`: extrai uma ou mais porções "
+              "de carne crua de um corpo QUE JÁ ESTÁ MORTO. Nasceu de uma sondagem real "
+              "nesta sessão — um coelho morto criado no mundo confirmou que NENHUMA tool "
+              "de item enxergava um `character.md`, mesmo morto (`take`/`cook` recusavam "
+              "estruturalmente, zero LLM). DUAS réguas numa chamada só — "
+              "ESQUARTEJABILIDADE (categórica: este corpo é feito de carne? golem/"
+              "esqueleto/construto pontuam 0, SEM TESTE) antes de RENDIMENTO (quanto "
+              "daquela carne está aproveitável, rolada com `d20 + mod(DEX) + "
+              "nivel_acougue`) — divididas de propósito, no molde de "
+              "`fonte_de_calor`/`cozinhabilidade` em `cook`, pra que uma calibração "
+              "ambígua do Árbitro nunca deixe passar carne de quem não é carne. O "
+              "resultado é N ITENS (nunca um único item com campo de quantidade): a LLM "
+              "escreve nome/description UMA vez, o Motor deriva quantas porções e o "
+              "peso de cada uma deterministicamente do peso do corpo e da banda — mesmo "
+              "padrão de item fungível que as moedas do mundo já usam, sem estender o "
+              "parser de julgamento (`motor/juizo.py`) pra arrays. O corpo NUNCA é "
+              "apagado nem reescrito (`character` é exceção-zero ao Princípio IV, ao "
+              "contrário do ingrediente que `cook` consome) — só ganha "
+              "`status.esquartejado: true`, marcador permanente que impede uma segunda "
+              "extração. Proficiência em `\"acougue\"` (3º consumidor de "
+              "`proficiencies_for`, mesmo mecanismo assintótico de `cozinha`/`cura`) "
+              "soma DIRETO na rolagem. TRÊS simplificações deliberadas vs. `cook`: sem "
+              "materialização preguiçosa (esquartejar não tem tempo de preparo real — "
+              "YAGNI), sem gate de exclusividade próprio, e o `enum_source` de "
+              "personagens mortos (`butcher_alvo`) é UMA linha em "
+              "`arbiter.py::_verb_candidates`, copiando o padrão que `heal` já usa pra "
+              "`incapacitado` — a hipótese inicial de que a percepção filtrava mortos "
+              "era falsa (bug de schema no fixture de teste, não comportamento do "
+              "Motor). MINOR: tool nova. Ver specs/050-butcher-corpse/",
     "2.16.0": "spec 049 — FOME E SEDE COM O TEMPO REAL. `eat`/`drink` passam a "
               "gravar, além do rótulo já existente, uma âncora interna por régua "
               "(`status.hunger_ts`+`hunger_note`, `status.thirst_ts`+`thirst_note` "

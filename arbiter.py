@@ -491,6 +491,10 @@ def _verb_candidates(idx: dict) -> dict:
         # morto (fora de escopo), nunca de pé (nada a socorrer)
         "heal": sorted(c for c in idx["chars"] if c != actor
                        and motor.INCAPACITATED in (idx["char_conditions"].get(c) or [])),
+        # esquarteja-se OUTRO presente que já esteja MORTO (spec 050) — nunca
+        # incapacitado, nunca de pé; matar continua exclusivo de `attack`
+        "butcher_alvo": sorted(c for c in idx["chars"] if c != actor
+                               and motor.DEAD in (idx["char_conditions"].get(c) or [])),
         # comércio (spec 011): o PORTÃO já filtra os enums — o modelo só enxerga
         # o que o mundo põe à mesa
         "negociar_com": sorted(c for c in idx["chars"] if c != actor),
@@ -855,6 +859,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
     drunk_asked: set = set()  # alvo (item ou object) já tentado via drink (spec 047)
     cooked_asked: set = set()  # (ingredientes, fonte_calor) já tentado via cook (spec 048)
+    butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1016,6 +1021,12 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
                 # gente não é item: modelos tentam `take`/`equip` para "pegar
                 # alguém no colo". Redireciona em vez de só negar — sem a dica o
                 # modelo desiste e narra um feito que não aconteceu (spec 010).
+                # Um corpo MORTO tem um destino diferente de quem só é carregado
+                # (spec 050, research R3) — a dica aponta pra ferramenta certa.
+                if motor.DEAD in (idx["char_conditions"].get(item) or []):
+                    return _err(f"'{item}' é um CORPO, não um item — para "
+                                "extrair algo dele use a ferramenta butcher",
+                                "item", _validos(items))
                 return _err(f"'{item}' é uma PESSOA, não um item — para levá-la "
                             "consigo use a ferramenta carry", "item",
                             _validos(items))
@@ -1065,6 +1076,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
+        butchered_asked=butchered_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

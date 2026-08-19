@@ -32,7 +32,8 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # "nenhuma" (a resposta explícita para memórias sem prática nenhuma
 # associada). "cura" (spec 032) é o primeiro domínio de fase 2 — a tool
 # `curar` é a primeira a CONSUMIR proficiencies_for como modificador real.
-DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha", "nenhuma"}
+DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
+          "acougue", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.
@@ -166,6 +167,16 @@ def _validate_character(fm: dict) -> list[str]:
             isinstance(desde, bool) or not isinstance(desde, (int, float))
         ):
             errors.append("character: 'status.descansando_desde' deve ser número.")
+        # spec 049: âncoras de decadência de fome/sede — mesmo molde de
+        # descansando_desde (campo novo, sem ficha legada a acomodar).
+        # `*_ts` é epoch (time.time()); `*_note` é a nota 0-10 de
+        # saciedade/hidratação do ato que gravou a âncora.
+        for campo in ("hunger_ts", "hunger_note", "thirst_ts", "thirst_note"):
+            valor = status.get(campo)
+            if valor is not None and (
+                isinstance(valor, bool) or not isinstance(valor, (int, float))
+            ):
+                errors.append(f"character: 'status.{campo}' deve ser número.")
     skills = fm.get("skills")
     if skills is not None and not isinstance(skills, dict):
         errors.append("character: 'skills' deve ser um mapa.")

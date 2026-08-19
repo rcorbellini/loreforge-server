@@ -517,6 +517,12 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
         rotulo_fome = ("com fome" if saciedade <= 2 else
                        "saciado" if saciedade >= 7 else "sem fome")
         _set_field(actor_folder, "status.hunger", rotulo_fome)
+        # spec 049: âncora de decadência por tempo real — junto do rótulo
+        # escrito na hora, grava QUANDO comeu e O QUANTO satisfez, pra
+        # `hunger_label` derivar o rótulo certo em consultas futuras sem
+        # esperar um novo `eat`. Cada ato sobrescreve o par inteiro.
+        _set_field(actor_folder, "status.hunger_ts", time.time())
+        _set_field(actor_folder, "status.hunger_note", saciedade)
         item_fm, _ = io.read_doc(item_folder / "item.md")
         # capturado ANTES de possivelmente apagar o arquivo (emenda 2.1.0 ao
         # Princípio IV): depois de `remove_entity`, `io.name_of(item_id)` não
@@ -613,6 +619,11 @@ def _apply_drink_ops(character_id: str, actor_folder: Path, resolution: dict,
         rotulo_sede = ("com sede" if hidratacao <= 2 else
                        "hidratado" if hidratacao >= 7 else "sem sede")
         _set_field(actor_folder, "status.thirst", rotulo_sede)
+        # spec 049: âncora de decadência por tempo real — mesmo par de `eat`
+        # (`status.hunger_ts`/`hunger_note`), espelhado para sede. Cada ato
+        # de beber sobrescreve o par inteiro.
+        _set_field(actor_folder, "status.thirst_ts", time.time())
+        _set_field(actor_folder, "status.thirst_note", hidratacao)
         # capturado ANTES de qualquer reescrita, no mesmo espírito de `eat`
         # (ainda que aqui o alvo NUNCA seja removido — R3 — o nome vem do
         # frontmatter atual, não do id cru).

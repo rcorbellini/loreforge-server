@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.15.0"
+__version__ = "2.16.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -50,6 +50,20 @@ __version__ = "2.15.0"
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
 HISTORY = {
+    "2.16.0": "spec 049 — FOME E SEDE COM O TEMPO REAL. `eat`/`drink` passam a "
+              "gravar, além do rótulo já existente, uma âncora interna por régua "
+              "(`status.hunger_ts`+`hunger_note`, `status.thirst_ts`+`thirst_note` "
+              "— epoch do ato + a nota 0-10 de saciedade/hidratação daquele ato, "
+              "segredo do server). `hunger_label`/`thirst_label` "
+              "(`motor/fisica/primitivas.py`), lidas por `get_context`, passam a "
+              "DERIVAR o rótulo do tempo real decorrido desde a âncora contra "
+              "dois limiares lineares por nota (nota mais alta segura mais "
+              "tempo; sede sempre aperta antes de fome na mesma nota) — puro "
+              "cálculo na lane de consulta, sem escrita, mesmo molde de "
+              "`tempo.py::current_moment()`. Personagem sem âncora (nunca comeu/"
+              "bebeu via tool, ou ficção autorada à mão) mantém o comportamento "
+              "de sempre, sem decadência. Consulta enriquecida com mecânica "
+              "nova — MINOR.",
     "2.15.0": "spec 048 — COZINHAR. Tool nova `cook`: combina N ingredientes (em "
               "qualquer lugar ao alcance) sobre uma fonte de calor presente, julgada "
               "por QUATRO réguas (fonte de calor, cozinhabilidade, favorabilidade, "

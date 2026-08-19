@@ -550,12 +550,58 @@ _FOME_CANONICA = (
 )
 
 
+# spec 049: decadência por tempo real. `eat`/`drink` gravam, ao lado do
+# rótulo escrito na hora, uma ÂNCORA interna (`status.hunger_ts`/
+# `thirst_ts` — epoch de quando comeu/bebeu — e `status.hunger_note`/
+# `thirst_note` — a nota 0-10 de saciedade/hidratação daquele ato). Quando a
+# âncora existe, o rótulo passa a ser DERIVADO do tempo real decorrido, não
+# mais lido do texto estático — puro cálculo na lane de consulta (mesmo
+# molde de `tempo.py::current_moment()`, sem escrita, sem WRITE_LOCK, porque
+# `hunger_label`/`thirst_label` têm um único leitor: `get_context`).
+def _stage_by_time(ts: float, note: int, limiar1_fn, limiar2_fn,
+                    rotulos: tuple[str, str, str]) -> str:
+    """3 estágios a partir do tempo real decorrido desde `ts`, contra dois
+    limiares (em horas) que dependem de `note` — quanto maior a nota, mais
+    tempo cada limiar segura. Satura no rótulo mais severo (`rotulos[2]`);
+    não existe um 4º estágio."""
+    horas = (time.time() - ts) / 3600.0
+    if horas >= limiar2_fn(note):
+        return rotulos[2]
+    if horas >= limiar1_fn(note):
+        return rotulos[1]
+    return rotulos[0]
+
+
+def _hunger_note_de(status: dict) -> int:
+    nota = status.get("hunger_note")
+    return int(nota) if isinstance(nota, (int, float)) and not isinstance(nota, bool) else 0
+
+
+def _horas_ate_com_fome(nota: int) -> float:
+    return 3 + nota * 1.5
+
+
+def _horas_ate_faminto(nota: int) -> float:
+    return 10 + nota * 4
+
+
 def hunger_label(char_fm: dict) -> str:
-    """O que ele SENTE de fome, em rótulo canônico. Ficha sem `hunger` (ou com
-    palavra que não se reconhece) lê como `sem fome`: ausência não é urgência, e
-    inventar necessidade onde o autor não escreveu seria o mundo pondo fome em quem
+    """O que ele SENTE de fome, em rótulo canônico. Com `status.hunger_ts`
+    presente (já comeu via `eat` pelo menos uma vez), o rótulo é DERIVADO do
+    tempo real decorrido desde então, escalado pela nota daquele ato (spec
+    049) — ignora o texto estático de `status.hunger`. Sem `hunger_ts`
+    (nunca comeu via tool, ou ficção autorada à mão com texto livre), o
+    comportamento é o de sempre: ficha sem `hunger` (ou com palavra que não
+    se reconhece) lê como `sem fome` — ausência não é urgência, e inventar
+    necessidade onde o autor não escreveu seria o mundo pondo fome em quem
     não tem."""
-    bruto = str(((char_fm.get("status") or {}).get("hunger") or "")).strip().lower()
+    status = char_fm.get("status") or {}
+    ts = status.get("hunger_ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        return _stage_by_time(ts, _hunger_note_de(status),
+                               _horas_ate_com_fome, _horas_ate_faminto,
+                               ("sem fome", "com fome", "faminto"))
+    bruto = str(status.get("hunger") or "").strip().lower()
     if not bruto:
         return "sem fome"
     for marcas, rotulo in _FOME_CANONICA:
@@ -577,11 +623,33 @@ _SEDE_CANONICA = (
 )
 
 
+def _thirst_note_de(status: dict) -> int:
+    nota = status.get("thirst_note")
+    return int(nota) if isinstance(nota, (int, float)) and not isinstance(nota, bool) else 0
+
+
+def _horas_ate_com_sede(nota: int) -> float:
+    return 2 + nota * 1
+
+
+def _horas_ate_sedento(nota: int) -> float:
+    return 6 + nota * 2
+
+
 def thirst_label(char_fm: dict) -> str:
-    """O que ele SENTE de sede, em rótulo canônico. Ficha sem `thirst` (ou com
-    palavra que não se reconhece) lê como `sem sede` — mesmo espírito de
-    `hunger_label`: ausência não é urgência."""
-    bruto = str(((char_fm.get("status") or {}).get("thirst") or "")).strip().lower()
+    """O que ele SENTE de sede, em rótulo canônico — mesmo mecanismo de
+    `hunger_label` (spec 049): `status.thirst_ts` presente deriva o rótulo
+    do tempo real decorrido, com limiares próprios SEMPRE mais curtos que os
+    de fome na mesma nota (sede aperta antes). Sem `thirst_ts`, mesmo
+    espírito de sempre: texto livre ausente ou não reconhecido lê como `sem
+    sede` — ausência não é urgência."""
+    status = char_fm.get("status") or {}
+    ts = status.get("thirst_ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        return _stage_by_time(ts, _thirst_note_de(status),
+                               _horas_ate_com_sede, _horas_ate_sedento,
+                               ("sem sede", "com sede", "sedento"))
+    bruto = str(status.get("thirst") or "").strip().lower()
     if not bruto:
         return "sem sede"
     for marcas, rotulo in _SEDE_CANONICA:

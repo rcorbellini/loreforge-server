@@ -432,15 +432,25 @@ def _equipped_items(actor_folder: Path, present_items: dict) -> list[dict]:
 
 
 def roll_steal_check(actor_fm: dict, char_id: str, alvo_id: str, item_id: str,
-                     exposicao: int, rolls: list | None = None) -> tuple[str, dict]:
+                     exposicao: int, nivel_crime: float = 0.0,
+                     rolls: list | None = None) -> tuple[str, dict]:
     """Devolve (desfecho, roll_info). desfecho ∈
     {'impossivel','limpo','flagrado_levou','flagrado_vazio'}.
 
-    Curva da persuasão (persuade_dc), UMA rolagem: d20 + mod(DEX) vs DC. Extremos
-    deterministas: exposição 0 = impossível às claras (sem dado); 10 = trivial,
-    limpo (sem dado). Entre 1-9, a DISTÂNCIA à DC governa o flagrante:
+    Curva da persuasão (persuade_dc), UMA rolagem: `d20 + mod(DEX) + nivel_crime`
+    vs DC. Extremos deterministas: exposição 0 = impossível às claras (sem dado);
+    10 = trivial, limpo (sem dado) — a proficiência NUNCA entra neles. Entre 1-9,
+    a DISTÂNCIA à DC governa o flagrante:
       passou (total ≥ DC) → LIMPO; falhou por ≤5 → FLAGRADO mas levou (o agarrão);
       falhou por >5 → FLAGRADO e vazio. Nota/DC são segredo do mundo.
+
+    `nivel_crime` (spec 051) é a proficiência do ladrão no domínio `"crime"`
+    (`memoria.proficiencies_for`, fator contínuo assintótico) — todo furto já
+    carimbava `domain: "crime"` desde a spec 029, e agora esse acúmulo VOLTA como
+    bônus. Soma DIRETO no total, decidindo o PRÓPRIO desfecho — mesmo papel que
+    `nivel_cozinha` cumpre em `cook` e `nivel_acougue` em `butcher`, divergência
+    deliberada de `cura` (lá a proficiência só ajusta a magnitude depois do
+    desfecho já decidido).
     """
     exposicao = int(exposicao)
     if exposicao <= 0:
@@ -460,7 +470,7 @@ def roll_steal_check(actor_fm: dict, char_id: str, alvo_id: str, item_id: str,
     d20 = rolagem._roll_d20()
     mod = rolagem.attr_modifier((actor_fm.get("attributes") or {}).get("DEX", 10))
     dc = rolagem.persuade_dc(exposicao)
-    total = d20 + mod
+    total = d20 + mod + float(nivel_crime)
     if total >= dc:
         desfecho = "limpo"
     elif dc - total <= 5:
@@ -475,7 +485,9 @@ def roll_steal_check(actor_fm: dict, char_id: str, alvo_id: str, item_id: str,
                   or (exposicao <= 4 and desfecho == "limpo"),
         "critico": ("sucesso" if (d20 == 20 and desfecho == "limpo")
                     else "falha" if (d20 == 1 and desfecho == "flagrado_vazio") else None),
-        "rolagem": {"d20": d20, "mod": mod, "total": total, "dc": dc},
+        "rolagem": {"d20": d20, "mod": mod,
+                    "nivel_crime": round(float(nivel_crime), 2),
+                    "total": total, "dc": dc},
     }
     if rolls is not None:
         rolls.append(info)

@@ -408,8 +408,13 @@ def _apply_steal_ops(character_id: str, actor_folder: Path, resolution: dict,
         if _find_item_under(present_chars[alvo], item_id) is None:
             rejected.append(_rejection(base, _fail("item_nao_e_do_alvo", item=item_id, alvo=alvo)))
             continue
+        # spec 051: a prática de furtar volta como bônus. Todo furto já carimbava
+        # `domain: "crime"` (spec 029) e ninguém lia o acúmulo de volta — agora lê,
+        # pelo MESMO mecanismo dinâmico de `cura`/`cozinha`/`acougue` (nunca um campo
+        # estático `skills.*`). Soma direto no total, decidindo o próprio desfecho.
+        nivel_crime = memoria.proficiencies_for(character_id).get("crime", 0.0)
         desfecho, info = roll_steal_check(
-            actor_fm, character_id, alvo, item_id, exposicao, rolls)
+            actor_fm, character_id, alvo, item_id, exposicao, nivel_crime, rolls)
         if desfecho == "impossivel":
             rejected.append(_rejection(base, _fail("furto_impossivel", item=item_id)))
             continue

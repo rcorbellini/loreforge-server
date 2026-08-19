@@ -8,6 +8,8 @@ Rolagem forçada (motor._roll_d20). Cobre:
     recusado (tão grave quanto uma agressão)
   - item que não é do alvo → recusa
   - segredo: exposição/DC/dado não descem ao client (a nota não vira valor visível)
+  - spec 051: a proficiência em "crime" soma DIRETO na rolagem — dois ladrões idênticos,
+    MESMA tirada, desfechos diferentes; extremos deterministas intocados
 
 Uso:  python3 server/selftest_phase26.py
 """
@@ -68,6 +70,14 @@ def force(v):
 def _tem(cid, item):
     f = motor.find_character_folder(cid)
     return f is not None and motor._find_item_under(f, item) is not None
+
+
+def _planta_memoria_crime(cid, intensity="giant"):
+    """Planta uma memória de prática de furto (spec 029/051) sem passar por um furto
+    de verdade — molde de `_planta_memoria_acougue` (selftest_phase52)."""
+    folder = motor.find_character_folder(cid)
+    motor.memoria._write_memory(folder, "uma temporada inteira batendo carteiras",
+                                intensity=intensity, domain="crime", involved=[cid])
 
 
 def _tem_memoria_furto(dono, ladrao):
@@ -164,6 +174,74 @@ check("item 6: a virada é do bloco FURTO (resultado 'limpo'), não da força f�
       any(v.get("resultado") == "limpo" for v in viradas), str(viradas))
 check("item 8: a virada deixa memória MAIS VIVA no ladrão (theft_twist)",
       _tem_mem_contendo("azarado-teste", "ninguém viu"))
+
+# =========================================================================== #
+# 8) spec 051 — a proficiência em "crime" soma DIRETO na rolagem do furto
+# =========================================================================== #
+
+NOVATO = "novato-crime-teste"
+EXPERIENTE = "gatuno-experiente-teste"
+_mk_char(NOVATO, dex=10)      # DEX 10 -> mod 0
+_mk_char(EXPERIENTE, dex=10)  # idêntico; a ÚNICA diferença é a prática
+_planta_memoria_crime(EXPERIENTE, "giant")  # peso 8 -> fator ~3.33
+
+# SC-002: ator virgem em `crime` -> bônus zero (nunca erro, nunca regressão)
+nivel_novato = motor.memoria.proficiencies_for(NOVATO).get("crime", -1)
+check("spec 051: ator SEM nenhuma memória domain='crime' -> nivel_crime = 0.0 "
+      "(bônus zero, nunca erro)", nivel_novato == 0.0, str(nivel_novato))
+nivel_exp = motor.memoria.proficiencies_for(EXPERIENTE).get("crime", 0.0)
+check("spec 051: o furtador de prática acumula nivel_crime > 0 pelo MESMO mecanismo "
+      "dinâmico de cozinha/acougue (nunca um campo skills.*)", nivel_exp > 3.0,
+      str(nivel_exp))
+
+# SC-001: MESMO d20 (9), MESMA exposição 5 (DC 10). Novato: total 9 -> falhou por 1
+# (<=5) -> flagrado_levou (o dono guarda o rancor). Experiente: 9 + 3.33 = 12.33 >= 10
+# -> LIMPO (o dono nem soube). A MESMA tirada, desfechos diferentes, só pela prática.
+_mk_item(TAVERNA / ELGA, "bug-novato")
+_mk_item(TAVERNA / ELGA, "bug-exp")
+force(9)
+motor.apply_resolution(NOVATO, {"steal_ops": [
+    {"alvo": ELGA, "item": "bug-novato", "exposicao": 5}]})
+motor.apply_resolution(EXPERIENTE, {"steal_ops": [
+    {"alvo": ELGA, "item": "bug-exp", "exposicao": 5}]})
+check("spec 051: os dois levaram o item (o bônus muda o FLAGRANTE, não o butim aqui)",
+      _tem(NOVATO, "bug-novato") and _tem(EXPERIENTE, "bug-exp"))
+check("spec 051: o NOVATO foi flagrado com a mesma tirada (total 9 < DC 10)",
+      _tem_memoria_furto(ELGA, NOVATO))
+check("spec 051: o EXPERIENTE saiu LIMPO com a MESMA tirada — a prática cruzou a DC "
+      "(9 + ~3.33 >= 10) e o dono não guardou nada",
+      not _tem_memoria_furto(ELGA, EXPERIENTE),
+      f"elga->experiente={motor.sentiment_toward(ELGA, EXPERIENTE)}")
+
+# FR-003: os extremos deterministas NUNCA rolam — a proficiência não os alcança
+_mk_item(TAVERNA / ELGA, "bug-exp-zero")
+force(20)
+out_imp = motor.apply_resolution(EXPERIENTE, {"steal_ops": [
+    {"alvo": ELGA, "item": "bug-exp-zero", "exposicao": 0}]})
+check("spec 051: exposição 0 continua IMPOSSÍVEL mesmo para o mais proficiente, sem dado",
+      _tem(ELGA, "bug-exp-zero") and not _tem(EXPERIENTE, "bug-exp-zero")
+      and all(r.get("rolagem") is None for r in out_imp.get("rolls", [])
+              if r.get("tipo") == "furto"),
+      str(out_imp.get("rolls")))
+_mk_item(TAVERNA / ELGA, "bug-exp-dez")
+force(1)
+out_dez = motor.apply_resolution(EXPERIENTE, {"steal_ops": [
+    {"alvo": ELGA, "item": "bug-exp-dez", "exposicao": 10}]})
+check("spec 051: exposição 10 continua LIMPO sem dado (proficiência nunca entra)",
+      _tem(EXPERIENTE, "bug-exp-dez")
+      and all(r.get("rolagem") is None for r in out_dez.get("rolls", [])
+              if r.get("tipo") == "furto"),
+      str(out_dez.get("rolls")))
+
+# FR-004/SC-004: nivel_crime é segredo do mundo — nunca desce ao client
+_mk_item(TAVERNA / ELGA, "bug-segredo")
+force(9)
+out_seg = motor.apply_resolution(EXPERIENTE, {"steal_ops": [
+    {"alvo": ELGA, "item": "bug-segredo", "exposicao": 5}]})
+blob_seg = " ".join(server_app.inworld_effects(out_seg))
+check("spec 051: nem a proficiência nem o total aparecem no que desce ao client",
+      "crime" not in blob_seg.lower() and "profici" not in blob_seg.lower(),
+      blob_seg)
 
 print()
 if FAILS:

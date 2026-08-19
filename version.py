@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.17.0"
+__version__ = "2.17.1"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -49,6 +49,17 @@ __version__ = "2.17.0"
 #  devolver, no MESMO JSON, um `plano` (ações-do-livro ordenadas + narrativa) que sobe
 #  ao /api/act e o server SÓ LOGA — telemetria, nunca à arbitragem. Investigação da
 #  execução de intenção, fatia C do item 38. PATCH.)
+# (2.17.1 — spec 051, sem superfície nova (nenhuma tool, campo ou endpoint), por isso
+#  PATCH: a proficiência em `crime` passa a DECIDIR o furto. Desde a spec 029 todo furto
+#  carimbava `domain: "crime"` nas memórias que gera, e desde então esse acúmulo não era
+#  lido por ninguém — `crime` era a única proficiência do jogo que crescia e nunca era
+#  consultada, e um gatuno de cem furtos rolava idêntico a quem nunca roubou.
+#  `roll_steal_check` ganha `nivel_crime`, somado DIRETO no total (`d20 + mod(DEX) +
+#  nivel_crime` vs `persuade_dc(exposição)`) — mesmo papel que `nivel_cozinha` em `cook`
+#  e `nivel_acougue` em `butcher`, divergência deliberada de `cura` (lá a proficiência só
+#  ajusta magnitude depois do desfecho). Os extremos deterministas (exposição 0/10)
+#  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
+#  zero arquivo novo.)
 HISTORY = {
     "2.17.0": "spec 050 — ESQUARTEJAR. Tool nova `butcher`: extrai uma ou mais porções "
               "de carne crua de um corpo QUE JÁ ESTÁ MORTO. Nasceu de uma sondagem real "

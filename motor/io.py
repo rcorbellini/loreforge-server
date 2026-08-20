@@ -63,6 +63,18 @@ def _is_valid(fm: dict) -> bool:
 
 
 def find_character_folder(character_id: str) -> Path:
+    """A pasta do personagem — e ela tem de ser ÚNICA.
+
+    ANTES devolvia o PRIMEIRO `rglob` que casasse. Com o mesmo id em duas pastas
+    (o que o git produz sozinho: deslocar é rename, e `checkout`/`stash`/
+    `submodule update` ressuscita o caminho antigo enquanto o novo segue no
+    disco) isso ligava A Mente ao fantasma EM SILÊNCIO, e a ordem do `rglob` nem
+    é garantida — o mesmo mundo podia dar respostas diferentes. Em 2026-08-20 havia
+    12 personagens assim. Falhar alto é a única resposta honesta: o mundo está
+    corrompido e nenhuma escolha automática entre as duas cópias é defensável aqui.
+    Quem resolve é `sanea_duplicatas.py`, com histórico do git na mão.
+    """
+    achados = []
     for path in WORLD_DIR.rglob("character.md"):
         fm, _ = read_doc(path)
         if fm.get("id") == character_id:
@@ -72,8 +84,17 @@ def find_character_folder(character_id: str) -> Path:
                     f"personagem '{character_id}' tem arquivo inválido: "
                     + "; ".join(errors)
                 )
-            return path.parent
-    raise MotorError(f"personagem não encontrado: '{character_id}'.")
+            achados.append(path.parent)
+    if not achados:
+        raise MotorError(f"personagem não encontrado: '{character_id}'.")
+    if len(achados) > 1:
+        onde = ", ".join(str(p.relative_to(WORLD_DIR)) for p in sorted(achados))
+        raise MotorError(
+            f"personagem '{character_id}' existe em MAIS DE UM lugar: {onde}. "
+            "O mundo está duplicado — rode "
+            "`python3 loreforge-server/sanea_duplicatas.py`."
+        )
+    return achados[0]
 
 
 def find_entity(entity_id: str) -> tuple[Path, dict, str] | None:

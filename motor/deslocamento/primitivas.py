@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import random
 import threading
+import sys
 import time
 import uuid
 import unicodedata
@@ -499,6 +500,33 @@ def _witness_movement(location_folder: Path, mover_id: str, evento: str,
                       intensity=intens, involved=involved, evento=evento)
 
 
+_COLISOES_AVISADAS: set[str] = set()
+
+
+def _colisao_de_pasta(destino: Path) -> bool:
+    """O destino já tem uma pasta com este nome? Então NÃO se move.
+
+    Existe porque `io.move_entity` levanta `FileExistsError`, e as duas chamadas
+    que deslocam personagem (`_enter_route_locked` e `_resolve_arrivals`) já
+    tinham gravado memória, rastro e testemunha quando chegavam nela. O viajante
+    ficava órfão: o mundo dizia que ele havia chegado, o disco dizia que não, e
+    sem `transit` a varredura seguinte o pulava para sempre (a Elga passou 12h
+    assim, em 2026-08-20). Checar ANTES de qualquer escrita é o que transforma
+    isso em espera, e a espera se resolve sozinha quando alguém rodar
+    `sanea_duplicatas.py`.
+    """
+    if not destino.exists():
+        return False
+    chave = str(destino)
+    if chave not in _COLISOES_AVISADAS:
+        _COLISOES_AVISADAS.add(chave)
+        print(f"⚠ deslocamento bloqueado: '{destino.name}' já existe em "
+              f"{destino.parent} — id duplicado no mundo. O viajante espera na "
+              f"rota. Rode `python3 loreforge-server/sanea_duplicatas.py`.",
+              file=sys.stderr, flush=True)
+    return True
+
+
 def enter_route(character_id: str, route_id: str) -> dict:
     """Entrada pública em rota (adquire o lock). Ver _enter_route_locked."""
     with WRITE_LOCK:
@@ -550,6 +578,9 @@ def _enter_route_locked(character_id: str, route_id: str,
     denial = _check_prerequisites(route_fm, actor_folder, actor_fm)
     if denial:
         return {"moved": False, "reason": denial}
+
+    if _colisao_de_pasta(route_folder / actor_folder.name):
+        return {"moved": False, "reason": "o caminho não se abriu agora."}
 
     passenger_folder = None
     if passenger_id is not None:
@@ -635,6 +666,8 @@ def _resolve_arrivals() -> None:
             dest_folder = _location_folder_by_id(transit.get("destination"))
             if dest_folder is None:
                 continue  # destino sumiu do mundo: deixa em trânsito (defensivo)
+            if _colisao_de_pasta(dest_folder / child.name):
+                continue  # espera na rota, com o `transit` INTACTO (ver helper)
             plano = [r for r in (transit.get("plano") or []) if isinstance(r, str)]
             destino_final = transit.get("destino_final")
             chegou_ao_fim = not plano
@@ -682,7 +715,16 @@ def _resolve_arrivals() -> None:
                                               outro_lugar_id=transit.get("origin"))
                     _leave_trace(dest_folder, cid, transit.get("route"),
                                    "chegada")
-            io.move_entity(child, dest_folder / child.name)  # rename atômico ao destino
+            try:
+                io.move_entity(child, dest_folder / child.name)  # rename atômico
+            except FileExistsError:
+                # corrida (a checagem acima já cobre o caso normal): devolve o
+                # `transit` para que a chegada seja TENTADA DE NOVO. Sem isto o
+                # personagem some da varredura e fica órfão dentro da rota.
+                fm_volta, body_volta = read_doc(char_file)
+                fm_volta["transit"] = dict(transit)
+                write_doc(char_file, fm_volta, body_volta)
+                _colisao_de_pasta(dest_folder / child.name)
 
     # de passagem por um lugar: a pasta já está na location, e o `transit` não
     # tem `route`. Cumprido o tempo de travessia, parte na próxima perna.

@@ -1140,13 +1140,29 @@ def main() -> None:
     print(f"(Árbitro: {arb['runtime']} · modelo {arb['model']} · "
           f"tools {arb.get('tool_calling', 'auto')})", flush=True)
 
-    problems = motor.validate_world()
+    # ID DUPLICADO vem PRIMEIRO e SEPARADO. Já vinha misturado ao relatório de
+    # schema, sob o rótulo "(ignorados no jogo)" — que é falso: duplicata não é
+    # ignorada, é JOGADA. Em 2026-08-20 eram 1002 linhas rolando na subida, o que
+    # garante que ninguém leia. Agora conta por ID (12, não 1002) e diz o que fazer.
+    dups = motor.duplicate_ids()
+    if dups:
+        print(f"\n⛔ {len(dups)} id(s) DUPLICADO(S) no mundo — o mesmo id em duas "
+              "pastas. Isto NÃO é ignorado: é jogado, e o Motor recusa carregar "
+              "personagem assim.", flush=True)
+        for d in dups[:10]:
+            print(f"   - {d['id']}: {', '.join(d['paths'])}", flush=True)
+        if len(dups) > 10:
+            print(f"   … e mais {len(dups) - 10}.", flush=True)
+        print("   → python3 loreforge-server/sanea_duplicatas.py\n", flush=True)
+
+    problems = [p for p in motor.validate_world()
+                if not any(e.startswith("id duplicado") for e in p["errors"])]
     if problems:
         print(f"⚠ {len(problems)} arquivo(s) do mundo com schema inválido "
               "(ignorados no jogo):", flush=True)
         for p in problems:
             print(f"   - {p['path']}: {'; '.join(p['errors'])}", flush=True)
-    else:
+    elif not dups:
         print("(mundo validado: todos os arquivos ok)", flush=True)
     warns = motor.world_warnings()
     for w in warns:

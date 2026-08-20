@@ -512,6 +512,30 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
                     "valence": {item_id: memoria.NEGATIVA}, "event": "eat_refused"}})
             continue
         saciedade = int(op.get("saciedade") or 0)
+        # GUARDA DE COERÊNCIA (decisão do mantenedor, 2026-08-20): as quatro notas
+        # não são independentes. `comestibilidade > 0` com `saciedade 0` é uma
+        # combinação sem sentido — a própria régua define 0 como "zero valor
+        # nutricional, a ação não alimenta em nada". Aceitá-la fechava um laço:
+        # `saciedade 0` faz o executor gravar `hunger: "com fome"` (comer REAFIRMA
+        # a fome) e `consumo > 0` preserva o item, então o mesmo alvo continua ali,
+        # apetecível para sempre. A Elga comeu a MESMA moeda de prata 17 vezes em
+        # 12h assim (juízo real: comestibilidade 3, saciedade 0, consumo 9).
+        #
+        # Recusar aqui, e não por uma regra sobre `currency`, é o que generaliza:
+        # vale para a moeda, a pedra e o cabo de faca sem lista de tipos. O custo
+        # é que a recusa gasta uma chamada de juízo — aceito de propósito, em
+        # troca de uma regra só. A memória é obrigatória: sem ela A Mente re-tenta
+        # em laço sem saber que já tentou (mesmo motivo de `nao_comestivel`).
+        if saciedade <= 0:
+            rejected.append({
+                **base, "regra": "nao_alimenta", "valores": {"item": item_id},
+                "why": io._WHY_BY_REGRA["nao_alimenta"],
+                "memory": {
+                    "content": (f"Pensei em comer {io.name_of(item_id)}, mas vi que "
+                                "não ia resolver minha fome e desisti."),
+                    "intensity": "small", "involved": [item_id],
+                    "valence": {item_id: memoria.NEGATIVA}, "event": "eat_refused"}})
+            continue
         toxicidade = int(op.get("toxicidade") or 0)
         consumo = int(op.get("consumo") or 0)
         nova_descricao = (op.get("nova_descricao") or "").strip()

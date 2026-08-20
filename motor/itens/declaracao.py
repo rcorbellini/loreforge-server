@@ -205,7 +205,11 @@ def _iw_eat(op):
         return f"comeu {item} e ficou saciado"
     if saciedade >= 3:
         return f"comeu {item} e tirou a pior da fome"
-    return f"comeu {item}, e a fome continuou exatamente onde estava"
+    # 1-2 é o belisco: alimenta pouquíssimo, mas alimenta. `saciedade 0` NÃO chega
+    # aqui — é recusado antes (`nao_alimenta`), e quem fala nesse caso é a recusa,
+    # não esta frase: dizer "comeu" de uma ação negada seria mentir com o item
+    # ainda na mão.
+    return f"comeu {item}, mal deu para sentir"
 
 
 @inworld("steal_ops_applied")

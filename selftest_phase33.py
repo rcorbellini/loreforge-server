@@ -109,16 +109,33 @@ check("1ª chamada de dormir NÃO muda a fadiga (é o iniciar)",
 check("1ª chamada de dormir grava status.descansando_desde",
       _descansando_desde(TOR) is not None)
 
-# 2) segunda chamada, pouco tempo depois: recupera só uma FRAÇÃO pequena
+# 2) SONO PROFUNDO NÃO SE INTERROMPE (2026-08-20). Antes, uma soneca de 60s
+# acordava e recuperava ~nada — e como a face só oferece `wake_up` a quem dorme,
+# isso fazia um laço obrigatório: deitar, levantar no tick seguinte, repetir (a
+# Elga, 61 vezes em 12h). Agora o Motor recusa, e o timestamp SOBREVIVE — é o
+# que faz o personagem continuar dormindo em vez de ficar órfão acordado.
 _backdate_descansando_desde(TOR, 60)  # 60s reais "decorridos"
+out_soneca = motor.apply_resolution(TOR, {"rest_ops": [{"op": "wake_up"}]})
+check("soneca de 60s é RECUSADA com 'sono_profundo'",
+      any(r.get("regra") == "sono_profundo" for r in out_soneca.get("rejected") or []),
+      str(out_soneca.get("rejected")))
+check("recusa NÃO mexe na fadiga", fadiga_de(TOR)[0] == fadiga_antes_iniciar,
+      f"obtido={fadiga_de(TOR)[0]} esperado={fadiga_antes_iniciar}")
+check("recusa PRESERVA descansando_desde (continua dormindo)",
+      _descansando_desde(TOR) is not None)
+
+# 2b) US1 continua valendo: passado o piso de qualidade, a recuperação é
+# PROPORCIONAL ao tempo real — que é o que esta seção sempre provou.
+_backdate_descansando_desde(TOR, 5 * 3600)  # 5h: acima do piso, abaixo do teto
 motor.apply_resolution(TOR, {"rest_ops": [{"op": "wake_up"}]})
-fadiga_apos_soneca, _ = fadiga_de(TOR)
-fracao_esperada = motor.fisica.rest_fraction(60)
-recuperada_esperada = round(fracao_esperada * teto_tor)
-check("2ª chamada (soneca curta) recupera só uma fração pequena",
-      fadiga_apos_soneca == max(0, fadiga_antes_iniciar - recuperada_esperada),
-      f"obtido={fadiga_apos_soneca} esperado={max(0, fadiga_antes_iniciar - recuperada_esperada)}")
-check("soneca curta apaga descansando_desde (acordou)",
+fadiga_apos_meia_noite, _ = fadiga_de(TOR)
+recuperada_esperada = round(motor.fisica.rest_fraction(5 * 3600) * teto_tor)
+check("passado o piso, recupera PROPORCIONAL ao tempo real (não tudo)",
+      fadiga_apos_meia_noite == max(0, fadiga_antes_iniciar - recuperada_esperada)
+      and 0 < recuperada_esperada < teto_tor,
+      f"obtido={fadiga_apos_meia_noite} esperado="
+      f"{max(0, fadiga_antes_iniciar - recuperada_esperada)}")
+check("acordar de verdade apaga descansando_desde",
       _descansando_desde(TOR) is None)
 
 # 3) terceiro ciclo: descanso completo (>= 8h) recupera fadiga por completo

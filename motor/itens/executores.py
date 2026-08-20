@@ -571,7 +571,7 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
                    {item_id: memoria.POSITIVA} if extremo_bom else None)
         intensity = "medium" if (adoeceu or extremo_bom) else "small"
         content = (f"Comi {nome_item} e fiquei doente." if adoeceu else
-                   f"Comi {nome_item} e fiquei bem satisfeito." if extremo_bom else
+                   f"Comi {nome_item}: matou a fome." if extremo_bom else
                    f"Comi {nome_item}.")
         applied.append({
             "item": item_id, "adoeceu": adoeceu, "saciedade": saciedade,

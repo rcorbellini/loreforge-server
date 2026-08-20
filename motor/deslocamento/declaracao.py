@@ -165,7 +165,7 @@ def _persuade(name: str, args: dict, ctx) -> tuple[dict, bool]:
 def _travel_to(name: str, args: dict, ctx) -> tuple[dict, bool]:
     destino = args.get("destino")
     if destino not in ctx.cand["viajar_para"]:
-        return ctx.err(f"'{destino}' não é lugar a que ele saiba chegar", "destino",
+        return ctx.err(f"'{destino}' não é lugar a que você saiba chegar", "destino",
                        [{"id": d, "nome": d} for d in ctx.cand["viajar_para"]]), False
     if destino in ctx.viajado:
         return ctx.err(f"a viagem para '{destino}' já foi decidida neste turno — o "

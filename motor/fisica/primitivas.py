@@ -709,6 +709,54 @@ def rest_fraction(decorrido_s: float) -> float:
     return min(1.0, decorrido_s / _TETO_SONO_PLENO_S)
 
 
+# Piso de "sono de qualidade" (spec 031): a fração a partir da qual o descanso
+# CONTA — pesa em compromisso alheio e, desde 2026-08-20, autoriza acordar. Mora
+# aqui, junto de `rest_fraction`, porque virou regra de DOIS consumidores (o
+# executor de `wake_up` e o rótulo que desce à Mente) e um limiar em dois lugares
+# é um limiar que diverge.
+_LIMIAR_SONO_QUALIDADE = 0.5
+
+
+def sleep_state(char_fm: dict) -> dict:
+    """O estado do sono AGORA — a única fonte sobre dormir, para todo mundo.
+
+    Existe porque três consumidores precisam da MESMA resposta e discordar entre
+    eles é o bug: o executor de `wake_up` (pode acordar?), o contexto que desce à
+    Mente (que rótulo ela lê) e o conector (chama o modelo ou não?). Com a regra
+    escrita três vezes, um deles diria "sono leve" enquanto outro recusaria
+    acordar.
+
+    "Dorme até se recuperar OU ser acordado" (decisão do mantenedor, 2026-08-20).
+    Então PODE acordar quando o sono já rendeu tudo o que havia para render — a
+    fadiga zerou — ou quando cruzou o piso de qualidade. Sem a primeira condição,
+    quem deitasse quase descansado ficaria preso 4h por causa de 10 de fadiga.
+
+    Devolve rótulo em PROSA e booleanos de estado; NUNCA a fração, o tempo ou a
+    fadiga (Princípios V/IX) — o número morre aqui dentro.
+    """
+    if not is_resting(char_fm):
+        return {"dormindo": False, "pode_acordar": True, "rotulo": None}
+    inicio = (char_fm.get("status") or {}).get("descansando_desde") or 0
+    fracao = rest_fraction(time.time() - inicio)
+    fadiga, teto = ensure_fatigue(char_fm)
+    ja_rendeu_tudo = round(fracao * teto) >= fadiga
+    pode = ja_rendeu_tudo or fracao >= _LIMIAR_SONO_QUALIDADE
+    if ja_rendeu_tudo:
+        rotulo = "o sono já rendeu tudo o que tinha a render"
+    elif fracao >= 0.85:
+        rotulo = "o sono está quase no fim, o corpo já quer levantar"
+    elif pode:
+        rotulo = "o sono está leve"
+    else:
+        rotulo = "sono profundo, longe de acordar"
+    return {"dormindo": True, "pode_acordar": pode, "rotulo": rotulo}
+
+
+def sono_label(char_fm: dict) -> str | None:
+    """O rótulo do sono para a Mente — `None` para quem está acordado."""
+    return sleep_state(char_fm)["rotulo"]
+
+
 # Categoria de esforço de uma ação, "T-shirt size" — cada tool escolhe a
 # PRÓPRIA categoria no PRÓPRIO call site (spec 030, FR-002). A tradução
 # categoria→fração é a ÚNICA coisa centralizada aqui; QUAL tool custa

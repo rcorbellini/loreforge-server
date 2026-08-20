@@ -25,6 +25,8 @@ from ..fisica import (
     hunger_label,
     thirst_label,
     fatigue_label,
+    sono_label,
+    sleep_state,
     _inside_closed,
     _direct_items,
     _is_wide_open,
@@ -514,7 +516,20 @@ def get_context(character_id: str) -> dict:
                 "fome": hunger_label(self_fm),
                 "sede": thirst_label(self_fm),
                 "cansaco": fatigue_label(self_fm),
+                # `None` para quem está acordado. Prosa, nunca a fração nem o
+                # tempo (Princípios V/IX) — o mesmo contrato de `consultar_momento`,
+                # que devolve "fim de tarde" e jamais a hora.
+                "sono": sono_label(self_fm),
             },
+            # DERIVADO e BOOLEANO, no mesmo molde de `ocupado` logo abaixo: é o
+            # sinal que o CONECTOR lê para não acionar A Mente em sono profundo
+            # (dormir não é decidir a cada minuto se já deu). Separado do rótulo
+            # de propósito: o rótulo é prosa para o personagem ler, isto é estado
+            # para a máquina decidir — casar decisão com substring de prosa seria
+            # frágil. Os dois saem da MESMA `fisica.sleep_state`, então não podem
+            # divergir.
+            "sono_profundo": (sleep_state(self_fm)["dormindo"]
+                              and not sleep_state(self_fm)["pode_acordar"]),
             "body": self_body,
             # spec 052 — OCUPADO, DERIVADO. Substitui a leitura de
             # `status.cozinhando`, que era um campo no personagem: o fato passou a

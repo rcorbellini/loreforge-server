@@ -331,6 +331,11 @@ _REGRAS_COM_SUJEITO = {
     "nao_cedeu", "nada_a_ceder", "nao_confiou", "recusou_informar",
     "alvo_resistiu", "necessidade_insuficiente",
     "parceiro_incapaz", "personagem_inacessivel",
+    # Entraram em 2026-08-20: falam do ALVO e o pronome vazava gênero errado
+    # ("disso ela nada sabe" sobre o Torvin). Foram reordenadas para começar
+    # pelo pronome, que é o que esta troca exige — o nome entra no lugar dele.
+    "nada_a_contar", "informante_nao_sabe", "alvo_nao_caido",
+    "destino_e_o_dono",
 }
 
 

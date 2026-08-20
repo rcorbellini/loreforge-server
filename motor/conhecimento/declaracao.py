@@ -211,7 +211,7 @@ def _iw_unanswered(op):
 def _recognize(name: str, args: dict, ctx) -> tuple[dict, bool]:
     alvo = args.get("alvo")
     if alvo not in ctx.cand["examinar"]:
-        return ctx.err(f"'{alvo}' não é algo que ele perceba agora", "alvo",
+        return ctx.err(f"'{alvo}' não é algo que você perceba agora", "alvo",
                        [{"id": a, "nome": a} for a in ctx.cand["examinar"]]), False
     try:
         pacote = motor.recognition_of(ctx.actor, alvo)
@@ -228,7 +228,7 @@ def _recognize(name: str, args: dict, ctx) -> tuple[dict, bool]:
 def _examine(name: str, args: dict, ctx) -> tuple[dict, bool]:
     alvo = args.get("alvo")
     if alvo not in ctx.cand["examinar"]:
-        return ctx.err(f"'{alvo}' não é algo que ele perceba agora", "alvo",
+        return ctx.err(f"'{alvo}' não é algo que você perceba agora", "alvo",
                        [{"id": a, "nome": a} for a in ctx.cand["examinar"]]), False
     texto = motor.prose_of(ctx.actor, alvo)
     if not texto:
@@ -243,7 +243,7 @@ def _ask_directions(name: str, args: dict, ctx) -> tuple[dict, bool]:
     quem = args.get("quem")
     disposicao = None   # spec 043: pedida ao mundo abaixo, depois de validar `quem`
     if quem not in ctx.cand["perguntar_a"]:
-        return ctx.err(f"'{quem}' não é alguém a quem ele possa perguntar agora",
+        return ctx.err(f"'{quem}' não é alguém a quem você possa perguntar agora",
                        "quem", [{"id": c, "nome": ctx.chars.get(c, c)}
                                 for c in ctx.cand["perguntar_a"]]), False
     if quem in ctx.perguntados:
@@ -273,7 +273,7 @@ def _ask_directions(name: str, args: dict, ctx) -> tuple[dict, bool]:
     # gritando mais alto que uma de sucesso.
     if resposta["caminhos"] and all(motor.knows_route(ctx.actor, c["rota"])
                                     for c in resposta["caminhos"]):
-        return ctx.err("ele se dá conta de que já sabe todos os caminhos que esse "
+        return ctx.err("você se dá conta de que já sabe todos os caminhos que esse "
                        "aí teria a ensinar — e não chega a perguntar"), False
 
     lembra = motor.remembered_about(quem, ctx.actor)
@@ -316,7 +316,7 @@ def _ask_about(name: str, args: dict, ctx) -> tuple[dict, bool]:
     sobre = (args.get("sobre") or "").strip()
     disposicao = None   # spec 043: pedida ao mundo abaixo, depois de validar `quem`
     if quem not in ctx.cand["perguntar_a"]:
-        return ctx.err(f"'{quem}' não é alguém a quem ele possa perguntar agora",
+        return ctx.err(f"'{quem}' não é alguém a quem você possa perguntar agora",
                        "quem", [{"id": c, "nome": ctx.chars.get(c, c)}
                                 for c in ctx.cand["perguntar_a"]]), False
     if not sobre:

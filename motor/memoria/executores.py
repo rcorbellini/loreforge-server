@@ -126,7 +126,9 @@ _PUBLICO = "publico"   # ruído de ato ostensivo: visto por todos os presentes
 _APEGO_VITIMA_FORTE = 4.0
 
 
-_LIMIAR_SONO_QUALIDADE = 0.5
+# o limiar mora em `fisica.primitivas`, junto de `rest_fraction` e
+# `sleep_state` — dois consumidores, uma fonte só.
+_LIMIAR_SONO_QUALIDADE = fisica._LIMIAR_SONO_QUALIDADE
 
 
 _INTENSITY_ORDER = {"giant": 0, "large": 1, "medium": 2, "small": 3}
@@ -330,6 +332,24 @@ def _apply_rest_ops(character_id: str, actor_folder: Path,
         rejected.append({"acao": "wake_up", "regra": "nao_esta_dormindo",
                          "valores": {"personagem": character_id}})
         return applied, rejected, created
+    # SONO PROFUNDO NÃO SE INTERROMPE POR VONTADE (decisão do mantenedor,
+    # 2026-08-20): "na vida real você não fica decidindo se já tá na hora de
+    # acordar; você dorme até se recuperar ou ser acordado".
+    #
+    # Sem esta recusa o laço era ESTRUTURAL, não erro de modelo: a face oferece a
+    # quem dorme UMA única capacidade (`wake_up`, `face.py` — "quem dorme não
+    # pergunta"), e ela nunca falhava. Um personagem que deitava tinha
+    # obrigatoriamente de levantar no tick seguinte, ~68s depois, recuperando
+    # ZERO — a Elga fez isso 61 vezes em 12h (2026-08-20), 1,05M tokens.
+    #
+    # A guarda fica AQUI mesmo com o conector deixando de chamar A Mente em sono
+    # profundo: gate de client é UX, autoridade é do Motor, e uma chamada direta
+    # (ou uma face de um turno atrás) chega aqui. Mesmo argumento que o item 50
+    # usou para matar o alternador.
+    if pedido == "wake_up" and not fisica.sleep_state(fm)["pode_acordar"]:
+        rejected.append({"acao": "wake_up", "regra": "sono_profundo",
+                         "valores": {"personagem": character_id}})
+        return applied, rejected, created
     if pedido == "sleep":
         fisica.start_rest(actor_folder, time.time())  # spec 038: estado vira primitiva
         applied.append({"iniciou_descanso": True})
@@ -361,8 +381,8 @@ def _apply_rest_ops(character_id: str, actor_folder: Path,
     # decide se o compromisso pesa mais). Acordar inteiro e acordar moído são coisas
     # diferentes, e quem lembra é quem dormiu.
     _rec(created, character_id,
-         "Acordei inteiro." if fracao >= _LIMIAR_SONO_QUALIDADE
-         else "Acordei ainda moído.", "mutate", [character_id])
+         "Acordei com o corpo descansado." if fracao >= _LIMIAR_SONO_QUALIDADE
+         else "Acordei sem ter descansado.", "mutate", [character_id])
     return applied, rejected, created
 
 

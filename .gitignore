@@ -2,3 +2,6 @@ server.out
 __pycache__/
 *.pyc
 devlog.log
+
+# log do servidor em execução — arquivo vivo, nunca deve entrar no versionamento
+app.out

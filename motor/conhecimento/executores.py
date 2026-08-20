@@ -15,7 +15,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import fisica, io, memoria, registro, rolagem, rotas
+from .. import fisica, io, memoria, registro, rolagem, rotas, trabalho
 from ..fisica import (
     DOWN_CONDITIONS,
 )
@@ -104,7 +104,7 @@ def _apply_learn_ops(character_id: str, actor_folder: Path, resolution: dict,
     except MotorError:
         return applied, rejected, []
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected, []
     # o portão de disposição é resolvido UMA VEZ POR INFORMANTE POR TURNO, nunca
@@ -240,7 +240,7 @@ def _apply_hearsay_ops(character_id: str, actor_folder: Path, resolution: dict,
     except MotorError:
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     portoes: dict[str, bool] = {}

@@ -78,9 +78,20 @@ def _mk_object(location_folder: Path, object_id: str, name: str, descricao: str)
     return d
 
 
+def panela_de(cid: str):
+    """A PANELA NO FOGO do personagem (spec 052): a peça em processo com relógio de
+    PRAZO ligada a ele. Substitui a leitura de `status.cozinhando`, que era um campo
+    no personagem — o fato passou a morar numa entidade real da cena."""
+    achado = motor.trabalho.peca_pendente_de(motor.find_character_folder(cid),
+                                             apenas_prazo=True)
+    return achado[0] if achado else None
+
+
 def cooking_de(cid: str):
-    fm, _ = motor.read_doc(motor.find_character_folder(cid) / "character.md")
-    return (fm.get("status") or {}).get("cozinhando")
+    """O bloco de trabalho da panela, ou None. Mesmo papel que a leitura antiga de
+    `status.cozinhando` cumpria — só a fonte mudou."""
+    pasta = panela_de(cid)
+    return motor.trabalho.ler(pasta) if pasta else None
 
 
 def conditions_de(cid: str) -> list:
@@ -105,15 +116,9 @@ def cook_op(ingredientes, fonte_calor, fonte_de_calor=7, cozinhabilidade=7,
 def _forcar_pronto(cid: str):
     """Backdate `pronto_ts` pro passado — mesmo truque que outros testes de
     resolução preguiçosa já usam (`_backdate_descansando_desde`), sem dormir
-    de verdade."""
-    folder = motor.find_character_folder(cid)
-    fm, body = motor.read_doc(folder / "character.md")
-    status = dict(fm.get("status") or {})
-    cozinhando = dict(status.get("cozinhando") or {})
-    cozinhando["pronto_ts"] = time.time() - 1
-    status["cozinhando"] = cozinhando
-    fm["status"] = status
-    motor.write_doc(folder / "character.md", fm, body)
+    de verdade. Spec 052: o relógio mora na PANELA, não no personagem."""
+    pasta = panela_de(cid)
+    motor.trabalho.atualizar(pasta, pronto_ts=time.time() - 1)
 
 
 def _planta_memoria_cozinha(cid: str, intensity: str = "giant"):
@@ -150,28 +155,34 @@ motor._roll_d20 = force
 check("US1: ingredientes REMOVIDOS imediatamente (consumo no ATO, não na materialização)",
       not (coz_folder / "peixe-p50").exists() and not (coz_folder / "batata-p50").exists())
 pendente = cooking_de(COZ)
-check("US1: status.cozinhando gravado com pronto_ts FUTURO",
+check("US1: panela no fogo gravada com pronto_ts FUTURO (spec 052)",
       isinstance(pendente, dict) and pendente.get("pronto_ts", 0) > time.time(),
       str(pendente))
-check("US1: NENHUM item novo existe ainda (materialização é preguiçosa)",
-      not any((taverna_folder / p.get("id", "")).exists()
-             for p in [pendente.get("prato") or {}]))
+# MUDANÇA DELIBERADA da spec 052 (FR-046/SC-013): antes NADA existia no mundo até o
+# prato ficar pronto. Agora existe uma PANELA NO FOGO — visível na cena, que
+# qualquer um pode pegar ou roubar —, mas ela ainda NÃO é o prato.
+panela_folder = panela_de(COZ)
+check("US1: a panela no fogo EXISTE na cena (spec 052) e ainda não é o prato",
+      panela_folder is not None and (panela_folder / "item.md").exists()
+      and motor.trabalho.ler(panela_folder) is not None)
 mem_otima_ato = memorias_evento(COZ, "cook_otimo")
 check("US1: memória 'medium' positiva já gravada NO ATO (domain='cozinha')",
       len(mem_otima_ato) == 1 and mem_otima_ato[0].get("intensity") == "medium"
       and mem_otima_ato[0].get("domain") == "cozinha", str(mem_otima_ato))
 
-prato_id = (pendente.get("prato") or {}).get("id")
+prato_id = panela_folder.name
 _forcar_pronto(COZ)
 motor.get_context(COZ)  # dispara a resolução preguiçosa (lazy_evaluate)
-check("US1: após o tempo se cumprir, o prato passa a EXISTIR no lugar onde o ato começou",
-      (taverna_folder / prato_id / "item.md").exists())
+check("US1: após o tempo se cumprir, a PANELA vira o prato, onde ela estiver",
+      (taverna_folder / prato_id / "item.md").exists()
+      and motor.trabalho.ler(taverna_folder / prato_id) is None)
 prato_fm, prato_body = motor.read_doc(taverna_folder / prato_id / "item.md")
 check("US1: peso do prato = soma determinística dos ingredientes consumidos (0.4+0.2=0.6)",
       abs(float(prato_fm.get("weight_kg") or 0) - 0.6) < 1e-6, str(prato_fm.get("weight_kg")))
 check("US1: a description do prato é a candidata 'ótima' (banda que saiu)",
       prato_body.strip() == "peixe assado com batata, no ponto", prato_body)
-check("US1: status.cozinhando foi removido após materializar", cooking_de(COZ) is None)
+check("US1: a panela deixou de ser peça em processo após materializar",
+      cooking_de(COZ) is None)
 
 # ingredientes em TRÊS lugares diferentes (mão/chão implícitos + dentro de um
 # contêiner aberto) — mesmo filtro de `eat`, sem física nova (FR-001)
@@ -250,7 +261,7 @@ check("US2: fonte de calor 0 -> recusa 'sem_calor'",
       str(out_sem_calor.get("rejected")))
 check("US2: fonte de calor 0 -> ingrediente NÃO consumido",
       (rec_folder / "peixe2-p50").exists())
-check("US2: fonte de calor 0 -> status.cozinhando NUNCA criado", cooking_de(REC) is None)
+check("US2: fonte de calor 0 -> panela NUNCA criada", cooking_de(REC) is None)
 mem_sem_calor = memorias_evento(REC, "cook_refused_fonte")
 check("US2: recusa por fonte de calor GERA memória small/negativa",
       len(mem_sem_calor) == 1 and mem_sem_calor[0].get("intensity") == "small",
@@ -281,7 +292,7 @@ motor._roll_d20 = lambda: 20
 motor.apply_resolution(REC, {"cozinha_ops": [
     cook_op(["peixe2-p50"], "fogao2-p50", favorabilidade=5)]})
 motor._roll_d20 = force
-check("US2: prato pendente criado — status.cozinhando agora existe",
+check("US2: prato pendente criado — a panela no fogo agora existe",
       cooking_de(REC) is not None)
 _mk_item(rec_folder, "batata2-p50", "Batata", "Outra batata.")
 out_ja_cozinhando = motor.apply_resolution(REC, {"cozinha_ops": [
@@ -309,7 +320,7 @@ motor.apply_resolution(AZAR50, {"cozinha_ops": [
            descricao_media="peixe comum", descricao_otima="peixe perfeito")]})
 motor._roll_d20 = force
 pendente_ruim = cooking_de(AZAR50)
-check("US3: banda RUIM ainda cria status.cozinhando — NUNCA falha total",
+check("US3: banda RUIM ainda cria a panela — NUNCA falha total",
       pendente_ruim is not None, str(pendente_ruim))
 check("US3: a description candidata escolhida é a de banda RUIM, não uma genérica",
       (pendente_ruim.get("prato") or {}).get("description")
@@ -322,7 +333,7 @@ check("US3: banda RUIM grava memória small/negativa (domain='cozinha')",
 check("US3: NENHUMA condição aplicada ao personagem por `cook` (a punição é de `eat`, depois)",
       conditions_de(AZAR50) == [])
 
-prato_ruim_id = (pendente_ruim.get("prato") or {}).get("id")
+prato_ruim_id = panela_de(AZAR50).name
 _forcar_pronto(AZAR50)
 motor.get_context(AZAR50)
 prato_ruim_fm, prato_ruim_body = motor.read_doc(azar_folder.parent / prato_ruim_id / "item.md")

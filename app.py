@@ -437,6 +437,45 @@ def inworld_failures(rejected: list) -> list[str]:
         # deslocamento negado não entra: _apply_movement já devolve o hint honesto
     return out
 
+# spec 052 — o vocabulário in-world das rolagens de BANDA. Uma entrada por tipo;
+# acrescentar uma quinta é acrescentar uma linha, não um ramo. As frases dizem o que
+# aconteceu sem dizer NENHUM número: nem dado, nem nota, nem banda, nem DC (Princípio
+# V — os números seguem na `rolagem` e morrem na Mente).
+_BANDA_BOA = {
+    "cozinha": {"otima"},
+    "cura": {"alta"},
+    "acougue": {"farto"},
+    "forja": {"incomum", "raro", "lendario"},
+}
+
+_FRASES_DE_BANDA = {
+    "cozinha": {
+        "critico_bom": "o ponto saiu como raramente sai",
+        "critico_ruim": "o fogo virou contra o preparo na hora errada",
+        "virada_boa": "não havia por que aquilo ficar bom — e ficou",
+        "virada_ruim": "estava tudo a favor, e ainda assim o preparo se perdeu",
+    },
+    "cura": {
+        "critico_bom": "as mãos souberam exatamente o que fazer",
+        "critico_ruim": "as mãos falharam justo em quem mais precisava",
+        "virada_boa": "não parecia haver mais o que fazer — e ainda assim melhorou",
+        "virada_ruim": "era socorro simples, e o corpo não respondeu",
+    },
+    "acougue": {
+        "critico_bom": "a lâmina achou cada junta na primeira tentativa",
+        "critico_ruim": "a lâmina se perdeu no corpo e estragou o que havia",
+        "virada_boa": "aquele corpo não prometia nada — e rendeu",
+        "virada_ruim": "prometia fartura, e sobrou quase nada",
+    },
+    "forja": {
+        "critico_bom": "o metal respondeu como raramente responde",
+        "critico_ruim": "o metal traiu a peça no pior momento",
+        "virada_boa": "não havia por que aquilo virar coisa boa — e virou",
+        "virada_ruim": "tudo estava a favor, e a peça saiu torta",
+    },
+}
+
+
 def fate_twists(rolls: list) -> list[dict]:
     """Desfechos marcantes das rolagens (specs 006/007): virada (resultado
     invertido do natural/da tendência) e, na persuasão, também os críticos
@@ -554,6 +593,36 @@ def fate_twists(rolls: list) -> list[dict]:
                         "alvo": r.get("alvo"), "item": r.get("item"),
                         "resultado": r.get("resultado"),
                         "critico": r.get("critico"), "rolagem": r.get("rolagem")})
+            continue
+        # spec 052 — AS ROLAGENS DE BANDA. Cozinhar (048), curar (032), esquartejar
+        # (050) e forjar (052) calculam `virada`/`critico` desde que nasceram, e até
+        # aqui NENHUMA delas conseguia narrá-los: não havia ramo, o laço final exige
+        # `virada` (então o crítico natural das três antigas era descartado em
+        # silêncio), e a virada caía no ramo genérico de FORÇA lá embaixo, saindo
+        # como uma frase sobre um item que "devia ceder a esses braços" — com o id
+        # vazio, porque nenhuma delas tem esse formato. Era violação do Princípio X
+        # (aplicar sem relatar) em produção. O guard aqui aceita `virada OR critico`,
+        # como combate e furto já faziam.
+        if r.get("tipo") in _BANDA_BOA:
+            if not (r.get("virada") or r.get("critico")):
+                continue
+            frases = _FRASES_DE_BANDA[r["tipo"]]
+            bom = r.get("resultado") in _BANDA_BOA[r["tipo"]]
+            d20 = (r.get("rolagem") or {}).get("d20")
+            critico = r.get("critico")
+            # `critico` nasce booleano nas três antigas e nomeado em `forja` —
+            # normaliza pelo dado, que é o fato de onde os dois saem.
+            if critico == "sucesso" or (critico and d20 == 20):
+                frase = frases["critico_bom"]
+            elif critico == "falha" or (critico and d20 == 1):
+                frase = frases["critico_ruim"]
+            else:
+                frase = frases["virada_boa"] if bom else frases["virada_ruim"]
+            out.append({"o_que": frase, "personagem": r.get("personagem"),
+                        "alvo": r.get("alvo"), "item": r.get("item"),
+                        "resultado": r.get("resultado"),
+                        "critico": r.get("critico"),
+                        "rolagem": r.get("rolagem")})
             continue
         if not r.get("virada"):
             continue

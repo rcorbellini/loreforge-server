@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import fisica, io, rolagem
+from .. import fisica, io, rolagem, trabalho
 from ..io import read_doc, write_doc
 from ..rotas import _location_folder_by_id
 
@@ -86,34 +86,35 @@ def lazy_evaluate() -> None:
 
 
 def _resolve_pratos() -> None:
-    """Prato pendente cujo tempo se cumpriu materializa: `io.create_entity` no
-    LUGAR onde o ato começou (mesmo se o ator já não estiver mais lá — FR-015),
-    `status.cozinhando` é removido, e `status.action` é ajustado para que a
-    narração do momento seguinte relate o efeito (Princípio X) — MESMO
-    mecanismo que `_resolve_arrivals` já usa para "acabou de chegar", nenhum
-    canal de relato novo precisou ser inventado."""
-    now = time.time()
-    for char_file in list(io.WORLD_DIR.rglob("character.md")):
-        fm, body = read_doc(char_file)
-        cozinhando = (fm.get("status") or {}).get("cozinhando")
-        if not isinstance(cozinhando, dict):
-            continue
-        if now < (cozinhando.get("pronto_ts") or 0):
-            continue
-        char_folder = char_file.parent
-        local_folder = (_location_folder_by_id(cozinhando.get("local"))
-                        or char_folder.parent)
-        prato = cozinhando.get("prato") or {}
-        entity_id = prato.get("id")
-        if entity_id and not (local_folder / entity_id).exists():
-            io.create_entity(local_folder, entity_id, "item.md", {
-                "type": "item", "id": entity_id,
-                "name": prato.get("nome") or "Prato",
-                "weight_kg": prato.get("peso_kg") or 0.3,
-                "origin": "emergente",
-            }, prato.get("description") or "Um prato preparado.")
-        status = dict(fm.get("status") or {})
-        status.pop("cozinhando", None)
-        status["action"] = "o prato que estava no fogo ficou pronto"
-        fm["status"] = status
-        write_doc(char_file, fm, body)
+    """A panela cujo tempo se cumpriu VIRA o prato (spec 048, migrada na 052).
+
+    A resolução é a mesma de sempre — o tempo "passa" quando o mundo é consultado,
+    sem processo de fundo (Princípio VII), no molde de `_resolve_arrivals`. O que
+    mudou é a FONTE: antes esta função varria `character.md` atrás de um campo
+    `status.cozinhando`; agora varre as PEÇAS EM PROCESSO com relógio de PRAZO. O
+    prato não é mais criado do nada num lugar guardado: **a própria panela vira o
+    prato, onde quer que ela esteja** — se alguém a tirou do fogo e levou embora, é
+    lá que a comida fica pronta.
+
+    Só PRAZO passa por aqui. Forjar conta ESFORÇO e conclui num ATO: decidir na
+    trilha de LEITURA do mundo é justamente o que a avaliação preguiçosa evita
+    fazer com decisões (spec 052, FR-049).
+    """
+    for pasta, bloco in trabalho.vencidas_por_prazo():
+        prato = bloco.get("prato") or {}
+        nome = prato.get("nome") or "Prato"
+        trabalho.encerrar(pasta, {"name": nome},
+                          prato.get("description") or "Um prato preparado.")
+        # Princípio X: o efeito precisa CHEGAR a quem viveu. `status.action` é o
+        # canal de sempre — a narração do momento seguinte relata o que aconteceu.
+        ator = bloco.get("ator")
+        try:
+            char_folder = io.find_character_folder(ator) if ator else None
+        except Exception:
+            char_folder = None
+        if char_folder is not None:
+            fm, body = read_doc(char_folder / "character.md")
+            status = dict(fm.get("status") or {})
+            status["action"] = "o prato que estava no fogo ficou pronto"
+            fm["status"] = status
+            write_doc(char_folder / "character.md", fm, body)

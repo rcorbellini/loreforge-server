@@ -319,6 +319,10 @@ def _item_entry(it: dict, porter: str | None, in_object: str | None = None) -> d
         "estado": it.get("estado"),
         "porter": porter,
         "in_object": in_object,
+        # spec 052: peça em processo (lâmina na bigorna, panela no fogo) — carrega o
+        # NOME da capacidade que a criou, para que a retomada seja oferecida só à
+        # tool certa. O conteúdo do bloco (banda, tetos, tempos) continua fora.
+        "em_trabalho": it.get("em_trabalho"),
     }
 
 
@@ -456,8 +460,38 @@ def _verb_candidates(idx: dict) -> dict:
         # de calor presente na cena (mesmo universo cru de `shove_to`/`open` —
         # spec 048). As réguas de FONTE_DE_CALOR/COZINHABILIDADE, não um filtro
         # aqui, decidem se o object fornece calor e se os itens combinam.
-        "cook_ingredientes": sorted(i for i, e in items.items() if not worn(e)),
-        "cook_fonte": sorted(idx["objects"]),
+        "cook_ingredientes": sorted(i for i, e in items.items()
+                                    if not worn(e) and not e.get("em_trabalho")),
+        # spec 052 (FR-043a): o LUGAR entra no universo de fontes de calor, ao lado
+        # dos objects — molde EXATO de `shove_to`, logo abaixo. A lareira de uma
+        # cozinha e as brasas de uma forja costumam estar escritas na prosa do
+        # AMBIENTE, não instanciadas como entidade; sem isto, a mesma prosa serviria
+        # para forjar e deixaria de servir para cozinhar. A régua não mudou: muda de
+        # onde a descrição vem, nunca como ela é julgada.
+        "cook_fonte": sorted(idx["objects"])
+                      + ([idx["place_id"]] if idx["place_id"] else []),
+        # spec 052 — forjar. `forge_materiais` reusa o filtro de `cook_ingredientes`
+        # (mão, chão, dentro de contêiner aberto), MENOS as peças em processo: metal
+        # batido não volta a ser barra. `forge_peca` é filtro ESTRUTURAL (o bloco de
+        # trabalho no arquivo), zero LLM — e NÃO filtra por qual tool criou a peça:
+        # a peça da outra oficina aparece e é recusada com motivo próprio, que
+        # ensina; escondê-la só produziria silêncio.
+        "forge_materiais": sorted(i for i, e in items.items()
+                                  if not worn(e) and not e.get("em_trabalho")),
+        "forge_fonte": sorted(idx["objects"])
+                       + ([idx["place_id"]] if idx["place_id"] else []),
+        # MEDIDO na sondagem real (spec 052, T074): com UM enum único de peças, o
+        # modelo escolheu `forge_armor` para terminar uma LÂMINA em 5 de 5
+        # tentativas. A aposta original era que a recusa estrutural ensinaria — e o
+        # dado desmentiu: o modelo não aprende dentro do turno, só gasta a chamada.
+        # Filtrando por capacidade, a peça da outra oficina simplesmente não aparece
+        # (e o parâmetro inteiro some, por `omit_if_empty`), então não há o que
+        # errar. A recusa `peca_de_outra_oficina` fica como defesa em profundidade,
+        # para quem chama pela bancada HTTP.
+        "forge_peca_arma": sorted(i for i, e in items.items()
+                                  if e.get("em_trabalho") == "forge_weapon"),
+        "forge_peca_armadura": sorted(i for i, e in items.items()
+                                      if e.get("em_trabalho") == "forge_armor"),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
@@ -615,11 +649,13 @@ def build_tools(context: dict) -> list[dict]:
     """
     self_status = (context.get("self") or {}).get("status") or {}
     dormindo = motor.fisica.is_resting({"status": self_status})
-    # spec 048: mesmo gate cosmético do descanso, generalizado — enquanto o
-    # prato está no fogo, NENHUMA tool de mutação aparece (diferente de
-    # `sleep`, `cook` não tem uma tool-contraparte tipo `wake_up` a manter
-    # visível: a materialização é preguiçosa, não uma segunda ação do ator).
-    cozinhando = motor.fisica.is_cooking({"status": self_status})
+    # spec 048/052: mesmo gate cosmético do descanso, generalizado — enquanto há
+    # trabalho em curso, NENHUMA tool de mutação aparece.
+    # spec 052: "ocupado" deixou de ser um campo do personagem. `get_context`
+    # DERIVA o booleano da peça em processo na cena (nunca persistido, mesmo
+    # espírito de `proficiencies_for`) — o gate lê o fato derivado, e `character.md`
+    # segue sem campo nenhum de trabalho.
+    cozinhando = bool((context.get("self") or {}).get("ocupado"))
     idx = _scene_index(context)
     cand = scene_candidates(idx)
     chars = sorted(idx["chars"])
@@ -859,6 +895,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
     drunk_asked: set = set()  # alvo (item ou object) já tentado via drink (spec 047)
     cooked_asked: set = set()  # (ingredientes, fonte_calor) já tentado via cook (spec 048)
+    forged_asked: set = set()  # (tipo, materiais, fonte) / (tipo, peca) já tentado (spec 052)
     butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
@@ -993,11 +1030,16 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         único). A virada, rolada ou não, sempre sobe a `acc["rolls"]` (fate_twists)."""
         queue[ch].append(op)
         out = motor.apply_resolution(actor, _sub(ch, [op]), ensure_action=False)
-        if out.get("rolls"):
-            acc["rolls"].extend(out["rolls"])
         rej_list = out.get("rejected") or []
         if rej_list:
             queue[ch].pop()
+            # A rolagem sobe AQUI porque o caminho de recusa sai sem `_merge`. No
+            # caminho de SUCESSO ela NÃO sobe aqui: `_merge` logo abaixo já estende
+            # `acc["rolls"]` (rolls está em `_ACC_CH`). Estender nos dois fazia a
+            # MESMA rolagem subir duas vezes, e `fate_twists` emitia a frase de
+            # virada/crítico DUPLICADA ao jogador — a mesma linha, duas vezes.
+            if out.get("rolls"):
+                acc["rolls"].extend(out["rolls"])
             rolled = any(r.get("rolagem") is not None for r in (out.get("rolls") or []))
             return rej_list[0], rolled
         _seen_len[ch] = len(queue[ch])
@@ -1076,7 +1118,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
-        butchered_asked=butchered_asked,
+        butchered_asked=butchered_asked, forged_asked=forged_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,
@@ -1122,29 +1164,31 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     # coisas diferentes (a do furto lê a descrição do item; a da disposição lê o que o
     # informante guarda de quem pergunta). Injetar em vez de importar é o que mantém
     # `motor/` sem conhecer `llm` — a mesma fronteira de `ctx.arb_deny`.
+    _descrito: dict = {}
+
     def _describe(ent_id):
-        """A PROSA de uma entidade da cena — nome, descrição, e o que ela faz agora.
+        """A PROSA de uma entidade, para as réguas — delega à primitiva do Motor.
 
         As réguas leem DESCRIÇÃO, não campo: a de furto pesa a vistosidade do item
-        pelo que o texto dele diz; a de vantagem lê a postura do alvo. É acesso ao que
-        já está no contexto, não dado novo.
+        pelo que o texto dele diz; a de vantagem lê a postura do alvo.
+
+        NÃO lê mais do `proximity_context`, e a distinção é o conserto (spec 052). O
+        bundle é uma VISTA montada para A Mente: ele serve para VALIDAR que a coisa
+        está ao alcance — e cada tool já faz isso, contra o próprio enum, ANTES de
+        chegar aqui. Ele não é a fonte do que a coisa É. Enquanto foi tratado como
+        fonte, as réguas de item julgavam pelo nome, porque a prosa de item e object
+        nunca esteve no bundle. A fonte é o arquivo, e quem toca arquivo é primitiva
+        (`io.descricao_de`) — não o leitor de contexto do Árbitro.
+
+        Cacheado por turno: a mesma régua costuma perguntar pela mesma entidade mais
+        de uma vez, e o `.md` não muda no meio de uma leitura.
         """
         if not ent_id:
             return None
-        for chave in ("characters_present", "items_present", "objects_present"):
-            for e in (context.get(chave) or []):
-                if e.get("id") != ent_id:
-                    continue
-                out = {"nome": e.get("name"), "descricao": e.get("narrative")
-                       or e.get("description")}
-                if e.get("action"):
-                    out["fazendo"] = e["action"]
-                return {k: v for k, v in out.items() if v}
-        loc = context.get("location") or {}
-        if loc.get("id") == ent_id:
-            return {k: v for k, v in {"nome": loc.get("name"),
-                                      "descricao": loc.get("narrative")}.items() if v}
-        return {"nome": motor.name_of(ent_id)}
+        if ent_id not in _descrito:
+            _descrito[ent_id] = motor.descricao_de(ent_id) or {
+                "nome": motor.name_of(ent_id)}
+        return _descrito[ent_id]
 
     ctx.ask = ask if ask is not None else _sem_juizo
     # `prosa` (FR-018): o que o personagem está fazendo e dizendo. A régua lê COMO se

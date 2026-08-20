@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.17.1"
+__version__ = "2.18.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -61,6 +61,49 @@ __version__ = "2.17.1"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.18.0": "spec 052 — FORJAR EQUIPAMENTO, e o primeiro ato do projeto que ATRAVESSA "
+              "O TEMPO E PODE SER RETOMADO. Duas tools novas (`forge_weapon`, "
+              "`forge_armor`) com DUAS declarações e UM corpo — desvio declarado do "
+              "Princípio XII item 2, pelo motivo certo: as réguas nunca chegam à face "
+              "(os params de juízo somem do manifest), então duas tools não enxugam "
+              "prompt nenhum; o que elas fazem é mover a escolha entre arma e armadura "
+              "de um VALOR DE ENUM para o NOME DA TOOL, que modelos fracos erram muito "
+              "menos. QUATRO mecanismos novos: (1) a PEÇA EM PROCESSO é uma ENTIDADE "
+              "(`motor/trabalho.py`), não um campo no personagem — nasce na cena, "
+              "qualquer um a vê, pega, rouba ou termina, e ninguém é dono dela; (2) o "
+              "JULGAMENTO É CONGELADO — o Árbitro é consultado UMA vez, na abertura, e "
+              "toda retomada é aritmética pura, ZERO LLM, quantas forem; (3) DOIS "
+              "RELÓGIOS nomeados e distintos, compartilhando a mesma entidade: ESFORÇO "
+              "(`forge_*`, só avança com alguém presente, crédito por sessão com clamp "
+              "em min(decorrido, o que faltava), conclui num ATO) e PRAZO (`cook`, o "
+              "fogo trabalha sozinho, resolve na consulta ao mundo) — unificá-los "
+              "tornaria cozinhar interrompível e forjar passivo; (4) BANDA DE RARIDADE "
+              "com CATRACA DE MÃO ÚNICA: cinco bandas, rolada uma vez, só desce quando "
+              "alguém sem maestria põe a mão nela, e o EXTREMO natural do dado fica "
+              "congelado AO LADO da banda para ser pago só na conclusão — é o que torna "
+              "a obra excepcional imune à interrupção sem nenhuma exceção no "
+              "rebaixamento. A banda máxima exige TRÊS condições independentes "
+              "(material que permita, maestria que sustente, crítico), e `lendario` não "
+              "é alcançável por margem nenhuma. Banda `falha` nasce SEM bloco mecânico "
+              "e vale como improvisado por `fisica.weapon_of` — nenhum número novo foi "
+              "inventado para punir. DOIS domínios de proficiência (`ferraria`, "
+              "`armaria`, substituindo a reserva de `oficio`) e o TERCEIRO papel que a "
+              "proficiência cumpre no projeto: TETO, não modificador. O FERRAMENTAL não "
+              "tem parâmetro — a régua lê os objetos presentes E A DESCRIÇÃO DO LUGAR, "
+              "porque numa oficina escrita no idioma deste projeto a bigorna está na "
+              "prosa do ambiente (a Forja de Ferro de Porto Negro não tem NENHUM "
+              "object): um desenho que só olhasse entidades recusaria forjar exatamente "
+              "onde se forja. TRÊS RETROFITS no mesmo escopo: (a) `app.fate_twists` "
+              "ganhou ramo de BANDA e passou a narrar `cozinha`/`cura`/`acougue`, que "
+              "calculavam virada/crítico desde que nasceram e morriam em silêncio (o "
+              "crítico era descartado pelo guard, e a virada saía como frase de FORÇA "
+              "com id vazio — Princípio X violado em produção); (b) `cook` migrou para "
+              "a peça em processo, `status.cozinhando`/`fisica.is_cooking` MORRERAM, os "
+              "19 call sites passaram a `trabalho.is_busy(actor_folder)` e `get_context` "
+              "deriva `self.ocupado` sem persistir nada — o prato agora nasce ONDE A "
+              "PANELA ESTIVER; (c) `cook_fonte` passou a aceitar o LUGAR além dos "
+              "objects, para que a mesma prosa não sirva para forjar e deixe de servir "
+              "para cozinhar. MINOR: duas tools novas. Ver specs/052-forge-equipment/",
     "2.17.0": "spec 050 — ESQUARTEJAR. Tool nova `butcher`: extrai uma ou mais porções "
               "de carne crua de um corpo QUE JÁ ESTÁ MORTO. Nasceu de uma sondagem real "
               "nesta sessão — um coelho morto criado no mundo confirmou que NENHUMA tool "

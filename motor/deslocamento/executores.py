@@ -15,7 +15,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import combate, fisica, io, memoria, registro, rolagem, rotas
+from .. import combate, fisica, io, memoria, registro, rolagem, rotas, trabalho
 from ..combate import (
     roll_push_check,
     roll_resist_check,
@@ -113,7 +113,7 @@ def _apply_travel_ops(character_id: str, actor_folder: Path,
     if not resolution.get("travel_ops"):
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     for op in resolution.get("travel_ops") or []:
@@ -160,7 +160,7 @@ def _apply_carry_ops(character_id: str, actor_folder: Path, resolution: dict,
     if not resolution.get("carry_ops"):
         return applied, rejected
     actor_fm_sono, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm_sono) or fisica.is_cooking(actor_fm_sono):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm_sono) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     present_chars, _, _ = io._scene_entities(actor_folder.parent)  # cena fresca (025)
@@ -243,7 +243,7 @@ def _apply_persuade_ops(character_id: str, actor_folder: Path, resolution: dict,
     if not resolution.get("persuade_ops"):
         return applied, rejected
     actor_fm_sono, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm_sono) or fisica.is_cooking(actor_fm_sono):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm_sono) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected
     present_chars, _, _ = io._scene_entities(actor_folder.parent)  # cena fresca (025)
@@ -324,7 +324,7 @@ def _apply_expel_ops(character_id: str, actor_folder: Path, resolution: dict,
     if not resolution.get("expel_ops"):
         return applied, rejected, created
     actor_fm_sono, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm_sono) or fisica.is_cooking(actor_fm_sono):  # spec 031/048
+    if fisica.is_resting(actor_fm_sono) or trabalho.is_busy(actor_folder):  # spec 031/048
         rejected.append(_fail("descansando"))
         return applied, rejected, created
     present_chars, _, _ = io._scene_entities(actor_folder.parent)  # cena fresca (025)

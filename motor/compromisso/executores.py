@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import fisica, intencoes, memoria, registro
+from .. import fisica, intencoes, memoria, registro, trabalho
 from ..io import _fail, read_doc
 
 # Relevância da memória de compromisso: "medium" (mesma faixa de `persuade`/`learn`)
@@ -29,7 +29,7 @@ def _apply_promise(character_id: str, actor_folder: Path, res: dict,
     if not res.get("promise_ops"):
         return applied, rejected, created
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected, created
     for op in res.get("promise_ops") or []:

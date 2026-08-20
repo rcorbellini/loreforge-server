@@ -196,6 +196,39 @@ def name_of(entity_id: str) -> str:
     return (found[1].get("name") or entity_id)
 
 
+def descricao_de(entity_id: str) -> dict | None:
+    """A PROSA de uma entidade, lida do arquivo dela (spec 052).
+
+    Irmã de `name_of`, e pela mesma razão: uma régua não julga um id, julga o que a
+    coisa DIZ de si. Devolve `{nome, descricao, fazendo}` — só as chaves que
+    existem.
+
+    POR QUE ESTA PRIMITIVA PRECISOU EXISTIR. As réguas liam a descrição pelo
+    `proximity_context` (o bundle que o Motor monta para A Mente), e esse bundle
+    NUNCA carregou a prosa de item nem de object — só de location. Resultado: toda
+    régua que diz ler a descrição de um item julgava pelo NOME
+    (`cozinhabilidade`, `comestibilidade`, `toxicidade`, `embriaguez`, a vistosidade
+    do furto, a arma no combate). O erro estava na CAMADA, não na falta do dado: o
+    bundle é uma VISTA para o client — serve para validar que a coisa está ao
+    alcance, não para ser a fonte do que ela é. O arquivo é a fonte (Princípio IV), e
+    quem toca arquivo é primitiva (Princípio XII).
+
+    Lê SOB DEMANDA, e é por isso que a prosa não precisa entrar no contexto de toda
+    cena: só quem pergunta paga, e inflar o bundle degradaria todas as decisões do
+    turno para servir a régua de uma.
+    """
+    if not entity_id:
+        return None
+    found = find_entity(entity_id)
+    if not found:
+        return None
+    _path, fm, corpo = found
+    out = {"nome": fm.get("name") or entity_id,
+           "descricao": " ".join((corpo or "").split()) or None,
+           "fazendo": (fm.get("status") or {}).get("action")}
+    return {k: v for k, v in out.items() if v}
+
+
 _GROUND_WORDS = {"chao", "solo", "terra", "ground", "floor"}
 
 
@@ -298,6 +331,18 @@ _WHY_BY_REGRA = {
     "sem_calor": "isso não fornece calor nenhum para cozinhar",
     "nao_cozinhavel": "isso não forma prato nenhum",
     "ja_cozinhando": "já está ocupado com outra coisa no fogo",
+    # spec 052 — forjar. As três de admissão dizem QUAL das três coisas faltou:
+    # uma nota agregada esconderia se o problema era o metal, o fogo ou a oficina,
+    # e uma recusa que não aponta a saída gasta o turno duas vezes.
+    "sem_material": "não há material nenhum para trabalhar",
+    "material_inacessivel": "esse material não está ao alcance",
+    "peca_inacessivel": "essa peça em processo não está ao alcance",
+    "peca_de_outra_oficina": "essa peça foi começada para outra coisa — não é este o trabalho dela",
+    "ja_trabalhando": "já está com as mãos em outra peça",
+    "nao_forjavel": "não dá para forjar nada com isso",
+    "material_imprestavel": "esse material não presta para trabalho nenhum",
+    "sem_calor_de_forja": "esse fogo não dá conta de trabalhar metal",
+    "sem_ferramental": "não há aqui com que trabalhar metal",
     "alvo_inacessivel": "não está ao alcance para esquartejar",
     "alvo_nao_morto": "não há como esquartejar quem ainda pode se mexer",
     "ja_esquartejado": "esse corpo já foi todo revirado; não sobrou nada a tirar",

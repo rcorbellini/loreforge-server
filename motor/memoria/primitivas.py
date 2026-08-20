@@ -149,6 +149,15 @@ _DOMAIN_BY_EVENT = {
     # ficam DE FORA de propósito — não alimentam a proficiência.
     "butcher_farto": "acougue", "butcher_medio": "acougue",
     "butcher_fraco": "acougue",
+    # ferraria / armaria (spec 052) — quarto e quinto domínios de fase 2, e os
+    # primeiros a serem DOIS de uma vez: praticar armadura não faz ninguém melhor
+    # forjando espada. Só peça CONCLUÍDA carimba — abrir trabalho, retomar, ser
+    # rebaixado pela catraca e as recusas de mérito ficam DE FORA de propósito
+    # (FR-034): o que ensina o ofício é a peça terminada, não a tentativa.
+    "forge_weapon": "ferraria", "forge_weapon_falha": "ferraria",
+    "forge_weapon_excepcional": "ferraria",
+    "forge_armor": "armaria", "forge_armor_falha": "armaria",
+    "forge_armor_excepcional": "armaria",
 }
 
 
@@ -1701,12 +1710,19 @@ def _expire_memories(entity_folder: Path) -> None:
             write_doc(path, fm, body)
 
 
-def _iter_memories(character_id: str) -> list[dict]:
-    """Frontmatter de todas as memórias de um personagem, vivas e vencidas."""
-    try:
-        folder = find_character_folder(character_id)
-    except Exception:
-        return []
+def _iter_memories_in(folder: Path) -> list[dict]:
+    """Frontmatter das memórias de uma PASTA qualquer, vivas e vencidas.
+
+    Genérica por pasta desde a spec 052, porque personagem deixou de ser a única
+    coisa que lembra: uma peça forjada guarda a própria procedência (quem a
+    trabalhou, quando), no mesmo formato. `_expire_memories` já era genérica assim
+    — esta só foi alinhada.
+
+    Isso NÃO significa que a procedência de um item apareça na cena: ela se guarda
+    e não se distribui (spec 052, FR-037). `get_context` não lê esta pasta; só uma
+    capacidade futura de examinar um objeto vai lê-la. Se a procedência descesse de
+    graça na percepção, não sobraria nada para investigar.
+    """
     mem_dir = folder / "memories"
     if not mem_dir.is_dir():
         return []
@@ -1716,6 +1732,15 @@ def _iter_memories(character_id: str) -> list[dict]:
         if fm.get("type") == "memory":
             out.append(fm)
     return out
+
+
+def _iter_memories(character_id: str) -> list[dict]:
+    """Frontmatter de todas as memórias de um personagem, vivas e vencidas."""
+    try:
+        folder = find_character_folder(character_id)
+    except Exception:
+        return []
+    return _iter_memories_in(folder)
 
 
 def _is_alive(fm: dict, now: float | None = None) -> bool:

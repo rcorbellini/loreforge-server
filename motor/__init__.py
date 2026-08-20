@@ -35,6 +35,12 @@ import validator
 from . import juizo  # noqa: F401
 
 
+# --- spec 052: A PEÇA EM PROCESSO (nível 0) — a entidade que `forge_*` (relógio de
+# ESFORÇO) e `cook` (relógio de PRAZO) compartilham. Não mora em nenhum dos dois
+# domínios de propósito: as duas a usam, e o reuso mora na primitiva (Princípio XII).
+from . import trabalho  # noqa: F401
+
+
 # --- extraído para motor/turno.py (spec 021) ---
 from .turno import (  # noqa: F401
     apply_resolution,
@@ -289,6 +295,17 @@ from .cura import (  # noqa: F401
 
 
 # --- motor/cozinha.py (spec 048) ---
+from .forja import (  # noqa: F401
+    BANDAS,
+    banda_final,
+    bloco_mecanico,
+    duracao_segundos_forja,
+    roll_forge_check,
+    teto_por_maestria,
+    teto_por_material,
+)
+
+
 from .cozinha import (  # noqa: F401
     _apply_cozinha_ops,
     _h_cozinha,
@@ -347,7 +364,6 @@ from .fisica import (  # noqa: F401
     effective_weight,
     ensure_fatigue,
     ensure_hp,
-    is_cooking,
     is_resting,
     fatigue_max,
     porter_of,
@@ -461,6 +477,7 @@ from .io import (  # noqa: F401
     find_entity,
     move_entity,
     name_of,
+    descricao_de,
     new_id,
     read_doc,
     write_doc,

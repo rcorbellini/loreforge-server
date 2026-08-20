@@ -158,8 +158,13 @@ def _cook(name: str, args: dict, ctx) -> tuple[dict, bool]:
                            ctx.validos({i: ctx.items[i] for i in disponiveis})), False
     fontes = ctx.cand["cook_fonte"]
     if fonte_calor not in fontes:
+        # spec 052: `fontes` passou a incluir o LUGAR além dos objects, então montar
+        # o mapa por `ctx.objects[o]` levantaria KeyError no id do lugar — a lista de
+        # válidos morreria justamente na recusa que existe para orientar quem errou.
         return ctx.err(f"'{fonte_calor}' não é uma fonte de calor presente", "fonte_calor",
-                       ctx.validos({o: ctx.objects[o] for o in fontes})), False
+                       ctx.validos({o: ctx.objects.get(o)
+                                    or {"name": (ctx.context.get("location") or {}).get("name") or o}
+                                    for o in fontes})), False
     chave = (tuple(sorted(ingredientes)), fonte_calor)
     if chave in ctx.cooked_asked:
         return ctx.err("cozinhar esses ingredientes nessa fonte já foi tentado neste "

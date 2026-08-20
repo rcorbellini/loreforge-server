@@ -30,6 +30,7 @@ from .primitivas import (  # noqa: F401
     _is_alive,
     _is_trace_active,
     _iter_memories,
+    _iter_memories_in,
     _leave_trace,
     _lower_intensity,
     _memory_salience,

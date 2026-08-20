@@ -16,7 +16,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import fisica, io, registro, rolagem
+from .. import fisica, io, registro, rolagem, trabalho
 from ..io import (
     find_character_folder,
     name_of,
@@ -230,7 +230,7 @@ def _apply_accuse(character_id: str, actor_folder: Path,
     if not res.get("accuse_ops"):
         return applied, rejected, created
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(io._fail("descansando"))
         return applied, rejected, created
     now = time.time()

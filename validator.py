@@ -32,8 +32,11 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # "nenhuma" (a resposta explícita para memórias sem prática nenhuma
 # associada). "cura" (spec 032) é o primeiro domínio de fase 2 — a tool
 # `curar` é a primeira a CONSUMIR proficiencies_for como modificador real.
+# spec 052: `ferraria` (arma) e `armaria` (armadura) — DOIS domínios, não um.
+# Substituem a reserva de `oficio` que a doc anunciava: manter as três seria uma
+# opção morta no manifesto. Praticar um NÃO faz o outro progredir (FR-033).
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-          "acougue", "nenhuma"}
+          "acougue", "ferraria", "armaria", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.
@@ -73,6 +76,13 @@ DEFAULT_BODY = SLOTS
 # Atributos que uma arma pode usar (spec 008): força no corpo a corpo, agilidade
 # nas leves e de arremesso.
 WEAPON_ATTRIBUTES = ("STR", "DEX")
+
+# As cinco BANDAS de qualidade de equipamento forjado (spec 052), em ordem. É enum
+# FECHADO, ao contrário do vocabulário de slot: o valor vira precondição mecânica de
+# capacidades futuras (encantamento só sobre certas bandas), e uma precondição que
+# dependesse de reler prosa derivaria a cada leitura. `falha` é a única sem bloco
+# mecânico nenhum — vale como improvisado pelas regras que já existem.
+RARITIES = ("falha", "comum", "incomum", "raro", "lendario")
 
 # Campos obrigatórios de topo por tipo (FR-006, FR-008, FR-009).
 REQUIRED_TOP = {
@@ -400,6 +410,62 @@ def _validate_item(fm: dict) -> list[str]:
     errors.extend(_validate_interactions(fm))
     errors.extend(_validate_item_physics(fm))
     errors.extend(_validate_locks(fm))
+    errors.extend(_validate_item_trabalho(fm))
+    return errors
+
+
+def _validate_item_trabalho(fm: dict) -> list[str]:
+    """A PEÇA EM PROCESSO e a BANDA de qualidade (spec 052).
+
+    Nenhum dos dois é campo de autor: `trabalho` só existe em peça que o Motor
+    criou, e `rarity` só nasce ao concluir uma forja. Quem escreve um mundo à mão
+    nunca digita nem um nem outro — é a resposta ao portão do Princípio XI ("o
+    criador precisaria conhecer o schema?": não).
+
+    A regra que vale a pena ler duas vezes: peça EM PROCESSO não tem banda nem bloco
+    mecânico. Enquanto está na bigorna ela não é arma nem armadura, e empunhá-la vale
+    como improvisado — sem nenhuma regra nova para isso.
+    """
+    errors: list[str] = []
+    rarity = fm.get("rarity")
+    if rarity is not None and rarity not in RARITIES:
+        errors.append(f"item: 'rarity' inválida: '{rarity}' "
+                      f"(permitidas: {', '.join(RARITIES)}).")
+
+    bloco = fm.get("trabalho")
+    if bloco is None:
+        return errors
+    if not isinstance(bloco, dict):
+        errors.append("item: 'trabalho' deve ser um mapa.")
+        return errors
+    if not isinstance(bloco.get("tool"), str) or not bloco.get("tool"):
+        errors.append("item: 'trabalho.tool' ausente (qual capacidade criou a peça).")
+
+    por_prazo = "pronto_ts" in bloco
+    por_esforco = "tempo_necessario_s" in bloco
+    if por_prazo == por_esforco:
+        # O CAMPO PRESENTE é o que diz qual relógio vale — sem enum de modo e sem
+        # máquina de estados. Ter os dois (ou nenhum) é peça sem relógio nenhum.
+        errors.append("item: 'trabalho' precisa de EXATAMENTE um relógio — "
+                      "'pronto_ts' (prazo) ou 'tempo_necessario_s' (esforço).")
+    for campo in ("pronto_ts", "tempo_necessario_s", "tempo_trabalhado_s",
+                  "trabalhando_desde"):
+        valor = bloco.get(campo)
+        if valor is not None and (isinstance(valor, bool)
+                                  or not isinstance(valor, (int, float))):
+            errors.append(f"item: 'trabalho.{campo}' deve ser numérico (segundos).")
+    for campo in ("banda", "teto_material"):
+        valor = bloco.get(campo)
+        if valor is not None and valor not in RARITIES:
+            errors.append(f"item: 'trabalho.{campo}' inválida: '{valor}' "
+                          f"(permitidas: {', '.join(RARITIES)}).")
+    extremo = bloco.get("extremo")
+    if extremo is not None and extremo not in ("sucesso", "falha"):
+        errors.append("item: 'trabalho.extremo' só pode ser 'sucesso' ou 'falha'.")
+    for campo in ("weapon", "armor", "rarity"):
+        if fm.get(campo) is not None:
+            errors.append(f"item: peça em processo não pode ter '{campo}' — "
+                          "ela ainda não é o que vai ser.")
     return errors
 
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import fisica, registro
+from .. import fisica, registro, trabalho
 from ..io import (
     _fail,
     new_id,
@@ -50,7 +50,7 @@ def _h_intentions(character_id, actor_folder, res, rolls):
     if not res.get("intentions"):
         return applied, rejected, []
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):  # spec 031/048: auto-suficiência, nível 0
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
         return applied, rejected, []
     for op in res.get("intentions") or []:

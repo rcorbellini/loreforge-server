@@ -16,7 +16,8 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import cozinha, deslocamento, fisica, intencoes, io, memoria, registro, rotas
+from .. import (cozinha, deslocamento, fisica, intencoes, io, memoria, registro,
+                rotas, trabalho)
 from ..deslocamento import (
     lazy_evaluate,
 )
@@ -455,6 +456,17 @@ def get_context(character_id: str) -> dict:
                 "interactions": item_fm.get("interactions"),
                 **item_physics(item_fm, child),
             }
+            # spec 052: uma peça em processo é VISIVELMENTE uma peça em processo —
+            # uma lâmina meio batida na bigorna, uma panela no fogo. O booleano é o
+            # que permite ao manifesto oferecer a retomada; o CONTEÚDO do bloco
+            # (banda, tetos, tempos) fica fora, porque é segredo do mundo.
+            _bloco_trab = item_fm.get(trabalho.BLOCO)
+            if isinstance(_bloco_trab, dict):
+                # a CAPACIDADE que criou a peça, não um booleano: é o que permite ao
+                # manifesto oferecer a retomada só à tool certa. Não é segredo — é
+                # visível que uma lâmina meio batida é uma lâmina. O CONTEÚDO do
+                # bloco (banda, tetos, tempos) continua fora.
+                entry["em_trabalho"] = _bloco_trab.get("tool") or True
             # contêiner ABERTO no chão expõe o que tem (spec 005); fechado, nada
             if isinstance(item_fm.get("container"), dict):
                 entry["contains"] = [] if is_closed(item_fm) \
@@ -504,6 +516,13 @@ def get_context(character_id: str) -> dict:
                 "cansaco": fatigue_label(self_fm),
             },
             "body": self_body,
+            # spec 052 — OCUPADO, DERIVADO. Substitui a leitura de
+            # `status.cozinhando`, que era um campo no personagem: o fato passou a
+            # morar na peça (a panela no fogo), e isto é recalculado a cada leitura,
+            # nunca persistido — mesmo espírito de `familiarity_with`/
+            # `proficiencies_for`. Um BOOLEANO, nada mais: nenhum tempo, nenhuma
+            # banda, nenhum número desce por aqui.
+            "ocupado": trabalho.is_busy(char_folder),
             "inventory": _nested_item_refs(char_folder),
             # física do corpo (spec 004): a Mente narra esforço, a guarda valida
             "fisico": {

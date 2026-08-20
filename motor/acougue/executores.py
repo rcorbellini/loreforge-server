@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro
+from .. import fisica, io, memoria, registro, trabalho
 from ..estado import _set_field
 from ..io import _fail, _rejection, name_of, read_doc
 
@@ -35,7 +35,7 @@ def _apply_esquartejar_ops(character_id: str, actor_folder: Path, resolution: di
     if not resolution.get("esquartejar_ops"):
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_resting(actor_fm) or fisica.is_cooking(actor_fm):
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):
         rejected.append(_fail("descansando"))
         return applied, rejected
     present_chars, _po, _pi = io._scene_entities(actor_folder.parent)  # cena fresca (025)

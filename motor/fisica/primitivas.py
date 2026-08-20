@@ -695,15 +695,6 @@ def is_resting(char_fm: dict) -> bool:
     return bool((char_fm.get("status") or {}).get("descansando_desde"))
 
 
-def is_cooking(char_fm: dict) -> bool:
-    """Nível 0 (spec 048, molde EXATO de `is_resting`): ÚNICA definição de
-    "está cozinhando" no código — lê `status.cozinhando`. Quem precisa
-    bloquear uma ação enquanto o ator tem um prato pendente no fogo CHAMA
-    esta função na própria validação — mesma disciplina, capacidade nível
-    0, nunca um hook central."""
-    return bool((char_fm.get("status") or {}).get("cozinhando"))
-
-
 # Teto de recuperação plena de `dormir` (spec 031): 8h reais — mesma escala
 # 1:1 de tempo real que viagem já usa (nenhum relógio próprio, Princípio VII).
 _TETO_SONO_PLENO_S = 8 * 3600

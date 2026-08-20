@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import estado, fisica, io, memoria, registro
+from .. import estado, fisica, io, memoria, registro, trabalho
 from ..estado import _set_field
 from ..io import _fail, _rejection, name_of, read_doc
 
@@ -34,7 +34,9 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
     if not resolution.get("cozinha_ops"):
         return applied, rejected
     actor_fm, _ = read_doc(actor_folder / "character.md")
-    if fisica.is_cooking(actor_fm):
+    # spec 052: "está cozinhando" deixou de ser um campo no personagem e passou a
+    # ser DERIVADO da panela no fogo — a entidade que o ato deixa na cena.
+    if trabalho.is_busy(actor_folder):
         rejected.append(_fail("ja_cozinhando"))
         return applied, rejected
     if fisica.is_resting(actor_fm):  # spec 031: auto-suficiência, nível 0
@@ -53,8 +55,12 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
         ingredientes = list(op.get("ingredientes") or [])
         fonte_calor = op.get("fonte_calor")
         base = {"cozinhar": ingredientes, "fonte_calor": fonte_calor}
+        # spec 052: a fonte de calor pode ser um object OU o próprio LUGAR — a
+        # lareira de uma cozinha costuma estar escrita na prosa do ambiente, não
+        # instanciada. A pasta da fonte não é usada para mais nada aqui; o que
+        # importa é que ela EXISTA na cena.
         fonte_folder = present_objects.get(fonte_calor)
-        if fonte_folder is None:
+        if fonte_folder is None and fonte_calor != place_id:
             rejected.append(_rejection(base, _fail("fonte_calor_inacessivel",
                                                     fonte_calor=fonte_calor)))
             continue
@@ -112,13 +118,20 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
             io.remove_entity(folder)  # consumo total — exceção escopada do Princípio IV
 
         duracao_nota = int(op.get("duracao") or 0)
-        pronto_ts = time.time() + duracao_segundos(duracao_nota)
-        prato_id = io.new_id("prato")
-        _set_field(actor_folder, "status.cozinhando", {
-            "pronto_ts": pronto_ts, "local": place_id,
-            "prato": {"id": prato_id, "nome": nome, "description": descricao,
-                     "peso_kg": round(peso_kg, 3) or 0.3},
-        })
+        # spec 052: nasce uma PANELA NO FOGO — entidade real na cena, visível para
+        # todos, que qualquer um pode pegar ou roubar. Antes, os ingredientes sumiam
+        # e NADA existia no mundo até o prato ficar pronto: o estado morava num campo
+        # escondido do personagem, e o prato materializava no lugar onde o ato tinha
+        # começado, mesmo que o cozinheiro já estivesse longe. Agora o prato nasce
+        # ONDE A PANELA ESTIVER (spec 052, FR-046).
+        corpo_panela = (f"{nome} no fogo, ainda no meio do preparo — o cheiro já "
+                        "escapa, mas ainda não está pronto.")
+        _peca_id, panela = trabalho.criar_peca(
+            actor_folder.parent, corpo_panela,
+            {"tool": "cook", "ator": character_id,
+             "pronto_ts": time.time() + duracao_segundos(duracao_nota),
+             "prato": {"nome": nome, "description": descricao}},
+            name=f"{nome} (no fogo)", weight_kg=round(peso_kg, 3) or 0.3)
 
         extremo_bom = banda == "otima"
         ruim = banda == "ruim"

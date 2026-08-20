@@ -69,7 +69,6 @@ from .primitivas import (  # noqa: F401
     hunger_label,
     thirst_label,
     fatigue_label,
-    is_cooking,
     is_resting,
     item_own_weight,
     item_size,

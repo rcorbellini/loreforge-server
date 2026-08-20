@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import motor
 
-from ..registro import ToolSpec, tool_spec
+from ..io import name_of
+from ..registro import ToolSpec, inworld, tool_spec
 from .primitivas import DOMAINS
 
 _STR = {"type": "string"}
@@ -191,3 +192,34 @@ ACCUSE = tool_spec(ToolSpec(
     enum_sources={"alvo": "acusar_alvo"},
     apply=_accuse,
 ))
+
+
+# --------------------------------------------------------------------------- #
+# FRASES IN-WORLD (spec 038) — o que VOLTA para A Mente em `aconteceu`.
+#
+# Sem construtor registrado aqui o canal é MUDO: `aconteceu` sai vazio e o único
+# retorno é o `narrative_hint`, que é a prosa que A PRÓPRIA Mente escreveu. Ela
+# então age contra o eco de si mesma. Foi assim que a Elga dormiu e acordou 61
+# vezes em 12h recuperando ZERO fadiga (2026-08-20): o dado estava no outcome
+# (`fadiga_recuperada: 0`), e ninguém o traduzia.
+# --------------------------------------------------------------------------- #
+
+@inworld("rest_ops_applied")
+def _iw_rest(op):
+    if op.get("iniciou_descanso"):
+        return "deitou e pegou no sono"
+    if not op.get("acordou"):
+        return None
+    # a frase do sono RUIM é a razão de este construtor existir: ela é o único
+    # jeito de A Mente saber que deitar de novo não vai adiantar.
+    return {"inteiro": "acordou inteiro, o corpo descansado",
+            "pouco": "acordou cedo demais: o corpo aproveitou pouco e o cansaço "
+                     "ainda pesa",
+            "nenhum": "acordou sem ter descansado NADA — mal fechou os olhos, e "
+                      "o cansaço está inteiro onde estava"}.get(
+        op.get("qualidade"), "acordou")
+
+
+@inworld("accuse_ops_applied")
+def _iw_accuse(op):
+    return f"acusou {name_of(op.get('alvo'))} na cara, com a lembrança inteira"

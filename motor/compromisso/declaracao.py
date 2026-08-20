@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import motor
 
-from ..registro import ToolSpec, tool_spec
+from ..io import name_of
+from ..registro import ToolSpec, inworld, tool_spec
 
 
 def _promise(name: str, args: dict, ctx) -> tuple[dict, bool]:
@@ -46,3 +47,12 @@ PROMISE = tool_spec(ToolSpec(
     enum_sources={"para": "give_to"},
     apply=_promise,
 ))
+
+
+@inworld("promise_ops_applied")
+def _iw_promise(op):
+    alvo = name_of(op.get("para"))
+    expectativa = (op.get("expectativa") or "").strip()
+    if not expectativa:
+        return f"fez uma promessa a {alvo}"
+    return f"prometeu a {alvo}: {expectativa}"

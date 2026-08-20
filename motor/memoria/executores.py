@@ -347,8 +347,15 @@ def _apply_rest_ops(character_id: str, actor_folder: Path,
     intensificadas = []
     if fracao >= _LIMIAR_SONO_QUALIDADE:
         intensificadas = _intensify_commitments(character_id, actor_folder)
+    # A QUALIDADE é rótulo, não número (Princípios V/IX): é ela que a frase
+    # in-world lê. Sem isto o construtor teria de reimportar o limiar daqui, e o
+    # `aconteceu` voltava vazio — que foi exatamente o defeito: 61 ciclos de
+    # sono da Elga em 2026-08-20, todos com `fadiga_recuperada: 0`, e A Mente
+    # nunca soube. Quem conhece a regra é o executor; o construtor só renderiza.
+    qualidade = ("inteiro" if fracao >= _LIMIAR_SONO_QUALIDADE
+                 else "pouco" if recuperada > 0 else "nenhum")
     applied.append({"acordou": True, "fadiga_recuperada": recuperada,
-                    "fracao_dormida": round(fracao, 2),
+                    "fracao_dormida": round(fracao, 2), "qualidade": qualidade,
                     "compromissos_intensificados": intensificadas})
     # o DESFECHO do sono entra no texto porque o mundo já o conhece (a mesma fração que
     # decide se o compromisso pesa mais). Acordar inteiro e acordar moído são coisas

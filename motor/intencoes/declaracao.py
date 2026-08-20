@@ -55,3 +55,16 @@ SET_INTENTION = tool_spec(ToolSpec(
                   "status": lambda s: sorted(s.INTENTION_STATUSES)},
     apply=_set_intention,
 ))
+
+
+# NÃO existe `@inworld("intentions_applied")`, e é decisão, não esquecimento.
+#
+# `aconteceu` carrega O QUE O MUNDO SABE E A MENTE NÃO — é por isso que ele
+# existe: acordar sem ter descansado é fato do corpo que só o Motor mediu. Uma
+# DECISÃO é o inverso exato: a Mente acabou de tomá-la, foi ela que chamou a
+# tool, e o mundo não viu nada (decidir não tem plateia). Devolver "assentou uma
+# decisão: X" seria o Motor contando ao personagem o que ele mesmo pensou — a
+# fronteira que `loreforge-arbiter-boundary` protege, e o mesmo motivo pelo qual
+# `create_memory` também não tem frase. O relato mora no `narrative_hint`.
+#
+# Guardado por `selftest_phase28.py` ("nenhuma linha nova em inworld_effects").

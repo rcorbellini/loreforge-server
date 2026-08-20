@@ -141,6 +141,36 @@ check("frontmatter: nenhuma linha do bloco vira chave solta",
 
 import arbiter  # noqa: E402
 import tools_doc  # noqa: E402
+
+# --------------------------------------------------------------------------- #
+# TODO CANAL MUTADOR TEM FRASE IN-WORLD.
+#
+# `aconteceu` é construído iterando `registro.inworld_phrases()`. Canal mutador
+# SEM construtor não vira frase nenhuma: a lista sai vazia e o único retorno à
+# Mente é o `narrative_hint`, que é a prosa que ELA MESMA escreveu — ela passa a
+# agir contra o eco de si. Quatro canais estavam assim (`rest_ops`, `intentions`,
+# `promise_ops`, `accuse_ops`), e foi o que deixou a Elga dormir/acordar 61 vezes
+# em 12h sem nunca saber que recuperava ZERO fadiga (2026-08-20).
+#
+# Este check existe para que uma tool NOVA não nasça muda em silêncio. Se você
+# está aqui porque ele quebrou: registre `@inworld("<canal>_applied")` junto do
+# corpo da tool, e faça a frase dizer o DESFECHO, não só o ato.
+# --------------------------------------------------------------------------- #
+_CANAIS_SEM_DESFECHO = {
+    # `mutations` não tem frase própria: entra por `applied`, o canal genérico.
+    "mutations",
+    # `intentions` é MUDO DE PROPÓSITO. `aconteceu` carrega o que o MUNDO sabe e
+    # A MENTE NÃO. Decidir é o inverso: a Mente acabou de decidir, e o mundo não
+    # viu nada. Dizer-lhe o que ela pensou invade a interioridade do personagem
+    # (fronteira Árbitro/Mente). Guardado por selftest_phase28.
+    "intentions",
+}
+_com_frase = set(motor.registro.inworld_phrases())
+_mudos = sorted(ch for ch in motor.registro._HANDLERS
+                if ch not in _CANAIS_SEM_DESFECHO
+                and f"{ch}_applied" not in _com_frase)
+check("todo canal mutador tem frase in-world (@inworld)", not _mudos,
+      "sem frase: " + ", ".join(_mudos))
 _doc = (Path(__file__).resolve().parent.parent / "docs" / "tools.md")
 _gen = (Path(__file__).resolve().parent.parent / "docs" / "tools.generated.md")
 _specs = sorted(motor.registro.specs())

@@ -189,10 +189,23 @@ def _iw_transfer(op):
 
 @inworld("eat_ops_applied")
 def _iw_eat(op):
+    """O ATO e o DESFECHO — antes só dizia o ato.
+
+    "comeu Moeda de Prata" é verdade e é inútil: não diz se matou a fome. A Elga
+    comeu a MESMA moeda 17 vezes em 12h (2026-08-20) porque cada vez recebia de
+    volta "comeu Moeda de Prata" e continuava com fome, sem nunca ligar as duas
+    coisas. A nota é segredo do mundo (Princípio V) — desce o rótulo, nunca o
+    número, no mesmo molde do rótulo de fome que o executor grava na ficha.
+    """
     item = name_of(op.get("item"))
     if op.get("adoeceu"):
         return f"comeu {item} e passou mal"
-    return f"comeu {item}"
+    saciedade = int(op.get("saciedade") or 0)
+    if saciedade >= 7:
+        return f"comeu {item} e ficou saciado"
+    if saciedade >= 3:
+        return f"comeu {item} e tirou a pior da fome"
+    return f"comeu {item}, e a fome continuou exatamente onde estava"
 
 
 @inworld("steal_ops_applied")

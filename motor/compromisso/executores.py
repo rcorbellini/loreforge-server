@@ -57,7 +57,10 @@ def _apply_promise(character_id: str, actor_folder: Path, res: dict,
 
         intention_id = intencoes.create_intention(
             actor_folder, expectativa, status="ativa", memoria_id=mem_id_ator)
-        applied.append({"para": para, "intention_id": intention_id})
+        # `expectativa` viaja no applied porque é ela que a frase in-world diz —
+        # "prometeu a X" sem o QUE foi prometido não é fato narrável.
+        applied.append({"para": para, "intention_id": intention_id,
+                        "expectativa": expectativa})
     return applied, rejected, created
 
 

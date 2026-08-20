@@ -112,7 +112,13 @@ para cozinhar):
 ATENÇÃO à diferença que esta régua existe para marcar: a fogueira que assa carne
 NÃO funde metal. Um fogo que seria ótimo para cozinhar é 2 ou 3 aqui. Só sobe de
 5 o que a descrição indicar como fogo DE TRABALHO — forja, fornalha, fole,
-brasas contidas e sopradas. A nota é segredo do mundo: nunca o número na
+brasas contidas e sopradas.
+JULGUE SOMENTE A FONTE ESCOLHIDA, em "fonte_calor". Os "objetos_presentes"
+existem para a régua de FERRAMENTAL e não contam aqui: se há uma forja acesa no
+lugar mas quem age escolheu a fornalha apagada, a nota é a DA FORNALHA APAGADA.
+Uma fonte CLARAMENTE morta (cinza compactada, poeira, sem brasa nenhuma, fria há
+muito tempo) é 0, não 1 — não hesite no extremo quando a descrição já diz que
+não há calor nenhum ali. A nota é segredo do mundo: nunca o número na
 narrativa; nota 0 faz a tentativa ser recusada."""
 
 REGUA_FERRAMENTAL = """\
@@ -133,7 +139,8 @@ quanto na dos objetos presentes):
 LEIA A DESCRIÇÃO DO LUGAR COM ATENÇÃO: numa oficina, a bigorna e o martelo
 costumam estar escritos na prosa do ambiente, e não existir como objetos
 separados. "A bigorna ocupa o centro, cercada de tenazes e martelos" é
-ferramental farto, mesmo que nenhum objeto esteja listado. A nota é segredo do
+ferramental farto, mesmo que nenhum objeto esteja listado. Esta é a ÚNICA régua
+que lê "objetos_presentes" — as outras julgam só o que foi escolhido. A nota é segredo do
 mundo: nunca o número na narrativa; nota 0 faz a tentativa ser recusada."""
 
 REGUA_DURACAO = """\

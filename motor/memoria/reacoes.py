@@ -15,6 +15,7 @@ from __future__ import annotations
 from .. import fatos
 from .primitivas import (
     remember,
+    remember_recurring,
     _record_attack,
     _record_carry,
     _record_cura,
@@ -82,6 +83,19 @@ def react_actor_memory(fato, actor_folder, present) -> list:
         mem = op.get("memory")
         if not isinstance(mem, dict) or not mem.get("content"):
             return []
+        # O FATO QUE SE REPETE, declarado pela própria tool (SC-003: uma tool nova
+        # não edita esta reação). Com `about` no contrato, a repetição RENOVA e
+        # ADENSA em vez de criar arquivo novo — é o que impede a recusa re-tentada
+        # de virar o assunto mais importante da vida do personagem, e daí
+        # combustível do tick autônomo. Sem `about`, nada muda: grava como sempre.
+        if mem.get("about"):
+            mid, vezes = remember_recurring(
+                cid, mem["content"], about=mem["about"], evento=mem.get("event"),
+                involved=mem.get("involved"), summary=mem.get("summary", ""),
+                intensity=mem.get("intensity", "small"),
+                frag=mem.get("reincidencia", ""), valence=mem.get("valence"))
+            return ([{"target": cid, "id": mid, "event": mem.get("event"),
+                      "vezes": vezes}] if mid else [])
         mid = remember(cid, mem["content"],
                        intensity=mem.get("intensity", "medium"),
                        involved=mem.get("involved"), valence=mem.get("valence"),

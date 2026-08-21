@@ -85,6 +85,12 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
                                "tinha calor nenhum.",
                     "intensity": "small", "involved": [fonte_calor],
                     "valence": {fonte_calor: memoria.NEGATIVA},
+                    # UMA memória por fonte fria, renovada: tentar cozinhar na
+                    # mesma rua dez vezes é o MESMO fato mais insistente, não dez
+                    # fatos. A Elga acumulou 9 cópias disto (2026-08-20) e eram
+                    # elas que a mandavam tentar de novo.
+                    "about": f"cozinhar\x00sem_calor\x00{fonte_calor}",
+                    "reincidencia": "tentei",
                     "event": "cook_refused_fonte"}})
             continue
         if int(op.get("cozinhabilidade") or 0) <= 0:
@@ -95,6 +101,7 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
                     "content": "Tentei cozinhar, mas aquilo não formava prato nenhum.",
                     "intensity": "small", "involved": list(ingredientes),
                     "valence": {i: memoria.NEGATIVA for i in ingredientes},
+                    "about": "cozinhar\x00nao_cozinhavel", "reincidencia": "tentei",
                     "event": "cook_refused_combo"}})
             continue
 

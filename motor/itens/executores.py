@@ -509,7 +509,9 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
                 "memory": {
                     "content": f"Tentei comer {io.name_of(item_id)}, mas não era comida.",
                     "intensity": "small", "involved": [item_id],
-                    "valence": {item_id: memoria.NEGATIVA}, "event": "eat_refused"}})
+                    "valence": {item_id: memoria.NEGATIVA},
+                    "about": f"comer\x00nao_comestivel\x00{item_id}",
+                    "reincidencia": "tentei", "event": "eat_refused"}})
             continue
         saciedade = int(op.get("saciedade") or 0)
         # GUARDA DE COERÊNCIA (decisão do mantenedor, 2026-08-20): as quatro notas
@@ -534,7 +536,13 @@ def _apply_eat_ops(character_id: str, actor_folder: Path, resolution: dict,
                     "content": (f"Pensei em comer {io.name_of(item_id)}, mas vi que "
                                 "não ia resolver minha fome e desisti."),
                     "intensity": "small", "involved": [item_id],
-                    "valence": {item_id: memoria.NEGATIVA}, "event": "eat_refused"}})
+                    "valence": {item_id: memoria.NEGATIVA},
+                    # `about` DIFERENTE do `nao_comestivel`: os dois compartilham
+                    # o evento, e com a mesma chave os dois textos fundiriam numa
+                    # memória só — "não era comida" e "não ia matar a fome" são
+                    # coisas diferentes de se aprender sobre o item.
+                    "about": f"comer\x00nao_alimenta\x00{item_id}",
+                    "reincidencia": "pensei nisso", "event": "eat_refused"}})
             continue
         toxicidade = int(op.get("toxicidade") or 0)
         consumo = int(op.get("consumo") or 0)
@@ -632,7 +640,9 @@ def _apply_drink_ops(character_id: str, actor_folder: Path, resolution: dict,
                 "memory": {
                     "content": f"Tentei beber de {io.name_of(alvo_id)}, mas não era bebida.",
                     "intensity": "small", "involved": [alvo_id],
-                    "valence": {alvo_id: memoria.NEGATIVA}, "event": "drink_refused"}})
+                    "valence": {alvo_id: memoria.NEGATIVA},
+                    "about": f"beber\x00{alvo_id}", "reincidencia": "tentei",
+                    "event": "drink_refused"}})
             continue
         hidratacao = int(op.get("hidratacao") or 0)
         embriaguez = int(op.get("embriaguez") or 0)

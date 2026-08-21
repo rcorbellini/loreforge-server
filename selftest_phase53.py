@@ -174,8 +174,14 @@ res, _ = motor.registro.specs()["forge_weapon"].apply(
     "forge_weapon", {"peca": peca.name}, ctx)
 motor.apply_resolution(FERR, {"forja_ops": ctx.queue["forja_ops"]})
 bloco = motor.trabalho.ler(peca)
-check("US2: retomar creditou o tempo efetivamente trabalhado (~30s)",
-      29 <= (bloco.get("tempo_trabalhado_s") or 0) <= 32,
+# A janela era 29..32 e piscava: `tempo_trabalhado_s` conta até AGORA, e "agora"
+# inclui o `build_ctx` + `apply_resolution` que rodam entre o carimbo e a leitura.
+# Sob carga isso passa de 2s (medido: 32,622 — 1 falha em 6 execuções, e já
+# falhava assim ANTES de qualquer mudança desta rodada). O que o teste prova é
+# que se creditou o TRABALHADO e não o NECESSÁRIO (30 e não 300); a folga não
+# enfraquece isso.
+check("US2: retomar creditou o tempo efetivamente trabalhado (~30s, não os 300)",
+      29 <= (bloco.get("tempo_trabalhado_s") or 0) <= 45,
       str(bloco.get("tempo_trabalhado_s")))
 check("SC-002: RETOMAR não consulta o Árbitro nenhuma vez",
       _asks == [], f"{len(_asks)} chamadas")

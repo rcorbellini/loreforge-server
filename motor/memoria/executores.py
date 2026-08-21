@@ -210,6 +210,7 @@ from .primitivas import (  # noqa: F401
     get_active_memories,
     has_trauma_from,
     memory_about,
+    _remember_recurring,
     memory_involved,
     memory_kind,
     memory_ouvido_de,
@@ -256,14 +257,22 @@ def _apply_accuse(character_id: str, actor_folder: Path,
 
         eu = _char_name(character_id)
         alvo_nome = _char_name(alvo)
-        mem_id_acusador = _write_memory(
+        # UMA memória por (quem, quem, qual lembrança) — renovada, não duplicada.
+        # Acusar a MESMA pessoa da MESMA coisa de novo é o mesmo fato mais
+        # insistente. Medido: a Quinha acusou o Grum quatro vezes em 12 minutos
+        # (2026-08-16), e cada repetição escrevia nos dois E em toda a plateia —
+        # 39 memórias excedentes espalhadas por 13 personagens.
+        chave = f"{alvo}\x00{memoria_id}"
+        mem_id_acusador, _ = _remember_recurring(
             actor_folder, f"Acusei {alvo_nome}: {body.strip()}",
-            involved=[alvo], evento="accuse")
+            evento="accuse", about=f"acusei\x00{chave}", involved=[alvo],
+            intensity="medium", frag="o acusei disso")
         created.append({"target": character_id, "id": mem_id_acusador})
         alvo_folder = find_character_folder(alvo)
-        mem_id_acusado = _write_memory(
+        mem_id_acusado, _ = _remember_recurring(
             alvo_folder, f"{eu} me acusou: {body.strip()}",
-            involved=[character_id], evento="accused")
+            evento="accused", about=f"acusaram\x00{character_id}\x00{memoria_id}",
+            involved=[character_id], intensity="medium", frag="ele me acusou disso")
         created.append({"target": alvo, "id": mem_id_acusado})
         applied.append({"alvo": alvo, "memoria_id": memoria_id})
     return applied, rejected, created

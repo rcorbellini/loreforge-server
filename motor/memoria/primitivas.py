@@ -367,10 +367,33 @@ def _insistencia(vezes: int) -> str:
     return " Já insisti muitas vezes, e nunca rendeu nada."
 
 
+def _reincidencia(vezes: int, frag: str) -> str:
+    """A mesma escala de `_insistencia`, com o VERBO de quem chama.
+
+    `_insistencia` fala de PERGUNTA ("já insisti"), e por isso o mecanismo ficou
+    preso a um consumidor só: o `sanea_mundo.py` já registrava que "a mesma frase
+    serviria a 'Vi X acusar Y', onde 'insisti' é o verbo errado". O que muda entre
+    os casos é uma palavra, não a escala — então a palavra vem de fora e a escala
+    fica aqui, num lugar só. `frag` é a 1ª pessoa do passado ("tentei", "o acusei
+    disso", "os vi nisso").
+
+    Continua sem número (Princípio V): o personagem sabe que repetiu, não quantas.
+    """
+    if vezes <= 1:
+        return ""
+    if vezes == 2:
+        return f" E não foi a primeira vez que {frag}."
+    if vezes <= 5:
+        return f" Já {frag} algumas vezes, sempre no mesmo."
+    return f" Já {frag} muitas vezes, e nunca mudou nada."
+
+
 def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
                         about: str, involved: list[str],
-                        intensity: str = "small",
-                        summary: str = "") -> tuple[str | None, int]:
+                        intensity: str = "small", summary: str = "",
+                        frag: str = "",
+                        valence: dict[str, str] | None = None
+                        ) -> tuple[str | None, int]:
     """UMA memória por assunto que SE REPETE — renovada, nunca duplicada.
 
     Generaliza o desenho que só `_remember_route` tinha (spec 013, FR-008: "criar OU
@@ -412,13 +435,26 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
             # não deve perder vínculo (é o que costura o mundo).
             juntos = list(dict.fromkeys(list(fm.get("involved") or []) + list(involved)))
             fm["involved"] = juntos
-            corpo = texto + _insistencia(vezes)
-            fm["summary"] = (summary.strip() or _short_summary(corpo)) + _insistencia(vezes)
+            # A VALÊNCIA TAMBÉM SOBREVIVE À RENOVAÇÃO. Sem isto, transformar uma
+            # memória em recorrente APAGA o afeto — e o afeto é o que faz o
+            # personagem passar a desgostar do item que já o frustrou. A suíte
+            # pegou exatamente isso (fases 48 e 49). Cresce como `involved`: a
+            # mesma frustração com mais alvos não perde os anteriores.
+            if valence:
+                limpo = {k: v for k, v in valence.items()
+                         if v in ("positiva", "negativa")}
+                if limpo:
+                    fm["valence"] = {**(fm.get("valence") or {}), **limpo}
+            # `frag` vazio = o consumidor histórico (`unanswered`), cuja prosa
+            # de insistência é afinada para pergunta e está travada em teste.
+            cauda = _reincidencia(vezes, frag) if frag else _insistencia(vezes)
+            corpo = texto + cauda
+            fm["summary"] = (summary.strip() or _short_summary(corpo)) + cauda
             write_doc(path, fm, corpo)
             return fm.get("id"), vezes
     return _write_memory(character_folder, texto, intensity=intensity,
                          involved=involved, about=about, summary=summary,
-                         evento=evento), 1
+                         evento=evento, valence=valence), 1
 
 
 def _remember_route(character_folder: Path, route_id: str,
@@ -727,6 +763,30 @@ def _lower_intensity(tier: str) -> str:
     escada = {"giant": "large", "large": "medium", "medium": "small",
               "small": "small"}
     return escada.get(tier, "small")
+
+
+def remember_recurring(target: str, content: str, *, about: str, evento: str,
+                       involved: list[str] | None = None, intensity: str = "small",
+                       summary: str = "", frag: str = "",
+                       valence: dict[str, str] | None = None
+                       ) -> tuple[str | None, int]:
+    """SINK do fato que SE REPETE — irmão de `remember`, mesma fronteira.
+
+    `remember` grava um arquivo por vez que o fato acontece. Quando o fato é O
+    MESMO insistido (a recusa que se re-tenta, a acusação repetida), isso o
+    transforma no assunto mais importante da vida do personagem e vira combustível
+    do tick autônomo — ver `_remember_recurring` para o caso que criou a regra.
+
+    Aqui a repetição RENOVA e ADENSA, em uma memória só. Devolve (id, vezes)."""
+    try:
+        folder = find_character_folder(target)
+    except Exception:
+        return None, 0
+    if folder is None or not (folder / "character.md").exists():
+        return None, 0
+    return _remember_recurring(folder, content, evento=evento, about=about,
+                               involved=involved or [], intensity=intensity,
+                               summary=summary, frag=frag, valence=valence)
 
 
 def remember(target: str, content: str, *, kind: str = ACONTECIMENTO,
@@ -1296,6 +1356,12 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
             fatos.append({"envolvidos": [character_id, alvo],
                           "texto": f"Vi {ator} acusar {_char_name(alvo)}.",
                           "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                          # A plateia também não presencia N brigas quando é a
+                          # MESMA brigada de novo. `recorrente` é a chave; `about`
+                          # aqui já tem outro dono (o enquadramento de posse do
+                          # furto), então não dá para reusar aquele campo.
+                          "recorrente": f"acusacao\x00{character_id}\x00{alvo}",
+                          "reincidencia": "os vi nisso",
                           "evento": "witness_accuse"})
     return fatos
 
@@ -1383,9 +1449,16 @@ def _record_witness(character_id: str, actor_folder: Path,
                 val = {character_id: va} if va else None
             else:
                 val = {character_id: fato["val_ator"]} if fato["val_ator"] else None
-            mem_id = _write_memory(wfolder, texto, kind=ACONTECIMENTO,
-                                   intensity=intens, involved=inv, valence=val,
-                                   evento=fato.get("evento"), about=alvo_dono)
+            if fato.get("recorrente"):
+                # o mesmo ato repetido não vira N lembranças na plateia
+                mem_id, _ = _remember_recurring(
+                    wfolder, texto, evento=fato.get("evento"),
+                    about=fato["recorrente"], involved=inv, intensity=intens,
+                    frag=fato.get("reincidencia", ""))
+            else:
+                mem_id = _write_memory(wfolder, texto, kind=ACONTECIMENTO,
+                                       intensity=intens, involved=inv, valence=val,
+                                       evento=fato.get("evento"), about=alvo_dono)
             created.append({"target": wid, "id": mem_id, "event": "witness"})
     return created
 

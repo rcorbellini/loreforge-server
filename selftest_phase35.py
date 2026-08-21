@@ -623,6 +623,52 @@ check("53.4: outro assunto NÃO se funde com o primeiro",
       len([p for p in _mems.glob("*.md") if p.name not in _antes2]) == 1)
 
 
+# ---- 2026-08-20: a MESMA renovação para a RECUSA re-tentada ------------------
+# `_remember_recurring` teve UM consumidor só (`unanswered`) por semanas, e o
+# resto das recusas seguiu duplicando: a Elga acumulou 9 cópias de "tentei
+# cozinhar na Rua do Mercador, mas não tinha calor" e 7 de "tentei beber de Moeda
+# de Prata" (2026-08-20). É o mesmo laço do Tobias, e pelo mesmo motivo — a
+# memória da recusa é o que manda tentar de novo.
+#
+# O que destravou a generalização foi a PROSA: `_insistencia` fala de pergunta
+# ("já insisti"), e o `sanea_mundo.py` já registrava que ela não serve a "Vi X
+# acusar Y". Agora a escala mora num lugar (`_reincidencia`) e o VERBO vem de
+# quem chama.
+_antes_r = {p.name for p in _mems.glob("*.md")}
+for _ in range(4):
+    motor.memoria.remember_recurring(
+        _A52, "Tentei cozinhar em Rua do Mercador, mas não tinha calor nenhum.",
+        about="cozinhar\x00sem_calor\x00rua-do-mercador",
+        evento="cook_refused_fonte", involved=["rua-do-mercador"], frag="tentei",
+        valence={"rua-do-mercador": "negativa"})
+_novos_r = [p for p in _mems.glob("*.md") if p.name not in _antes_r]
+check("recusa repetida deixa UMA memória, não quatro", len(_novos_r) == 1,
+      f"{len(_novos_r)} arquivos")
+if _novos_r:
+    _fmr, _corpor = motor.read_doc(_novos_r[0])
+    check("a recusa repetida conta que se insistiu, com o VERBO certo",
+          "tentei" in _corpor.lower() and "insisti" not in _corpor.lower(), _corpor)
+    check("recusa repetida: sem número de sistema (Princípio V)",
+          not any(d in _corpor for d in "0123456789"), _corpor)
+    check("recusa repetida: a VALÊNCIA sobrevive à renovação (o afeto é o que "
+          "faz o personagem desgostar do que já o frustrou)",
+          (_fmr.get("valence") or {}).get("rua-do-mercador") == "negativa",
+          str(_fmr.get("valence")))
+    check("recusa repetida: renova o prazo e conta as vezes",
+          _fmr.get("state") == "active" and _fmr.get("vezes") == 4,
+          f"state={_fmr.get('state')} vezes={_fmr.get('vezes')}")
+
+# CHAVES DIFERENTES NÃO FUNDEM: `nao_comestivel` e `nao_alimenta` compartilham o
+# evento `eat_refused`, e com a mesma chave os dois textos virariam um só.
+_antes_k = {p.name for p in _mems.glob("*.md")}
+motor.memoria.remember_recurring(_A52, "Tentei comer X, mas não era comida.",
+    about="comer\x00nao_comestivel\x00x", evento="eat_refused", frag="tentei")
+motor.memoria.remember_recurring(_A52, "Pensei em comer X, mas não ia matar a fome.",
+    about="comer\x00nao_alimenta\x00x", evento="eat_refused", frag="pensei nisso")
+check("mesmo evento com `about` diferente NÃO funde (são coisas distintas)",
+      len([p for p in _mems.glob("*.md") if p.name not in _antes_k]) == 2)
+
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + ", ".join(FAILS))

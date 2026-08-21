@@ -59,6 +59,7 @@ from .primitivas import (  # noqa: F401
     _record_travel,
     _record_witness,
     _remember_recurring,
+    remember_recurring,
     _remember_route,
     _renew_memory,
     _roll_trace_d20,

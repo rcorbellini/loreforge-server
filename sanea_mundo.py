@@ -45,9 +45,15 @@ def _dono(path: Path) -> Path | None:
     return next((a for a in path.parents if (a / "character.md").exists()), None)
 
 
-def main(aplicar: bool) -> int:
+def main(aplicar: bool, somente_memorias: bool = False) -> int:
     # --- 1) intenções: todas fora ------------------------------------------- #
-    ints = sorted(motor.WORLD_DIR.rglob("intentions/*.md"))
+    # ZERAR INTENÇÃO É RITUAL PONTUAL, NÃO ROTINA. O pedido de 2026-08-14 valia
+    # para aquelas 24, que haviam nascido tortas com o ramo de criação morto. Com
+    # a bifurcação religada, intenção nova é conteúdo legítimo — e este script
+    # passou a ser rodado de novo (a fusão de memórias é útil sempre). Sem este
+    # recorte, quem quisesse limpar memória apagaria o compromisso de todo mundo
+    # junto, em silêncio.
+    ints = [] if somente_memorias else sorted(motor.WORLD_DIR.rglob("intentions/*.md"))
     por = collections.Counter()
     for p in ints:
         d = _dono(p)
@@ -103,4 +109,5 @@ def main(aplicar: bool) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main("--aplicar" in sys.argv))
+    raise SystemExit(main("--aplicar" in sys.argv,
+                          "--somente-memorias" in sys.argv))

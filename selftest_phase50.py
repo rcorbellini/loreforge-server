@@ -323,7 +323,7 @@ pendente_ruim = cooking_de(AZAR50)
 check("US3: banda RUIM ainda cria a panela — NUNCA falha total",
       pendente_ruim is not None, str(pendente_ruim))
 check("US3: a description candidata escolhida é a de banda RUIM, não uma genérica",
-      (pendente_ruim.get("prato") or {}).get("description")
+      (pendente_ruim.get("resultado") or {}).get("description")
       == "peixe queimado por fora, cru por dentro",
       str(pendente_ruim))
 mem_ruim = memorias_evento(AZAR50, "cook_ruim")
@@ -363,7 +363,7 @@ motor.apply_resolution(MED50, {"cozinha_ops": [
 motor._roll_d20 = force
 pendente_media = cooking_de(MED50)
 check("US3: banda MÉDIA escolhe a candidata 'média'",
-      (pendente_media.get("prato") or {}).get("description") == "peixe comum, bem cozido",
+      (pendente_media.get("resultado") or {}).get("description") == "peixe comum, bem cozido",
       str(pendente_media))
 mem_media = memorias_evento(MED50, "cook")
 check("US3: banda MÉDIA grava memória small neutra/positiva (event='cook')",

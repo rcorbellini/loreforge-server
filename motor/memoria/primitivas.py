@@ -1975,6 +1975,32 @@ def fatigue_label(fadiga: int, fatigue_max: int) -> str:
 # nunca um nível inteiro travado. Calibrável — não é balanceamento final
 # (research.md §4 da 029; R12 da 048); fica pra quando specs de consumo (`cura`,
 # `cozinha`, `forjar`) puderem testar contra jogo real.
+def _peso_das_repeticoes(fm: dict) -> float:
+    """Quanto uma memória RECORRENTE vale a mais por ter acontecido N vezes (053).
+
+    O DEFEITO QUE ISTO CONSERTA. `_remember_recurring` grava `vezes` e renova UMA
+    memória em vez de duplicar — o que salvou o contexto do turno (o Irmão Tobias
+    tinha 35 das 40 memórias vivas sendo a mesma recusa). Mas a proficiência lia só
+    `intensity`, então N ocorrências pesavam como uma: praticar quarenta vezes valia
+    o mesmo que praticar uma. Medido no mundo em 2026-08-24: cinco eventos de
+    `domain: social` que merjam somavam 590 ocorrências em 111 arquivos — **479
+    práticas invisíveis**.
+
+    O fator 0,25 não é número novo: é o MESMO que memória vencida já usa logo
+    abaixo. A repetição arquivada vale o que a lembrança vencida vale.
+
+    A intensidade NÃO escala com `vezes`, e isso é deliberado: escalar reconstruiria
+    o dano que criou o mecanismo de recorrência — o não-evento insistido virando o
+    fato mais importante da vida do personagem, e daí combustível do tick autônomo.
+    O que cresce é a PRÁTICA contabilizada, nunca a saliência.
+    """
+    try:
+        vezes = int(fm.get("vezes") or 1)
+    except (TypeError, ValueError):
+        return 1.0
+    return 1.0 + max(0, vezes - 1) * 0.25
+
+
 def _proficiency_factor(peso: float) -> float:
     if peso <= 0:
         return 0.0
@@ -2011,7 +2037,7 @@ def proficiencies_for(character_id: str) -> dict[str, float]:
             continue
         if fm.get("state") == "esquecida":
             continue
-        p = _MEMORY_WEIGHT.get(fm.get("intensity"), 2.0)
+        p = _MEMORY_WEIGHT.get(fm.get("intensity"), 2.0) * _peso_das_repeticoes(fm)
         if not _is_alive(fm):
             p *= 0.25
         pesos[dominio] += p

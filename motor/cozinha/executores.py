@@ -137,7 +137,9 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
             actor_folder.parent, corpo_panela,
             {"tool": "cook", "ator": character_id,
              "pronto_ts": time.time() + duracao_segundos(duracao_nota),
-             "prato": {"nome": nome, "description": descricao}},
+             # spec 053: `prato` era o nome específico de cook dentro de um bloco
+             # genérico. Virou `resultado`, que qualquer domínio de prazo usa.
+             "resultado": {"nome": nome, "description": descricao}},
             name=f"{nome} (no fogo)", weight_kg=round(peso_kg, 3) or 0.3)
 
         extremo_bom = banda == "otima"

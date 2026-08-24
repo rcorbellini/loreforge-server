@@ -16,7 +16,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import (cozinha, deslocamento, fisica, intencoes, io, memoria, registro,
+from .. import (deslocamento, fisica, intencoes, io, memoria, registro,
                 rotas, trabalho)
 from ..deslocamento import (
     lazy_evaluate,
@@ -221,6 +221,11 @@ def _walk_scene(location_folder: Path, para_em, incluir_barrado: bool = True) ->
             _no(child, fm, "character")
         elif (child / "object.md").exists():
             fm, _ = read_doc(child / "object.md")
+            # spec 053, ponto 2 de 3: entidade extinta some do alcance/visão. O
+            # arquivo continua no disco como vestígio datado (Princípio IV) — some
+            # da LEITURA, não do mundo. Irmão de `_is_alive` para memória.
+            if io.esta_extinto(fm):
+                continue
             _no(child, fm, "object")
         elif (child / "item.md").exists():
             fm, _ = read_doc(child / "item.md")
@@ -400,12 +405,12 @@ def get_context(character_id: str) -> dict:
     casos, quem estiver na mesma pasta coexiste e pode interagir (FR-021).
 
     Roda a avaliação preguiçosa antes de montar o bundle (FR-020, FR-022, FR-028).
-    Spec 048: a resolução preguiçosa de `cook` (prato pendente -> materializado
-    quando o tempo real se cumpre) roda no MESMO ponto, segunda família a usar
-    o padrão que `deslocamento.lazy_evaluate` já estabeleceu.
+    Spec 053: a segunda família virou GENÉRICA — `trabalho.resolver_vencidas`
+    resolve todo prazo vencido do mundo (prato, fonte de fogo, o que vier),
+    no mesmo ponto e no mesmo padrão que `deslocamento.lazy_evaluate` estabeleceu.
     """
     lazy_evaluate()
-    cozinha.lazy_evaluate()
+    trabalho.resolver_vencidas()
 
     char_folder = find_character_folder(character_id)
     place_folder = char_folder.parent
@@ -433,13 +438,23 @@ def get_context(character_id: str) -> dict:
             obj_fm, _ = read_doc(child / "object.md")
             if not _is_valid(obj_fm):
                 continue
+            if io.esta_extinto(obj_fm):   # spec 053, ponto 3 de 3: o bundle da Mente
+                continue
             # itens aninhados dentro deste object (ex.: loot de um baú) não entram em
             # items_present — ficam ocultos da lista ambiente até uma ação os liberar
             # (spec 002, Decisão 2). Mas o Árbitro precisa SABER que existem para poder
             # revelá-los/transferi-los — "contains" carrega essa referência interna.
+            obj_body = read_doc(child / "object.md")[1].strip()
             objects_present.append({
                 "id": obj_fm.get("id"),
                 "name": obj_fm.get("name"),
+                # spec 053: a PROSA do object desce à cena. Antes, A Mente via só o
+                # nome — e uma entidade cujo significado inteiro vive na descrição
+                # (uma fonte de fogo) seria muda para ela. As réguas do Árbitro já
+                # liam por `io.descricao_de`; quem não lia era quem interpreta.
+                # Custo medido no mundo: 12 objects, no máximo 4 numa location,
+                # prosa média de 243 bytes — ~240 tokens na pior cena.
+                "description": obj_body or None,
                 "interactions": obj_fm.get("interactions"),
                 # fechado esconde o conteúdo até do Árbitro-contexto (spec 005)
                 "contains": [] if is_closed(obj_fm) else _nested_item_refs(child),

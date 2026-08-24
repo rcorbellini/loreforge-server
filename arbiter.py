@@ -470,6 +470,12 @@ def _verb_candidates(idx: dict) -> dict:
         # onde a descrição vem, nunca como ela é julgada.
         "cook_fonte": sorted(idx["objects"])
                       + ([idx["place_id"]] if idx["place_id"] else []),
+        # spec 053 — acender. Reusa o filtro EXATO de `cook_ingredientes`: alcançável,
+        # não vestido, e não `em_trabalho`. Este último por outro motivo que na forja —
+        # lá é "metal batido não volta a ser barra", aqui é "a panela no fogo não é
+        # lenha". Mesma regra, e herdá-la é reuso; reescrevê-la seria duplicação.
+        "kindle_materiais": sorted(i for i, e in items.items()
+                                   if not worn(e) and not e.get("em_trabalho")),
         # spec 052 — forjar. `forge_materiais` reusa o filtro de `cook_ingredientes`
         # (mão, chão, dentro de contêiner aberto), MENOS as peças em processo: metal
         # batido não volta a ser barra. `forge_peca` é filtro ESTRUTURAL (o bloco de
@@ -895,6 +901,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     eaten_asked: set = set()  # item já tentado via eat neste turno (spec 046)
     drunk_asked: set = set()  # alvo (item ou object) já tentado via drink (spec 047)
     cooked_asked: set = set()  # (ingredientes, fonte_calor) já tentado via cook (spec 048)
+    kindled_asked: set = set()  # materiais já tentados via kindle_fire (spec 053)
     forged_asked: set = set()  # (tipo, materiais, fonte) / (tipo, peca) já tentado (spec 052)
     butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
@@ -1118,6 +1125,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         MEMORY_INTENSITIES=_MEMORY_INTENSITIES, INTENTION_STATUSES=_INTENTION_STATUSES,
         persuaded=persuaded, gave_asked=gave_asked, stole_asked=stole_asked,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
+        kindled_asked=kindled_asked,
         butchered_asked=butchered_asked, forged_asked=forged_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
@@ -1189,6 +1197,12 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
             _descrito[ent_id] = motor.descricao_de(ent_id) or {
                 "nome": motor.name_of(ent_id)}
         return _descrito[ent_id]
+
+    # spec 053: o que o ATOR CARREGA, entregue às réguas como contexto de LEITURA.
+    # Não é enum e não vira parâmetro: A Mente não escolhe o que o corpo já tem. A
+    # favorabilidade de acender lê isto para enxergar a pederneira sem que ela vire
+    # combustível — dois papéis distintos, dois blocos distintos.
+    ctx.em_maos = sorted(i for i, e in items.items() if e.get("porter") == actor)
 
     ctx.ask = ask if ask is not None else _sem_juizo
     # `prosa` (FR-018): o que o personagem está fazendo e dizendo. A régua lê COMO se

@@ -34,6 +34,28 @@ from .io import read_doc, write_doc
 
 BLOCO = "trabalho"
 
+# spec 053: os arquivos de entidade que podem carregar um bloco de trabalho. A ordem
+# importa só para o desempate teórico — uma pasta nunca tem os dois (io._scene_entities
+# usa `elif` desde sempre, e o validador passou a afirmar isso).
+_ARQUIVOS = ("item.md", "object.md")
+
+
+def _arquivo_de(pasta: Path) -> Path | None:
+    """O `.md` de entidade desta pasta, seja qual for o tipo (spec 053).
+
+    POR QUE ISTO PRECISOU EXISTIR. A primitiva nasceu na forja e na cozinha, onde
+    toda peça em processo era um ITEM — e por isso cinco funções abriam `item.md`
+    direto. A primeira coisa do projeto que se transforma no tempo SEM ser portátil
+    (uma fonte de fogo, spec 053) não cabia em nenhuma delas. Generalizar aqui é o
+    que o Princípio XII manda: o reuso mora na primitiva, e uma segunda primitiva
+    para o mesmo relógio seria a duplicação que tirar `trabalho` de dentro de
+    `forja/` já tinha evitado uma vez."""
+    for nome in _ARQUIVOS:
+        arquivo = pasta / nome
+        if arquivo.exists():
+            return arquivo
+    return None
+
 
 # --------------------------------------------------------------------------- #
 # Leitura
@@ -44,8 +66,8 @@ def ler(item_folder: Path) -> dict | None:
 
     É o RECONHECEDOR estrutural (spec 052, FR-011): a retomada sabe que o alvo é
     uma peça olhando o arquivo, sem gastar uma única chamada de LLM."""
-    arquivo = item_folder / "item.md"
-    if not arquivo.exists():
+    arquivo = _arquivo_de(item_folder)
+    if arquivo is None:
         return None
     fm, _ = read_doc(arquivo)
     bloco = fm.get(BLOCO)
@@ -107,7 +129,9 @@ def criar_peca(local_folder: Path, corpo: str, bloco: dict,
 
 
 def _grava_bloco(item_folder: Path, bloco: dict) -> None:
-    arquivo = item_folder / "item.md"
+    arquivo = _arquivo_de(item_folder)
+    if arquivo is None:
+        return
     fm, body = read_doc(arquivo)
     fm[BLOCO] = bloco
     write_doc(arquivo, fm, body)
@@ -153,7 +177,9 @@ def encerrar(item_folder: Path, fm_novo: dict, corpo: str) -> None:
     """A peça deixa de ser peça: o bloco SAI INTEIRO e o item vira o que foi feito.
 
     Item pronto não carrega estado de trabalho (invariante 2 do contrato)."""
-    arquivo = item_folder / "item.md"
+    arquivo = _arquivo_de(item_folder)
+    if arquivo is None:
+        return
     fm, _ = read_doc(arquivo)
     fm.update(fm_novo)
     fm.pop(BLOCO, None)
@@ -211,16 +237,80 @@ def is_busy(actor_folder: Path) -> bool:
     return peca_pendente_de(actor_folder, apenas_prazo=True) is not None
 
 
+def resolver_vencidas() -> None:
+    """A resolução PREGUIÇOSA de todo prazo do mundo (spec 053).
+
+    Antes morava em `cozinha._resolve_pratos`, e isso era uma bomba-relógio: aquela
+    função iterava `vencidas_por_prazo()` — que devolve TODAS as peças de prazo, não
+    só as de `cook` — e lia `bloco["prato"]`. No dia em que outro domínio usasse o
+    mesmo relógio, sua peça seria renomeada para "Prato", com o corpo "Um prato
+    preparado.", em silêncio. Trazer para cá é o Princípio XII: a resolução do prazo
+    é operação do dono do bloco, não de um domínio irmão.
+
+    Genérica de verdade — não conhece tool nenhuma. Lê `resultado`, transforma, e
+    marca extinto se pedirem. `prato` é aceito como sinônimo de leitura por uma
+    versão, para o mundo em voo não perder nada.
+    """
+    with io.WRITE_LOCK:
+        for pasta, bloco in vencidas_por_prazo():
+            r = bloco.get("resultado") or bloco.get("prato") or {}
+            nome = r.get("nome") or "Trabalho terminado"
+            encerrar(pasta, {"name": nome},
+                     r.get("description") or "Algo que ficou pronto.")
+            if r.get("extinto"):
+                io.marcar_extinto(pasta)
+            _notificar(bloco, pasta, r)
+
+
+# spec 053: a frase do desfecho é do MOTOR, fixa por tool — não do Árbitro. `cook` já
+# fazia assim ("o prato que estava no fogo ficou pronto"); só ganhou vizinhos.
+_FATO_POR_TOOL = {
+    "cook": "o prato que estava no fogo ficou pronto",
+    "kindle_fire": "o fogo que ardia aqui se apagou",
+}
+
+
+def _notificar(bloco: dict, pasta: Path, resultado: dict) -> None:
+    """Princípio X: o efeito precisa CHEGAR a quem viveu.
+
+    COM `ator` (cook, forja) avisa só ele — é dele o trabalho. SEM `ator` (a fonte de
+    fogo, que não ocupa ninguém) avisa QUEM ESTÁ NO LUGAR: sem isto o apagamento
+    seria absolutamente mudo, e o canal ficaria com dois dos três passos do
+    Princípio X. `status.action` é o canal de sempre — transitório, lido pela
+    narração do momento seguinte, sem tocar em memória."""
+    fato = resultado.get("fato") or _FATO_POR_TOOL.get(bloco.get("tool")) \
+        or "algo que estava em curso aqui terminou"
+    ator = bloco.get("ator")
+    if ator:
+        try:
+            alvos = [io.find_character_folder(ator)]
+        except Exception:
+            return
+    else:
+        chars, _, _ = io._scene_entities(pasta.parent)
+        alvos = list(chars.values())
+    for char_folder in alvos:
+        arquivo = char_folder / "character.md"
+        if not arquivo.exists():
+            continue
+        fm, body = read_doc(arquivo)
+        status = dict(fm.get("status") or {})
+        status["action"] = fato
+        fm["status"] = status
+        write_doc(arquivo, fm, body)
+
+
 def vencidas_por_prazo() -> list[tuple[Path, dict]]:
     """Peças de PRAZO cujo tempo se cumpriu — a varredura da resolução preguiçosa
     (`cozinha.lazy_evaluate`). Só PRAZO: ESFORÇO conclui num ato, nunca na trilha
     de leitura do mundo (spec 052, FR-021/FR-049)."""
     out = []
-    for arquivo in io.WORLD_DIR.rglob("item.md"):
-        fm, _ = read_doc(arquivo)
-        bloco = fm.get(BLOCO)
-        if not isinstance(bloco, dict) or not por_prazo(bloco):
-            continue
-        if concluido(bloco):
-            out.append((arquivo.parent, bloco))
+    for nome in _ARQUIVOS:          # spec 053: object também tem prazo (a fonte de fogo)
+        for arquivo in io.WORLD_DIR.rglob(nome):
+            fm, _ = read_doc(arquivo)
+            bloco = fm.get(BLOCO)
+            if not isinstance(bloco, dict) or not por_prazo(bloco):
+                continue
+            if concluido(bloco):
+                out.append((arquivo.parent, bloco))
     return out

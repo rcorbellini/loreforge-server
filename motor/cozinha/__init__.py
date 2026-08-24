@@ -4,7 +4,6 @@ Reexporta a API por NOME; importar executores registra o @registro.handler.
 """
 from .primitivas import (  # noqa: F401
     duracao_segundos,
-    lazy_evaluate,
     roll_cook_check,
 )
 from .executores import (  # noqa: F401

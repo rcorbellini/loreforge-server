@@ -234,6 +234,7 @@ check("proficiencia: personagem sem nenhuma memória tem todos os domínios em n
           "cura": 0,  # spec 032: 1º domínio de fase 2
           "cozinha": 0,  # spec 048: 2º domínio de fase 2
           "acougue": 0,  # spec 050: 3º domínio de fase 2
+          "fogo": 0,  # spec 053: 6º domínio de fase 2
           "ferraria": 0,  # spec 052: 4º domínio de fase 2 (forjar arma)
           "armaria": 0,   # spec 052: 5º — DOIS de uma vez, e por isso separados:
                           # praticar armadura não faz ninguém melhor com espada
@@ -268,10 +269,11 @@ check("proficiencia: determinismo — duas chamadas seguidas sem mutação são 
       motor.proficiencies_for(PROF) == motor.proficiencies_for(PROF))
 
 check("proficiencia: as chaves de domínio estão sempre presentes "
-     "(5 de fase 1 + cura/032 + cozinha/048 + acougue/050 + ferraria e armaria/052)",
+     "(5 de fase 1 + cura/032 + cozinha/048 + acougue/050 + ferraria e armaria/052 "
+     "+ fogo/053)",
       set(motor.proficiencies_for(PROF).keys()) ==
       {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-       "acougue", "ferraria", "armaria"})
+       "acougue", "ferraria", "armaria", "fogo"})
 
 # achado da validação manual (T017, quickstart contra servidor real): um
 # personagem INEXISTENTE devolvia 200 com zeros, silenciosamente, porque

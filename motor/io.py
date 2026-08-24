@@ -62,6 +62,37 @@ def _is_valid(fm: dict) -> bool:
     return validator.validate(fm) == []
 
 
+# spec 053 — A ENTIDADE EXTINTA. Irmã exata de `_is_alive` para memória: a coisa que
+# deixou de existir no jogo continua no disco como VESTÍGIO, e só some das leituras.
+#
+# Por que não deletar. O Princípio IV proíbe deletar arquivo durante o jogo, e a
+# exceção da spec 046 é escopada a "só ITEM consumido por completo" — reforçando que
+# "qualquer outra classe de entidade continua SEM exceção nenhuma". Um object é outra
+# classe. Marcar+filtrar honra a letra, e ainda guarda a DATA: uma capacidade futura
+# de investigar pode achar as cinzas e saber há quanto tempo alguém acampou ali.
+_EXTINTO = "extinto_em"
+
+
+def esta_extinto(fm: dict) -> bool:
+    """A entidade já deixou de existir no jogo? (o arquivo continua no disco)"""
+    state = fm.get("state")
+    return isinstance(state, dict) and state.get(_EXTINTO) is not None
+
+
+def marcar_extinto(pasta: Path) -> None:
+    """Carimba o instante da extinção. NUNCA remove o arquivo (Princípio IV)."""
+    for nome in ("object.md", "item.md"):
+        arquivo = pasta / nome
+        if not arquivo.exists():
+            continue
+        fm, body = read_doc(arquivo)
+        state = dict(fm.get("state") or {})
+        state[_EXTINTO] = int(time.time())
+        fm["state"] = state
+        write_doc(arquivo, fm, body)
+        return
+
+
 def find_character_folder(character_id: str) -> Path:
     """A pasta do personagem — e ela tem de ser ÚNICA.
 
@@ -371,6 +402,12 @@ _WHY_BY_REGRA = {
     "ja_esquartejado": "esse corpo já foi todo revirado; não sobrou nada a tirar",
     "sem_carne": "aquilo não é feito de carne",
     "nada_a_aproveitar": "não sobrou nada aproveitável ali",
+    # spec 053 — acender fogo. (`material_inacessivel` é reusado da forja: mesma
+    # recusa, mesma frase — não vale um segundo texto para o mesmo fato.)
+    "sem_combustivel": "não há material nenhum para acender",
+    "nao_queima": "isso não é coisa que pegue fogo",
+    "nao_pegou": "a chama não pegou desta vez — o material continua aí",
+    "ocupado_para_acender": "já está ocupado com outra coisa",
 }
 
 
@@ -449,11 +486,15 @@ def _scene_entities(location_folder: Path) -> tuple[dict, dict, dict]:
                 characters[fm["id"]] = child
         elif (child / "object.md").exists():
             fm, _ = read_doc(child / "object.md")
-            if fm.get("id"):
+            # spec 053: extinto continua no disco como vestígio, mas sai da cena — e
+            # daqui saem TODOS os enums do Árbitro (cook_fonte, forge_fonte, shove_to,
+            # stow_in, open/close, examinar, drink) e o `_entries` de itens/executores.
+            # É o choke-point: um dos três pontos de filtro, e o que cobre mais gente.
+            if fm.get("id") and not esta_extinto(fm):
                 objects[fm["id"]] = child
     items = {}
     for path in _iter_within_location(location_folder, "item.md"):
         fm, _ = read_doc(path)
-        if fm.get("id"):
+        if fm.get("id") and not esta_extinto(fm):
             items[fm["id"]] = path.parent
     return characters, objects, items

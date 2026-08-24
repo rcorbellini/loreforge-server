@@ -12,6 +12,8 @@ from __future__ import annotations
 # Tipos de entidade do MVP (spec 001, FR-002; object: spec 002, RF-06 v1.1). island/region/
 # event: fase posterior. rastro: spec 034 (marca física de deslocamento) —
 # mesma classe de extensão que object/intention já estabeleceram.
+TRABALHO_BLOCO = "trabalho"
+
 MVP_TYPES = {"location", "character", "route", "memory", "item", "object", "intention",
              "rastro"}
 
@@ -36,7 +38,7 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # Substituem a reserva de `oficio` que a doc anunciava: manter as três seria uma
 # opção morta no manifesto. Praticar um NÃO faz o outro progredir (FR-033).
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-          "acougue", "ferraria", "armaria", "nenhuma"}
+          "acougue", "ferraria", "armaria", "fogo", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.
@@ -399,6 +401,16 @@ def _validate_object(fm: dict) -> list[str]:
         errors.append("object: 'state' deve ser um mapa.")
     errors.extend(_validate_interactions(fm))
     errors.extend(_validate_locks(fm))
+    # spec 053: object passou a poder carregar um bloco `trabalho` (a fonte de fogo
+    # tem prazo). Antes disto, um object com bloco malformado passava SEM ERRO
+    # NENHUM — toda a validação vivia em `_validate_item_trabalho`, que só rodava
+    # para item. O buraco existia desde a 052; foi fechado aqui.
+    errors.extend(_validate_trabalho(fm, "object"))
+    if isinstance(state, dict):
+        extinto = state.get("extinto_em")
+        if extinto is not None and (isinstance(extinto, bool)
+                                    or not isinstance(extinto, (int, float))):
+            errors.append("object: 'state.extinto_em' deve ser numérico (epoch).")
     return errors
 
 
@@ -411,6 +423,53 @@ def _validate_item(fm: dict) -> list[str]:
     errors.extend(_validate_item_physics(fm))
     errors.extend(_validate_locks(fm))
     errors.extend(_validate_item_trabalho(fm))
+    return errors
+
+
+def _validate_trabalho(fm: dict, kind: str) -> list[str]:
+    """O bloco `trabalho` — comum a item e object desde a spec 053.
+
+    Extraído de `_validate_item_trabalho` quando a fonte de fogo passou a usar o
+    mesmo relógio de prazo sendo um `object`. O que sobrou lá é só o que é DE ITEM
+    (banda, teto de material, e a proibição de arma/armadura em peça em processo).
+    """
+    errors: list[str] = []
+    bloco = fm.get(TRABALHO_BLOCO)
+    if bloco is None:
+        return errors
+    if not isinstance(bloco, dict):
+        errors.append(f"{kind}: 'trabalho' deve ser um mapa.")
+        return errors
+    if not isinstance(bloco.get("tool"), str) or not bloco.get("tool"):
+        errors.append(f"{kind}: 'trabalho.tool' ausente (qual capacidade criou a peça).")
+
+    por_prazo = "pronto_ts" in bloco
+    por_esforco = "tempo_necessario_s" in bloco
+    if por_prazo == por_esforco:
+        # O CAMPO PRESENTE é o que diz qual relógio vale — sem enum de modo e sem
+        # máquina de estados. Ter os dois (ou nenhum) é peça sem relógio nenhum.
+        errors.append(f"{kind}: 'trabalho' precisa de EXATAMENTE um relógio — "
+                      "'pronto_ts' (prazo) ou 'tempo_necessario_s' (esforço).")
+    for campo in ("pronto_ts", "tempo_necessario_s", "tempo_trabalhado_s",
+                  "trabalhando_desde"):
+        valor = bloco.get(campo)
+        if valor is not None and (isinstance(valor, bool)
+                                  or not isinstance(valor, (int, float))):
+            errors.append(f"{kind}: 'trabalho.{campo}' deve ser numérico (segundos).")
+
+    # spec 053: `prato` virou `resultado` — genérico, com uma marca opcional. A
+    # transformação acontece nos dois casos; `extinto` decide só se a coisa continua
+    # VISÍVEL, não se continua existindo.
+    resultado = bloco.get("resultado")
+    if resultado is not None:
+        if not isinstance(resultado, dict):
+            errors.append(f"{kind}: 'trabalho.resultado' deve ser um mapa.")
+        else:
+            if not isinstance(resultado.get("nome"), str) or not resultado.get("nome"):
+                errors.append(f"{kind}: 'trabalho.resultado.nome' ausente.")
+            extinto = resultado.get("extinto")
+            if extinto is not None and not isinstance(extinto, bool):
+                errors.append(f"{kind}: 'trabalho.resultado.extinto' deve ser booleano.")
     return errors
 
 
@@ -432,28 +491,10 @@ def _validate_item_trabalho(fm: dict) -> list[str]:
         errors.append(f"item: 'rarity' inválida: '{rarity}' "
                       f"(permitidas: {', '.join(RARITIES)}).")
 
-    bloco = fm.get("trabalho")
-    if bloco is None:
-        return errors
+    errors.extend(_validate_trabalho(fm, "item"))   # spec 053: a parte comum
+    bloco = fm.get(TRABALHO_BLOCO)
     if not isinstance(bloco, dict):
-        errors.append("item: 'trabalho' deve ser um mapa.")
         return errors
-    if not isinstance(bloco.get("tool"), str) or not bloco.get("tool"):
-        errors.append("item: 'trabalho.tool' ausente (qual capacidade criou a peça).")
-
-    por_prazo = "pronto_ts" in bloco
-    por_esforco = "tempo_necessario_s" in bloco
-    if por_prazo == por_esforco:
-        # O CAMPO PRESENTE é o que diz qual relógio vale — sem enum de modo e sem
-        # máquina de estados. Ter os dois (ou nenhum) é peça sem relógio nenhum.
-        errors.append("item: 'trabalho' precisa de EXATAMENTE um relógio — "
-                      "'pronto_ts' (prazo) ou 'tempo_necessario_s' (esforço).")
-    for campo in ("pronto_ts", "tempo_necessario_s", "tempo_trabalhado_s",
-                  "trabalhando_desde"):
-        valor = bloco.get(campo)
-        if valor is not None and (isinstance(valor, bool)
-                                  or not isinstance(valor, (int, float))):
-            errors.append(f"item: 'trabalho.{campo}' deve ser numérico (segundos).")
     for campo in ("banda", "teto_material"):
         valor = bloco.get(campo)
         if valor is not None and valor not in RARITIES:

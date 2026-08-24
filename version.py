@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.18.0"
+__version__ = "2.19.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -61,6 +61,31 @@ __version__ = "2.18.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.19.0": "spec 053 — ACENDER FOGO, e a primeira coisa do projeto que SE TRANSFORMA "
+              "NO TEMPO SEM SER PORTÁTIL. `kindle_fire` cria uma fonte de fogo como "
+              "`object` cujo significado inteiro vive na PROSA: nenhum campo diz que "
+              "aquilo é fogo, esquenta 7 ou serve para forja — `cook` e `forge_*` leem a "
+              "MESMA descrição e chegam às próprias conclusões, e a integração saiu de "
+              "graça porque os enums de fonte de calor já são `objects + place`. Três "
+              "réguas, não as quatro de `cook` (acender tem um universo só); o meio de "
+              "ignição NÃO é gate, porque fogo por atrito existe — a falta de pederneira "
+              "é difícil, não impossível, e entra na favorabilidade, que lê o que o ator "
+              "carrega num bloco `em_maos` separado dos materiais. Falha PRESERVA o "
+              "material (diverge de `cook`, onde os ingredientes somem no ato porque "
+              "sempre nasce um prato). Domínio de proficiência novo (`fogo`, DEX). "
+              "TRÊS mudanças em código compartilhado, cada uma consertando um defeito "
+              "que já existia: (a) `trabalho` ficou CEGO AO TIPO e `prato` virou "
+              "`resultado` — e `cozinha._resolve_pratos` foi removida porque iterava "
+              "TODAS as peças de prazo do mundo lendo `bloco[\"prato\"]`, então a "
+              "primeira peça de outro domínio a usar o mesmo relógio viraria \"Prato\" "
+              "em silêncio; (b) `description` de object passou a descer no bundle — sem "
+              "isso A Mente via só o NOME de uma entidade cujo sentido é a prosa; (c) "
+              "`proficiencies_for` passou a contar `vezes`, corrigindo 479 práticas de "
+              "`social` que o merge de memória recorrente tornara invisíveis (64 pares "
+              "personagem×domínio subiram, retroativo, nenhum acima do teto). O fogo se "
+              "apaga por prazo e NÃO é deletado: vira cinzas, ganha `state.extinto_em` e "
+              "sai de cena por filtro em três pontos — Princípio IV inteiro, e o "
+              "vestígio fica datado para uma investigação futura achar.",
     "2.18.0": "spec 052 — FORJAR EQUIPAMENTO, e o primeiro ato do projeto que ATRAVESSA "
               "O TEMPO E PODE SER RETOMADO. Duas tools novas (`forge_weapon`, "
               "`forge_armor`) com DUAS declarações e UM corpo — desvio declarado do "

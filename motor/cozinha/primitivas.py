@@ -1,18 +1,15 @@
 """O Motor / cozinha — PRIMITIVAS (item 31 §3: DDD por domínio; spec 048).
 
-Funções puras (validação, rolagem, conversão de tempo) + a resolução PREGUIÇOSA
-do prato (spec 048, R7 — molde EXATO de `deslocamento.primitivas.lazy_evaluate`/
-`_resolve_arrivals`: o tempo "passa" na consulta ao mundo, sem processo de
-fundo, Princípio VII). Sem turno/LLM aqui. Ver executores.py.
+Funções puras: validação, rolagem e conversão de tempo. A resolução preguiçosa do
+prato NÃO mora mais aqui — desde a spec 053 ela é `trabalho.resolver_vencidas`,
+genérica para todo domínio de prazo. Sem turno/LLM aqui. Ver executores.py.
 """
 from __future__ import annotations
 
 import time
 from pathlib import Path
 
-from .. import fisica, io, rolagem, trabalho
-from ..io import read_doc, write_doc
-from ..rotas import _location_folder_by_id
+from .. import rolagem
 
 
 def roll_cook_check(actor_fm: dict, nota: int, nivel_cozinha: float = 0.0,
@@ -73,48 +70,9 @@ def duracao_segundos(nota: int) -> int:
     return 60 + 60 * max(0, min(10, int(nota)))
 
 
-def lazy_evaluate() -> None:
-    """Resolve pratos pendentes na consulta ao mundo (spec 048).
-
-    Sem processo de fundo: o tempo "passa" quando o mundo é consultado
-    (Princípio VII), exatamente como `deslocamento.lazy_evaluate` já faz para
-    chegada de rota — esta é a SEGUNDA família de resolução preguiçosa do
-    projeto, no mesmo molde.
-    """
-    with io.WRITE_LOCK:
-        _resolve_pratos()
-
-
-def _resolve_pratos() -> None:
-    """A panela cujo tempo se cumpriu VIRA o prato (spec 048, migrada na 052).
-
-    A resolução é a mesma de sempre — o tempo "passa" quando o mundo é consultado,
-    sem processo de fundo (Princípio VII), no molde de `_resolve_arrivals`. O que
-    mudou é a FONTE: antes esta função varria `character.md` atrás de um campo
-    `status.cozinhando`; agora varre as PEÇAS EM PROCESSO com relógio de PRAZO. O
-    prato não é mais criado do nada num lugar guardado: **a própria panela vira o
-    prato, onde quer que ela esteja** — se alguém a tirou do fogo e levou embora, é
-    lá que a comida fica pronta.
-
-    Só PRAZO passa por aqui. Forjar conta ESFORÇO e conclui num ATO: decidir na
-    trilha de LEITURA do mundo é justamente o que a avaliação preguiçosa evita
-    fazer com decisões (spec 052, FR-049).
-    """
-    for pasta, bloco in trabalho.vencidas_por_prazo():
-        prato = bloco.get("prato") or {}
-        nome = prato.get("nome") or "Prato"
-        trabalho.encerrar(pasta, {"name": nome},
-                          prato.get("description") or "Um prato preparado.")
-        # Princípio X: o efeito precisa CHEGAR a quem viveu. `status.action` é o
-        # canal de sempre — a narração do momento seguinte relata o que aconteceu.
-        ator = bloco.get("ator")
-        try:
-            char_folder = io.find_character_folder(ator) if ator else None
-        except Exception:
-            char_folder = None
-        if char_folder is not None:
-            fm, body = read_doc(char_folder / "character.md")
-            status = dict(fm.get("status") or {})
-            status["action"] = "o prato que estava no fogo ficou pronto"
-            fm["status"] = status
-            write_doc(char_folder / "character.md", fm, body)
+# spec 053: `lazy_evaluate`/`_resolve_pratos` foram REMOVIDAS daqui e viraram
+# `trabalho.resolver_vencidas`, genérica. Elas iteravam TODAS as peças de prazo do
+# mundo (não só as de `cook`) e liam `bloco["prato"]` — então a primeira peça de
+# outro domínio a usar o mesmo relógio seria renomeada para "Prato" em silêncio.
+# A resolução do prazo é operação do dono do bloco (Princípio XII), não de um
+# domínio irmão.

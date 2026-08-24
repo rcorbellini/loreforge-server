@@ -526,6 +526,31 @@ def fate_twists(rolls: list) -> list[dict]:
                         "critico": r.get("critico"),
                         "rolagem": r.get("rolagem")})
             continue
+        # spec 053 — ACENDER. Sem este ramo, uma virada de ignição caía no genérico
+        # de FORÇA e narrava "'None' não devia ceder a esses braços": o mesmo tipo de
+        # ruído que a 052/T017 tirou da forja, com um `None` literal no texto. A
+        # ignição é BINÁRIA, então não há banda a narrar — só o improvável.
+        if r.get("tipo") == "fogo":
+            if not (r.get("virada") or r.get("critico")):
+                continue
+            sucesso = r.get("resultado") == "sucesso"
+            # `critico` aqui é BOOLEANO (padrão de `cook`/`roll_kindle_check`), não a
+            # string "sucesso"/"falha" que `combate` usa — o desfecho vem de
+            # `resultado`. Confundir os dois faz o crítico cair no ramo comum, calado.
+            if r.get("critico") and sucesso:
+                frase = "a primeira faísca bastou"
+            elif r.get("critico"):
+                frase = "a mão escapou no pior momento, e a faísca morreu"
+            elif r.get("virada"):
+                frase = ("aquilo não devia pegar — e pegou" if sucesso else
+                         "era fogo certo — e a chama não veio")
+            else:
+                frase = ("a chama pegou" if sucesso else "a chama não pegou")
+            out.append({"o_que": frase, "personagem": r.get("personagem"),
+                        "resultado": r.get("resultado"),
+                        "critico": r.get("critico"),
+                        "rolagem": r.get("rolagem")})
+            continue
         if r.get("tipo") == "combate":
             if not (r.get("virada") or r.get("critico")):
                 continue

@@ -186,8 +186,14 @@ def build_ask(arb: dict, falhas: list | None = None):
             if falhas is not None:
                 falhas.append(str(exc))
             return ""
-        devlog.log("JUÍZO (nota pedida pela capacidade)",
-                   {"resposta": (raw or "")[:80]})
+        # spec 053: ÍNTEGRA, não recorte. Antes registrava 80 caracteres da resposta
+        # e NADA do prompt — e o docstring do devlog prometia "system + user". Sem o
+        # que foi ENVIADO não há como reproduzir um julgamento errado: quando o
+        # Árbitro deu combustibilidade 9 a uma pederneira (2026-08-24), a causa
+        # (o mesmo objeto em `materiais` e em `em_maos`) só apareceu por dedução.
+        devlog.log("JUÍZO — ENVIADO (system)", system)
+        devlog.log("JUÍZO — ENVIADO (user)", user)
+        devlog.log("JUÍZO — RESPOSTA (íntegra)", raw or "")
         return raw
 
     return ask
@@ -898,6 +904,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) if length else b"{}")
         except json.JSONDecodeError:
             return self._send_json({"error": "JSON inválido"}, 400)
+        devlog.requisicao("POST", "/api/mcp", payload, self.server.server_address[1])
 
         if not isinstance(payload, (dict, list)):
             return self._send_json(
@@ -942,6 +949,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) if length else b"{}")
         except json.JSONDecodeError:
             return self._send_json({"ok": False}, 204)
+        devlog.requisicao("POST", "/api/registro", payload, self.server.server_address[1])
         if isinstance(payload, dict):
             registro_turno.anotar_corpo(payload)
         self._send_json({"ok": True})
@@ -959,6 +967,8 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) if length else b"{}")
         except json.JSONDecodeError:
             return self._send_json({"error": "JSON inválido"}, 400)
+        devlog.requisicao("POST", f"/api/tools/{nome}", payload,
+                          self.server.server_address[1])
         if not isinstance(payload, dict):
             return self._send_json({"error": "payload precisa ser um objeto"}, 400)
         out = self.resolver_proposta(nome, payload)

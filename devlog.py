@@ -29,6 +29,30 @@ LOG_FILE = os.environ.get("LOREFORGE_LOG_FILE") or str(
     Path(__file__).resolve().parent / "devlog.log")
 
 
+def requisicao(metodo: str, caminho: str, corpo, porta: int = 8777) -> None:
+    """Registra um POST **por inteiro, reproduzível como curl** (spec 053).
+
+    POR QUE ISTO PRECISOU EXISTIR. O devlog prometia, no próprio docstring, registrar
+    "o que foi enviado à LLM do Árbitro (system + user)" — e registrava 80 caracteres
+    da RESPOSTA, sem o prompt. Quando um julgamento saiu errado no jogo (um sílex
+    julgado como combustível excelente, 2026-08-24), não havia como saber o que o
+    Árbitro tinha recebido: foi preciso adivinhar a causa e reproduzi-la à mão.
+
+    Um log que não permite REPRODUZIR o caso é log de conforto, não de diagnóstico.
+    A entrada sai como um `curl` colável: o caso volta a rodar sem reconstruir nada.
+    """
+    if not ENABLED:
+        return
+    try:
+        corpo_txt = json.dumps(corpo, ensure_ascii=False)
+    except Exception:
+        corpo_txt = repr(corpo)
+    curl = (f"curl -s -X {metodo} http://localhost:{porta}{caminho} \\\n"
+            f"  -H 'Content-Type: application/json' \\\n"
+            f"  -d '{corpo_txt}'")
+    log(f"REQUISIÇÃO {metodo} {caminho} — reproduzível", curl)
+
+
 def log(label: str, content=None) -> None:
     if not ENABLED:
         return

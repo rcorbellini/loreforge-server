@@ -24,6 +24,33 @@ from ..io import _fail, _rejection, name_of, read_doc
 from .primitivas import duracao_fogo_s, roll_kindle_check
 
 
+def _lista(nomes: list) -> str:
+    """"a, b e c" — nomes legíveis, nunca ids (spec 053).
+
+    Um personagem não lembra de "gravetos-da-encosta": ele lembra do feixe de
+    gravetos. Mesmo motivo de `io.name_of` existir."""
+    nomes = [n for n in (nomes or []) if n]
+    if not nomes:
+        return "nada"
+    if len(nomes) == 1:
+        return nomes[0]
+    return ", ".join(nomes[:-1]) + f" e {nomes[-1]}"
+
+
+def _tempero(roll_info: dict, *, pegou: bool) -> str:
+    """O QUANTO foi notável — do dado, sem NENHUM número (Princípio V).
+
+    A memória é o registro que o jogador lê para acompanhar a vida do personagem.
+    "Acendi Chama de Pinho" não conta história nenhuma: não diz com o quê, nem onde,
+    nem se foi fácil. O dado já sabe se foi notável; é só não jogar fora."""
+    info = roll_info or {}
+    if info.get("critico"):
+        return " — a primeira faísca bastou" if pegou else " — as mãos falharam feio"
+    if info.get("virada"):
+        return " — não parecia que ia pegar" if pegou else " — e parecia tão fácil"
+    return ""
+
+
 def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
                     rolls: list | None = None) -> tuple[list, list]:
     """Acender fogo (spec 053). O gate de admissão (combustibilidade) rejeita — COM
@@ -42,6 +69,15 @@ def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
         rejected.append(_fail("descansando"))
         return applied, rejected
     _, _, present_items = io._scene_entities(actor_folder.parent)  # cena fresca (025)
+    # ONDE — a memória sem lugar é meia memória: o jogador precisa poder ler a vida
+    # do personagem e saber onde cada coisa aconteceu.
+    place_id = place_nome = None
+    for fname in ("location.md", "route.md"):
+        arquivo = actor_folder.parent / fname
+        if arquivo.exists():
+            place_fm, _ = read_doc(arquivo)
+            place_id, place_nome = place_fm.get("id"), place_fm.get("name")
+            break
 
     for op in resolution.get("fogo_ops") or []:
         materiais = list(op.get("materiais") or [])
@@ -66,8 +102,11 @@ def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
                 **base, "regra": "nao_queima", "valores": {"materiais": materiais},
                 "why": io._WHY_BY_REGRA["nao_queima"],
                 "memory": {
-                    "content": "Tentei acender aquilo, mas não era coisa que queime.",
-                    "intensity": "small", "involved": list(materiais),
+                    "content": f"Tentei acender {_lista([name_of(m) for m in materiais])}"
+                               + (f", em {place_nome}" if place_nome else "")
+                               + ", mas não era coisa que queime.",
+                    "intensity": "small",
+                    "involved": list(materiais) + ([place_id] if place_id else []),
                     "valence": {m: memoria.NEGATIVA for m in materiais},
                     # UMA memória por MOTIVO, sem o id do alvo — molde exato de
                     # `cozinhar\x00nao_cozinhavel`. Tentar pedra e depois metal é o
@@ -90,8 +129,13 @@ def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
                 "why": io._WHY_BY_REGRA["nao_pegou"],
                 "virada": bool(roll_info.get("virada")),
                 "memory": {
-                    "content": "Tentei acender o fogo e a chama não pegou.",
-                    "intensity": "small", "involved": list(materiais), "valence": None,
+                    "content": f"Tentei acender fogo com {_lista([name_of(m) for m in materiais])}"
+                               + (f", em {place_nome}" if place_nome else "")
+                               + ", e a chama não pegou"
+                               + _tempero(roll_info, pegou=False) + ".",
+                    "intensity": "small",
+                    "involved": list(materiais) + ([place_id] if place_id else []),
+                    "valence": None,
                     "about": "acender\x00nao_pegou", "reincidencia": "tentei",
                     "event": "kindle_falha"}})
             continue
@@ -101,6 +145,8 @@ def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
         nome_final = (op.get("nome_final") or "").strip() or "Cinzas"
         descricao_final = (op.get("descricao_final") or "").strip() or "Cinzas frias."
 
+        # os NOMES antes do consumo — depois de `remove_entity` não há de onde tirar
+        nomes_materiais = [name_of(mid) for mid, _ in material_folders]
         for _mid, folder in material_folders:
             io.remove_entity(folder)  # consumo total — exceção escopada do Princípio IV
 
@@ -124,8 +170,13 @@ def _apply_fogo_ops(character_id: str, actor_folder: Path, resolution: dict,
         applied.append({
             "materiais": materiais, "fogo": fogo_id,
             "virada": bool(roll_info.get("virada")),
-            "memory": {"content": f"Acendi {nome}.", "intensity": "small",
-                       "involved": [fogo_id], "valence": None,
+            "memory": {
+                "content": f"Acendi {nome} com {_lista(nomes_materiais)}"
+                           + (f", em {place_nome}" if place_nome else "")
+                           + _tempero(roll_info, pegou=True) + ".",
+                "intensity": "small",
+                "involved": [fogo_id] + ([place_id] if place_id else []),
+                "valence": None,
                        # SEM `about`: cada fogueira é fato PRÓPRIO. Com `about`, todas
                        # as fogueiras da vida virariam um arquivo de peso fixo e a
                        # proficiência congelaria — é o que faz a prática ensinar.

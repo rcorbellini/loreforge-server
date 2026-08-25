@@ -105,6 +105,12 @@ Você vai julgar UMA tentativa de acender fogo com materiais que a pessoa juntou
 Leia as descrições REAIS fornecidas com cuidado antes de responder — nunca invente
 detalhes que não estejam nelas.
 
+O QUE ESTÁ EM MÃOS É FERRAMENTA, NÃO COMBUSTÍVEL. O bloco `em_maos` existe só
+para você saber COM QUE a pessoa faria faísca — pederneira, isqueiro, uma tocha.
+Nada que esteja em `em_maos` deve ser contado como material que queima, e a
+presença de uma ferramenta ali NUNCA melhora a combustibilidade da carga: ela só
+importa para a FAVORABILIDADE.
+
 {REGUA_COMBUSTIBILIDADE}
 
 {REGUA_FAVORABILIDADE}
@@ -187,12 +193,18 @@ KINDLE_FIRE = tool_spec(ToolSpec(
         ("nome_final", REGUA_ACENDER),
         ("descricao_final", REGUA_ACENDER),
     ),
-    description=("Tenta acender fogo com o que estiver ao alcance. O mundo decide, lendo "
-     "as descrições, se aquilo realmente pode queimar e o quanto a tentativa é "
-     "favorável — o que você tem em mãos conta. Dá para se aquecer, cozinhar e, se a "
-     "chama e o lugar permitirem, trabalhar metal. Um fogo aceso não prende quem o "
-     "acendeu: ele queima sozinho e, em algum momento, se apaga. Coisas que não "
-     "queimam são recusadas, e uma tentativa pode simplesmente não pegar."),
+    # A DESCRIPTION É PARA A LLM QUE ESCOLHE, não para o jogador ler (medido em
+    # 2026-08-25, `tests/exploracao/lab_descriptions.py`). Descreve EFEITO e CONTRATO
+    # DO PARÂMETRO, e deliberadamente NÃO enumera caso de uso: listar "para aquecer,
+    # cozinhar, forjar" congela a tool nos usos que hoje imaginamos e mata o que
+    # ninguém previu — e, medido, nem ajudava: a variante que listava usos foi a que
+    # MENOS encadeou "não tenho fogo, preciso acender antes de cozinhar" (0/5 contra
+    # 2/5). Também não alardeia o custo: a variante com "ato irreversível" derrubou a
+    # chamada legítima a 0/3 — aviso de custo suprime uso, não educa.
+    description=("Acende uma fonte de calor no lugar, queimando os materiais informados. "
+     "Em `materiais` vão as coisas que devem virar combustível; a ferramenta de fazer "
+     "faísca não entra — o mundo já considera sozinho o que está em mãos. O mundo "
+     "julga, pela descrição, se aquilo pega fogo."),
     params={"materiais": {"type": "array", "items": {"type": "string"}},
             "combustibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "favorabilidade": {"type": "integer", "minimum": 0, "maximum": 10},

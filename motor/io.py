@@ -416,6 +416,13 @@ _WHY_BY_REGRA = {
     "onde_inacessivel": "não está ao alcance para colher",
     "sem_vegetacao": "não há nada de verde ali para colher",
     "nada_a_colher": "há verde, mas nada que se aproveite agora",
+    # spec 055 — preparar. `ingrediente_inacessivel` é reusado de `cook` (mesmo
+    # fato, mesma frase — não vale um segundo texto). `recipiente_inacessivel`
+    # é chave PRÓPRIA (não `fonte_calor_inacessivel`, que já é de `cook`).
+    "recipiente_inacessivel": "não está ao alcance para preparar",
+    "sem_recipiente": "isso não serve de recipiente pra preparar nada",
+    "nao_combina": "isso não forma preparo nenhum junto",
+    "ja_preparando": "já está com as mãos em outro preparo",
 }
 
 

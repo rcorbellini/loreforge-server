@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.20.0"
+__version__ = "2.21.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -61,6 +61,24 @@ __version__ = "2.20.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.21.0": "spec 055 — PREPARAR. Tool nova `brew`: combina N ingredientes sobre um "
+              "recipiente (`object` ou o LUGAR), molde EXATO de `cook` — não uma tool "
+              "nova em espécie, `cook` com vocabulário de botica. Duas réguas de gate "
+              "(RECIPIENTE_ADEQUADO + PREPARABILIDADE, mesmo argumento de calibração "
+              "ambígua que separa fonte_de_calor/cozinhabilidade em cook), oito chaves "
+              "na chamada — cópia estrutural de REGUA_COZINHAR. Domínio de "
+              "proficiência novo (`botica`, INT — mesma razão de cook: dose, ordem, "
+              "técnica; distinto de `herbalismo`/WIS, que `forage` já usa para "
+              "perceber o terreno). O recipiente NUNCA é escrito nem trava — "
+              "divergência deliberada de `forage` (que reescreve um object colhido "
+              "porque há prosa autoral a proteger; aqui não há nada do tipo, e `cook` "
+              "já decidiu que exclusividade de equipamento não vale o mecanismo: um "
+              "fogão serve várias panelas ao mesmo tempo). Terceiro consumidor do "
+              "relógio de PRAZO genérico (`trabalho.criar_peca` + "
+              "`resolver_vencidas()`, specs 052/053) — código novo na trilha de "
+              "materialização: uma linha em `_FATO_POR_TOOL`. `motor/juizo.py` sem "
+              "extensão nenhuma. `character.skills.herbalismo`/`alquimia` seguem "
+              "mortos, mesma decisão que `forage` já tomou.",
     "2.20.0": "spec 054 — COLHER. Tool nova `forage`: lê a prosa de um alvo — o "
               "LUGAR atual ou um `object` presente — e extrai matéria vegetal dele, "
               "duas réguas (HERBABILIDADE categórica, RIQUEZA rolada) + TRÊS pares "

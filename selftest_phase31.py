@@ -239,6 +239,7 @@ check("proficiencia: personagem sem nenhuma memória tem todos os domínios em n
           "armaria": 0,   # spec 052: 5º — DOIS de uma vez, e por isso separados:
                           # praticar armadura não faz ninguém melhor com espada
           "herbalismo": 0,  # spec 054: 7º domínio de fase 2 (colher)
+          "botica": 0,  # spec 055: 8º domínio de fase 2 (preparar)
       }, str(motor.proficiencies_for(PROF)))
 
 # uma memória VIVA 'giant' em crime (peso 8.0) sobe o fator pela curva
@@ -271,10 +272,10 @@ check("proficiencia: determinismo — duas chamadas seguidas sem mutação são 
 
 check("proficiencia: as chaves de domínio estão sempre presentes "
      "(5 de fase 1 + cura/032 + cozinha/048 + acougue/050 + ferraria e armaria/052 "
-     "+ fogo/053 + herbalismo/054)",
+     "+ fogo/053 + herbalismo/054 + botica/055)",
       set(motor.proficiencies_for(PROF).keys()) ==
       {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-       "acougue", "ferraria", "armaria", "fogo", "herbalismo"})
+       "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica"})
 
 # achado da validação manual (T017, quickstart contra servidor real): um
 # personagem INEXISTENTE devolvia 200 com zeros, silenciosamente, porque

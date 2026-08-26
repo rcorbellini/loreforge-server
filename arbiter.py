@@ -482,6 +482,18 @@ def _verb_candidates(idx: dict) -> dict:
         "forage_onde": sorted(o for o in idx["objects"]
                               if not idx["objects_info"].get(o, {}).get("em_trabalho"))
                        + ([idx["place_id"]] if idx["place_id"] else []),
+        # spec 055 — preparar. Cópias LITERAIS de `cook_ingredientes`/`cook_fonte`,
+        # não a MESMA chave: um enum compartilhado entre duas tools impediria dar a
+        # uma delas um filtro próprio no futuro sem afetar a outra em silêncio (research
+        # R4 da spec 055) — mesmo motivo que já separa `kindle_materiais`/
+        # `forge_materiais`/`cook_ingredientes`, três chaves com o MESMO corpo de
+        # filtro. O recipiente NUNCA trava (divergência deliberada de `forage_onde`):
+        # `brew` não escreve nele, então `em_trabalho` não precisa ser filtrado aqui —
+        # um alambique nunca fica ocupado por causa de `brew`.
+        "brew_ingredientes": sorted(i for i, e in items.items()
+                                    if not worn(e) and not e.get("em_trabalho")),
+        "brew_recipiente": sorted(idx["objects"])
+                           + ([idx["place_id"]] if idx["place_id"] else []),
         # spec 053 — acender. Reusa o filtro EXATO de `cook_ingredientes`: alcançável,
         # não vestido, e não `em_trabalho`. Este último por outro motivo que na forja —
         # lá é "metal batido não volta a ser barra", aqui é "a panela no fogo não é
@@ -917,6 +929,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     forged_asked: set = set()  # (tipo, materiais, fonte) / (tipo, peca) já tentado (spec 052)
     butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
     forage_asked: set = set()  # onde já tentado via forage neste turno (spec 054)
+    brewed_asked: set = set()  # (ingredientes, recipiente) já tentado via brew (spec 055)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1140,7 +1153,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
         kindled_asked=kindled_asked,
         butchered_asked=butchered_asked, forged_asked=forged_asked,
-        forage_asked=forage_asked,
+        forage_asked=forage_asked, brewed_asked=brewed_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

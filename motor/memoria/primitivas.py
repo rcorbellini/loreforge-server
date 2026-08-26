@@ -163,6 +163,10 @@ _DOMAIN_BY_EVENT = {
     # DE FORA de propósito — não alimentam a proficiência.
     "forage_mato": "herbalismo", "forage_util": "herbalismo",
     "forage_seleta": "herbalismo",
+    # botica (spec 055) — sétimo domínio de fase 2. Só preparo CRIADO carimba
+    # (qualquer banda); as recusas de mérito (brew_refused_*) ficam DE FORA de
+    # propósito — não alimentam a proficiência.
+    "brew_otimo": "botica", "brew": "botica", "brew_ruim": "botica",
 }
 
 

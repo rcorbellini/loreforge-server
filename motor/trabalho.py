@@ -272,6 +272,10 @@ _FATO_POR_TOOL = {
     # alvo (sentido invertido de cook/kindle_fire, que gravam o resultado NOVO),
     # mas a frase do desfecho segue a MESMA convenção: fixa do Motor.
     "forage": "o que foi colhido aqui voltou a crescer",
+    # spec 055: a ÚNICA linha de código que `brew` acrescenta a esta primitiva
+    # compartilhada — molde EXATO de `cook`, sentido DIRETO (o resultado já É o
+    # remédio final, ao contrário de `forage`, que grava o resultado ANTIGO).
+    "brew": "o preparo que descansava no recipiente ficou pronto",
 }
 
 

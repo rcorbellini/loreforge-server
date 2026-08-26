@@ -200,6 +200,63 @@ check("SC-006: doc gerada cobre todas as tools/recusas/réguas",
       and all(f"`{rn}`" in _g for rn in _reguas),
       "cobertura incompleta na doc gerada")
 
+# --------------------------------------------------------------------------- #
+# FRASES DE `description` NÃO VOLTAM POR HÁBITO — SÓ POR MEDIÇÃO PRÓPRIA.
+#
+# Achado ao escrever `brew` (spec 055, 2026-08-26): a description tinha um
+# comentário do lado dizendo "esta frase foi medida como peso morto em `forage`
+# e não entra aqui" — e a MESMA frase apareceu duas linhas abaixo, na
+# description de verdade. Não foi falta de saber a regra (o comentário prova
+# que sim); foi hábito de copiar a FORMA de descriptions anteriores
+# (`cook`/`butcher`/`kindle_fire` terminam todas com "o mundo julga, pela
+# descrição, se X") sem re-derivar o CONTEÚDO a partir do que a medição provou.
+#
+# NÃO é proibição cega — `kindle_fire` usa a MESMA frase de propósito: ali ela
+# foi a variante MEDIDA como melhor (V5, 2026-08-25). O check falharia nela
+# também se não houvesse exceção — e quebrar a única tool que fez o processo
+# certo pra pegar quem não fez seria pior que não ter check nenhum. A distinção
+# que importa: cópia por hábito (pega aqui) × uso medido pra AQUELA tool
+# especificamente (`_EXCECOES_MEDIDAS`, cada entrada com a medição que a
+# justifica — sem isso, vira lista de "não mexe" sem lastro, o mesmo problema
+# disfarçado).
+#
+# Fonte única desta lista: aqui. `docs/validacao-de-descriptions.md` documenta
+# o RACIOCÍNIO e a medição de cada frase; não duplica a lista, pra não haver
+# duas fontes que possam divergir.
+_FRASES_APOSENTADAS = {
+    "o mundo julga": (
+        "medido em `forage` (2026-08-26, sondagem_forage.py): três variantes "
+        "empataram EXATAMENTE (FN=9, FP=0) com e sem essa frase — ela não move "
+        "a decisão de chamar-ou-não NAQUELA tool. Ver "
+        "docs/validacao-de-descriptions.md."),
+}
+_EXCECOES_MEDIDAS = {
+    ("kindle_fire", "o mundo julga"): (
+        "V5, a variante ADOTADA na sondagem original (2026-08-25, "
+        "lab_descriptions.py): FN=3 contra FN=4 da variante sem a frase — "
+        "aqui ela mediu melhor, não pior. Se remedir e o resultado mudar, "
+        "tire a exceção."),
+}
+
+
+def _tool_description_text(spec) -> str | None:
+    d = spec.description
+    if isinstance(d, str):
+        return d
+    return None  # callable(scene) -> str: dinâmica, fora do alcance deste check
+
+
+_com_frase_morta = []
+for _t in _specs:
+    _txt = _tool_description_text(motor.registro.get_spec(_t))
+    if _txt is None:
+        continue
+    for _frase in _FRASES_APOSENTADAS:
+        if _frase in _txt.lower() and (_t, _frase) not in _EXCECOES_MEDIDAS:
+            _com_frase_morta.append(f"{_t}: '{_frase}'")
+check("nenhuma description usa frase aposentada sem medição própria",
+      not _com_frase_morta, "; ".join(_com_frase_morta))
+
 # spec 043: o PORTAL foi aposentado. Ele hospedava uma segunda cópia do texto das
 # capacidades (`portal/rules/rules.json`) e um `sync.py` inteiro só para detectar
 # quando ela divergia da `@tool_spec` — duas fontes para o mesmo fato. Com a

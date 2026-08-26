@@ -38,7 +38,7 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # Substituem a reserva de `oficio` que a doc anunciava: manter as três seria uma
 # opção morta no manifesto. Praticar um NÃO faz o outro progredir (FR-033).
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-          "acougue", "ferraria", "armaria", "fogo", "herbalismo", "nenhuma"}
+          "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.

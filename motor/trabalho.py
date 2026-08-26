@@ -267,6 +267,11 @@ def resolver_vencidas() -> None:
 _FATO_POR_TOOL = {
     "cook": "o prato que estava no fogo ficou pronto",
     "kindle_fire": "o fogo que ardia aqui se apagou",
+    # spec 054: a ÚNICA linha de código que `forage` acrescenta a esta primitiva
+    # compartilhada — o resultado que a rebrota restaura é o TEXTO ANTIGO do
+    # alvo (sentido invertido de cook/kindle_fire, que gravam o resultado NOVO),
+    # mas a frase do desfecho segue a MESMA convenção: fixa do Motor.
+    "forage": "o que foi colhido aqui voltou a crescer",
 }
 
 

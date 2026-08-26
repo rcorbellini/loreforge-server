@@ -158,6 +158,11 @@ _DOMAIN_BY_EVENT = {
     "forge_weapon_excepcional": "ferraria",
     "forge_armor": "armaria", "forge_armor_falha": "armaria",
     "forge_armor_excepcional": "armaria",
+    # herbalismo (spec 054) — sexto domínio de fase 2. Só porção CRIADA
+    # carimba (qualquer banda); as recusas de mérito (forage_refused_*) ficam
+    # DE FORA de propósito — não alimentam a proficiência.
+    "forage_mato": "herbalismo", "forage_util": "herbalismo",
+    "forage_seleta": "herbalismo",
 }
 
 

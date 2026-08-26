@@ -408,6 +408,14 @@ _WHY_BY_REGRA = {
     "nao_queima": "isso não é coisa que pegue fogo",
     "nao_pegou": "a chama não pegou desta vez — o material continua aí",
     "ocupado_para_acender": "já está ocupado com outra coisa",
+    # spec 054 — colher. Chave PRÓPRIA (`onde_inacessivel`, não `alvo_inacessivel`
+    # — esse nome já colide entre `drink`/`butcher` neste mesmo dicionário, dict
+    # literal resolve pelo ÚLTIMO valor; não vale acrescentar um terceiro
+    # colidente). A recusa por cooldown (alvo ainda não rebrotado) nunca chega
+    # aqui — sai do enum antes, zero LLM (FR-003).
+    "onde_inacessivel": "não está ao alcance para colher",
+    "sem_vegetacao": "não há nada de verde ali para colher",
+    "nada_a_colher": "há verde, mas nada que se aproveite agora",
 }
 
 

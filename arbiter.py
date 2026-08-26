@@ -378,7 +378,8 @@ def _scene_index(context: dict) -> dict:
         if o.get("id"):
             objects[o["id"]] = o.get("name") or ""
             objects_info[o["id"]] = {"fechado": bool(o.get("fechado")),
-                                     "tem_fecho": bool(o.get("tem_fecho"))}
+                                     "tem_fecho": bool(o.get("tem_fecho")),
+                                     "em_trabalho": bool(o.get("em_trabalho"))}
         for it in o.get("contains") or []:
             if it.get("id"):
                 items[it["id"]] = _item_entry(it, porter=None, in_object=o.get("id"))
@@ -470,6 +471,17 @@ def _verb_candidates(idx: dict) -> dict:
         # onde a descrição vem, nunca como ela é julgada.
         "cook_fonte": sorted(idx["objects"])
                       + ([idx["place_id"]] if idx["place_id"] else []),
+        # spec 054 — colher. Cópia LITERAL de `cook_fonte`: objects presentes + o
+        # LUGAR, mesmo argumento (a mata de uma encosta costuma estar escrita na
+        # prosa do AMBIENTE, não instanciada). Um object com `em_trabalho` (um
+        # canteiro já colhido, ainda não rebrotado; a panela; a fonte de fogo) sai
+        # do enum — é o que dá FR-003 (recusa por cooldown) SEM chamada ao Árbitro,
+        # sem precisar de um filtro estrutural à parte (molde de
+        # `kindle_materiais`/`forge_materiais`, que já excluem `em_trabalho`). O
+        # LUGAR nunca é filtrado: `location` não tem bloco `trabalho` (FR-013).
+        "forage_onde": sorted(o for o in idx["objects"]
+                              if not idx["objects_info"].get(o, {}).get("em_trabalho"))
+                       + ([idx["place_id"]] if idx["place_id"] else []),
         # spec 053 — acender. Reusa o filtro EXATO de `cook_ingredientes`: alcançável,
         # não vestido, e não `em_trabalho`. Este último por outro motivo que na forja —
         # lá é "metal batido não volta a ser barra", aqui é "a panela no fogo não é
@@ -904,6 +916,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     kindled_asked: set = set()  # materiais já tentados via kindle_fire (spec 053)
     forged_asked: set = set()  # (tipo, materiais, fonte) / (tipo, peca) já tentado (spec 052)
     butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
+    forage_asked: set = set()  # onde já tentado via forage neste turno (spec 054)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1127,6 +1140,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
         kindled_asked=kindled_asked,
         butchered_asked=butchered_asked, forged_asked=forged_asked,
+        forage_asked=forage_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

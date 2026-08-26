@@ -456,6 +456,14 @@ def get_context(character_id: str) -> dict:
                 # prosa média de 243 bytes — ~240 tokens na pior cena.
                 "description": obj_body or None,
                 "interactions": obj_fm.get("interactions"),
+                # spec 054: um object com bloco `trabalho` pendente (a panela no fogo,
+                # a fonte de chama, um canteiro recém-colhido) É visivelmente uma coisa
+                # em processo — mesmo booleano que item já expõe (`em_trabalho`
+                # abaixo). É o que permite `forage_onde` excluir do enum um alvo ainda
+                # não rebrotado sem custar chamada nenhuma ao Árbitro (FR-003).
+                "em_trabalho": ((obj_fm.get(trabalho.BLOCO) or {}).get("tool")
+                                if isinstance(obj_fm.get(trabalho.BLOCO), dict)
+                                else None),
                 # fechado esconde o conteúdo até do Árbitro-contexto (spec 005)
                 "contains": [] if is_closed(obj_fm) else _nested_item_refs(child),
                 "fechado": is_closed(obj_fm),

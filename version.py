@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.19.0"
+__version__ = "2.20.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -61,6 +61,32 @@ __version__ = "2.19.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.20.0": "spec 054 — COLHER. Tool nova `forage`: lê a prosa de um alvo — o "
+              "LUGAR atual ou um `object` presente — e extrai matéria vegetal dele, "
+              "duas réguas (HERBABILIDADE categórica, RIQUEZA rolada) + TRÊS pares "
+              "nome/description (divergência deliberada de `butcher`: aqui a banda "
+              "decide O QUE se trouxe, não só quanto). Domínio de proficiência novo "
+              "(`herbalismo`, WIS — perceber o terreno, não força nem precisão de "
+              "faca nem conhecimento de bancada); `skills.herbalismo` da ficha da "
+              "Nerissa segue MORTO, de propósito. Síncrono como `butcher` (sem "
+              "peça em processo): N ≥ 1 porções nascem no mesmo turno. O "
+              "ESGOTAMENTO é ASSIMÉTRICO por tipo de alvo, e é a decisão central "
+              "da spec: um `object` colhido tem o corpo REESCRITO para o estado "
+              "colhido e ganha um bloco `trabalho` de PRAZO cujo `resultado` "
+              "guarda o NOME e o CORPO ANTIGOS — sentido invertido do que "
+              "`cook`/`forge_*` fazem —, e a rebrota é inteiramente "
+              "`trabalho.resolver_vencidas()` (uma linha nova: a frase em "
+              "`_FATO_POR_TOOL`); uma `location` NUNCA é tocada — nem campo, nem "
+              "prazo, porque um ato de um personagem não pode reescrever o palco "
+              "onde os outros estão. Nenhuma extensão de `io._MUTABLE_ROOT_BY_KIND` "
+              "nem de `trabalho._ARQUIVOS` foi necessária: a arquitetura já tratava "
+              "`location` como intocável. `forage_onde` é cópia literal de "
+              "`cook_fonte`/`forge_fonte` (objects + o lugar), com objects "
+              "`em_trabalho` excluídos do enum — o que dá a recusa por cooldown "
+              "ZERO chamadas ao Árbitro sem nenhum código de guarda extra, mesmo "
+              "molde que `kindle_materiais`/`forge_materiais` já usam para peça em "
+              "processo. Único campo de schema novo: o valor `herbalismo` "
+              "acrescido a `DOMAINS`.",
     "2.19.0": "spec 053 — ACENDER FOGO, e a primeira coisa do projeto que SE TRANSFORMA "
               "NO TEMPO SEM SER PORTÁTIL. `kindle_fire` cria uma fonte de fogo como "
               "`object` cujo significado inteiro vive na PROSA: nenhum campo diz que "

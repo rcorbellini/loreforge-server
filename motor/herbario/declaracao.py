@@ -164,16 +164,24 @@ FORAGE = tool_spec(ToolSpec(
         ("nome_seleta", REGUA_COLHER), ("descricao_seleta", REGUA_COLHER),
         ("descricao_colhida", REGUA_COLHER),
     ),
-    # A DESCRIPTION É PARA A LLM QUE ESCOLHE, não para o jogador ler (mesma
-    # disciplina medida em `kindle_fire`, 2026-08-25,
-    # `tests/exploracao/lab_descriptions.py`). Descreve EFEITO e CONTRATO DO
-    # PARÂMETRO, e deliberadamente NÃO enumera caso de uso: listar "ervas
-    # medicinais, gravetos, frutos" congelaria a tool nos usos que hoje se
-    # imaginam. Também não alardeia custo.
-    description=("Colhe do alvo informado a matéria vegetal que houver nele, "
-     "criando no lugar o que foi colhido. Em `onde` vai o lugar onde se está ou "
-     "uma coisa presente e alcançável de onde se colhe. O mundo julga, pela "
-     "descrição do alvo, se há o que colher ali e o quanto."),
+    # A DESCRIPTION É PARA A LLM QUE ESCOLHE, não para o jogador ler (disciplina
+    # de `docs/validacao-de-descriptions.md`, medida em `kindle_fire`,
+    # 2026-08-25). MEDIDO em `tests/exploracao/sondagem_forage.py` (2026-08-26,
+    # qwen3:8b, think:false, 3 variantes × 5 cenas × 5 rodadas): a frase "o mundo
+    # julga, pela descrição, se X" — herdada do molde de cook/butcher/kindle_fire
+    # — empatou EXATAMENTE (FN=9, FP=0) contra uma variante que a REMOVE por
+    # completo. Ela não move a decisão de chamar-ou-não; é peso morto pro
+    # consumidor real desta API (a Mente), então saiu. No lugar entrou CONTRATO
+    # DO PARÂMETRO mais concreto — exemplos do que `onde` aceita — que a medição
+    # não cobriu (não é redação PROVADA superior — é redação sem o texto morto).
+    # Deliberadamente NÃO enumera USO do que se colhe ("ervas medicinais, lenha,
+    # fruta") — isso sim foi medido como pior no `kindle_fire` (congela a tool
+    # nos usos que hoje se imaginam, e mediu MENOS encadeamento). Também não
+    # alardeia custo.
+    description=("Colhe matéria vegetal de um lugar ou de algo presente e "
+     "alcançável — uma clareira, uma moita, um canteiro, uma árvore. Em `onde` "
+     "vai o id de onde ela está: o lugar atual, ou algo da cena. Um alvo sem "
+     "vegetação de verdade não rende nada."),
     params={"onde": _STR,
             "herbabilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "riqueza": {"type": "integer", "minimum": 0, "maximum": 10},

@@ -192,7 +192,13 @@ def _retomar(character_id, actor_folder, actor_fm, op, tipo, present_items, pend
         return False, _rejection(base, _fail("peca_inacessivel", item=peca))
     bloco = trabalho.ler(pasta)
     if not bloco:
-        return False, _rejection(base, _fail("peca_inacessivel", item=peca))
+        # conserto pós-057: "sem bloco" quase sempre é "já concluiu" (o bloco
+        # morre em `encerrar()`), não "inacessível" — a frase antiga soava como
+        # problema de alcance, não "não há mais o que retomar" (achado da
+        # exploração da spec 057, aplicado aqui também por pedido do mantenedor).
+        regra = "peca_ja_concluida" if trabalho.origin_de(pasta) == "emergente" \
+            else "peca_inacessivel"
+        return False, _rejection(base, _fail(regra, item=peca))
     if bloco.get("tool") != _EVENTO[tipo]:
         # recusa ESTRUTURAL, zero LLM: chamar a tool de armadura sobre uma lâmina
         # meio pronta é erro de escolha, e o mundo sabe disso lendo o arquivo.

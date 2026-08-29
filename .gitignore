@@ -3,5 +3,9 @@ __pycache__/
 *.pyc
 devlog.log
 
+# config REAL do servidor (contém secret de sessão/JWT) — só os *.example.json
+# são versionados como molde
+config.server.json
+
 # log do servidor em execução — arquivo vivo, nunca deve entrar no versionamento
 app.out

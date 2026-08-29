@@ -26,6 +26,47 @@ NOTA_0_10 = "\n\nResponda APENAS com um número inteiro de 0 a 10, nada mais."
 _PRIMEIRO_NUMERO = re.compile(r"-?\d+")
 
 
+def _sanear_quebras_em_string(bruto: str) -> str:
+    """Escapa `\\n`/`\\r`/`\\t` CRUS que estejam DENTRO de uma string JSON, antes
+    do parse (spec 058, FR-013).
+
+    O DEFEITO QUE ISTO CONSERTA. Pedida uma letra de canção em quatro versos, o
+    modelo devolve algo como `{"letra": "verso um,\\nverso dois"}` — quebra de
+    linha CRUA dentro da string, JSON tecnicamente inválido. `json.loads` falha,
+    `julgamento` cai no default, e a resposta inteira SOME em silêncio: medido,
+    8 de 8 respostas de um contrato inteiro perdidas assim (research.md da spec
+    058, M4). Nenhuma capacidade anterior tinha pedido texto multi-linha — as
+    outras (`cook`, `brew`...) pedem parágrafo único e nunca esbarraram nisto.
+
+    Percorre caractere a caractere respeitando escape (`\\`) e o estar-dentro-de-
+    string (aspas não-escapadas alternam o estado); fora de string (a
+    indentação do objeto) NUNCA é tocado. Não conserta uma resposta TRUNCADA
+    (o objeto nunca fecha) — não há o que salvar aí, e inventar seria alucinar
+    conteúdo; essa cai no default como sempre (FR-015).
+    """
+    saida: list[str] = []
+    dentro_de_string = False
+    escapado = False
+    for ch in bruto:
+        if escapado:
+            saida.append(ch)
+            escapado = False
+            continue
+        if ch == "\\":
+            saida.append(ch)
+            escapado = True
+            continue
+        if ch == '"':
+            dentro_de_string = not dentro_de_string
+            saida.append(ch)
+            continue
+        if dentro_de_string and ch in "\n\r\t":
+            saida.append({"\n": "\\n", "\r": "\\r", "\t": "\\t"}[ch])
+            continue
+        saida.append(ch)
+    return "".join(saida)
+
+
 def nota(raw: str, default: int) -> int:
     """A nota que o mundo leu, grampeada em 0-10.
 
@@ -69,11 +110,16 @@ def julgamento(raw: str, campos: dict, texto_campos: dict[str, str] | None = Non
     texto na outra) é o que falha — o modelo já quer responder em JSON por
     conta própria; brigar com isso é que quebra. Pedindo o JSON com o schema
     explícito, a taxa de acerto medida foi 9 de 9 (e, para 3 textos candidatos
-    na mesma resposta — spec 048 — 3 de 3 na sondagem real)."""
+    na mesma resposta — spec 048 — 3 de 3 na sondagem real).
+
+    Antes do parse, SANEIA quebras de linha cruas dentro de string (spec 058,
+    `_sanear_quebras_em_string`) — necessário desde que uma capacidade (`sing`)
+    passou a pedir texto multi-linha; byte-idêntico para toda resposta que já
+    era válida (uma linha, texto antes/depois do objeto, `\\n` já escapado)."""
     campos_texto = texto_campos or {}
     resultado = dict(campos)
     resultado.update(campos_texto)
-    bruto = (raw or "").strip()
+    bruto = _sanear_quebras_em_string((raw or "").strip())
     inicio, fim = bruto.find("{"), bruto.rfind("}")
     if inicio == -1 or fim <= inicio:
         return resultado

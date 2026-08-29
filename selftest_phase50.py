@@ -439,7 +439,13 @@ check("US4: recusas (sem_calor/nao_cozinhavel) NÃO carregam domain='cozinha' �
      "só prato criado alimenta a proficiência (FR-009)",
       len(mem_dominio_recusa) == 0, str(mem_dominio_recusa))
 mem_dominio_sucesso = [fm for fm in motor.memoria._iter_memories(AZAR50)
-                       if fm.get("domain") == "cozinha"]
+                       if fm.get("domain") == "cozinha"
+                       # spec 057 (US4): retrofit de testemunha — AZAR50 também
+                       # PRESENCIA os outros cozinheiros da mesma taverna
+                       # cozinharem neste arquivo (witness_cozinha, domain
+                       # 'cozinha' também). O que este check mede é a memória
+                       # do PRÓPRIO ato, não o que ele testemunhou de terceiros.
+                       and fm.get("evento") != "witness_cozinha"]
 check("US4: prato criado (mesmo banda RUIM) carrega domain='cozinha'",
       len(mem_dominio_sucesso) == 1, str(mem_dominio_sucesso))
 

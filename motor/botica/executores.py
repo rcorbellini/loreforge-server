@@ -147,6 +147,7 @@ def _apply_botica_ops(character_id: str, actor_folder: Path, resolution: dict,
                    f"Preparei {nome}.")
         applied.append({
             "ingredientes": ingredientes, "recipiente": recipiente, "banda": banda,
+            "peca_id": _peca_id,  # spec 057: exposto para o leque de testemunha
             "virada": bool(roll_info.get("virada")),
             "memory": {"content": content, "intensity": intensity, "involved": [],
                        "valence": None,

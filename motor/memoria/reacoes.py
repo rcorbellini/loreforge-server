@@ -44,6 +44,25 @@ _WITNESS_CANAIS = {
     "persuade_give_ops": "persuade_give_ops_applied",
     "accuse_ops": "accuse_ops_applied",
     "expel_ops": "expel_ops_applied",  # spec 041: expulsão é ato PÚBLICO
+    # spec 057: craft testemunhado alimenta `dono()` — só ABERTURA/CONCLUSÃO
+    # viram fato (`_witness_facts` filtra por `fase`); retomada intermediária
+    # não gera testemunha nova (R8, research.md).
+    "craft_ops": "craft_ops_applied",
+    # spec 057 (US4) — retrofit dos seis ofícios legados: nenhum alimentava o
+    # leque até aqui. `cozinha_ops`/`botica_ops` só cobrem a ABERTURA — a
+    # conclusão desses dois é PREGUIÇOSA (`resolver_vencidas`, fora do pipeline
+    # de `Fato` inteiro) e usa um mecanismo à parte
+    # (`trabalho._testemunhar_conclusao_prazo`, contracts/witness-retrofit.md).
+    "forja_ops": "forja_ops_applied",
+    "cozinha_ops": "cozinha_ops_applied",
+    "botica_ops": "botica_ops_applied",
+    "forage_ops": "forage_ops_applied",
+    "esquartejar_ops": "esquartejar_ops_applied",
+    "fogo_ops": "fogo_ops_applied",
+    # spec 058: quem OUVE cantar ganha memória sobre o CANTOR (reputação) —
+    # não confundir com o RECONTO do feito, que `_apply_sing_ops` já grava
+    # direto (reusa `_record_hearsay`, não passa pelo leque).
+    "musica_ops": "musica_ops_applied",
 }
 
 # canais cuja MEMÓRIA DO ATOR/PARTICIPANTE vinha de um `_record_X` no executor.

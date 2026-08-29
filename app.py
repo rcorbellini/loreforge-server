@@ -42,6 +42,7 @@ import registro_turno
 from version import __version__
 import llm
 import motor
+import auth
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CLIENT_DIR = REPO_ROOT / "loreforge-client"
@@ -56,6 +57,12 @@ HEARTBEAT_SECS = 6.0
 # vez. Um 2º /act do mesmo personagem enquanto o turno corre é REJEITADO (não enfileira).
 _TURNS_IN_FLIGHT: set[str] = set()
 _TURNS_GUARD = threading.Lock()
+
+# Trava do vínculo jogador↔personagem (spec 056, FR-013): claim/release fazem
+# ler→checar→escrever no mesmo character.md; sem trava, dois claims concorrentes
+# passam ambos no `if fm.get("owner")` antes de qualquer um escrever. Mesmo
+# padrão de _TURNS_GUARD, mas escopo diferente (posse, não turno-em-andamento).
+_OWNERSHIP_GUARD = threading.Lock()
 
 
 def _claim_turn(character_id: str) -> bool:
@@ -128,7 +135,8 @@ def load_config() -> dict:
     # resposta única (Content-Length) atravessa o proxy como o GET e não estoura.
     server = doc.get("server") or {}
     stream = server.get("stream")
-    return {"arbiter": arb, "server": {"stream": True if stream is None else bool(stream)}}
+    auth_conf = doc.get("auth") or {}
+    return {"arbiter": arb, "server": {"stream": True if stream is None else bool(stream)}, "auth": auth_conf}
 
 
 def build_ask(arb: dict, falhas: list | None = None):
@@ -457,6 +465,7 @@ _BANDA_BOA = {
     "cura": {"alta"},
     "acougue": {"farto"},
     "forja": {"incomum", "raro", "lendario"},
+    "craft": {"incomum", "raro", "lendario"},
 }
 
 _FRASES_DE_BANDA = {
@@ -483,6 +492,12 @@ _FRASES_DE_BANDA = {
         "critico_ruim": "o metal traiu a peça no pior momento",
         "virada_boa": "não havia por que aquilo virar coisa boa — e virou",
         "virada_ruim": "tudo estava a favor, e a peça saiu torta",
+    },
+    "craft": {
+        "critico_bom": "as mãos acharam o jeito certo sem um erro sequer",
+        "critico_ruim": "as mãos escorregaram bem na hora que não podia",
+        "virada_boa": "não havia por que aquilo sair bem — e saiu",
+        "virada_ruim": "tudo estava a favor, e saiu torto mesmo assim",
     },
 }
 
@@ -683,6 +698,13 @@ _STATIC_TYPES = {
     ".svg": "image/svg+xml",
 }
 
+_IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
 
 class _MundoLocal:
     """O `mundo` do `mcp_core` quando o MCP roda DENTRO do server (spec 043).
@@ -758,22 +780,143 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        # spec 043 — UMA ROTA POR CAPACIDADE. A Mente propõe chamando a capacidade
-        # pelo nome, com os alvos que escolheu e a prosa do que faz. Não há despacho
-        # a editar quando nasce uma capacidade: o nome vem da URL e o registro
-        # responde (Open/Closed, como o resto do projeto).
         if parsed.path.startswith("/api/tools/"):
             return self._handle_tool(parsed.path[len("/api/tools/"):])
         if parsed.path == "/api/mcp":
             return self._handle_mcp()
         if parsed.path == "/api/registro":
             return self._handle_registro()
+        if parsed.path.startswith("/api/auth/"):
+            return self._handle_auth_post(parsed.path, self._query(parsed))
         self._send_json({"error": "rota não encontrada"}, 404)
 
     # ---- API -------------------------------------------------------------- #
 
+    def _authenticate(self) -> dict | None:
+        if not getattr(self.server, "auth_enabled", False):
+            return {"sub": "local", "email": "", "name": "local"}
+        header = self.headers.get("Authorization")
+        if not header or not header.startswith("Bearer "):
+            self._send_json({"error": "Unauthorized"}, 401)
+            return None
+        token = header[len("Bearer "):]
+        secret = CONFIG.get("auth", {}).get("secret")
+        if not secret:
+            self._send_json({"error": "Unauthorized"}, 401)
+            return None
+        payload = auth.jwt_decode(token, secret)
+        if not payload:
+            self._send_json({"error": "Unauthorized"}, 401)
+            return None
+        return payload
+
+    def _authorize_character(self, sub: str, character_id: str) -> bool:
+        if not getattr(self.server, "auth_enabled", False):
+            return True
+        if not character_id:
+            self._send_json({"error": "Missing character_id"}, 400)
+            return False
+        try:
+            fm, _ = motor.read_doc(motor.find_character_folder(character_id) / "character.md")
+            # FR-006: posse exige owner == sub — um personagem sem dono ainda não
+            # foi reivindicado por ninguém, e não é por isso que vira jogável por
+            # qualquer JWT válido (era exatamente esse buraco que a spec fechava).
+            if fm.get("owner") != sub:
+                self._send_json({"error": "Forbidden"}, 403)
+                return False
+            return True
+        except Exception:
+            self._send_json({"error": "Character not found"}, 404)
+            return False
+
+    def _handle_auth_post(self, path: str, q: dict) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            payload = json.loads(self.rfile.read(length) if length else b"{}")
+        except json.JSONDecodeError:
+            return self._send_json({"error": "JSON inválido"}, 400)
+        
+        if path == "/api/auth/login":
+            client_id = CONFIG.get("auth", {}).get("google_client_id")
+            if not client_id:
+                return self._send_json({"error": "Auth disabled"}, 400)
+            id_token = payload.get("id_token")
+            user = auth.verify_google_token(id_token, client_id)
+            if not user:
+                return self._send_json({"error": "Invalid token"}, 401)
+            secret = CONFIG.get("auth", {}).get("secret")
+            jwt_token = auth.jwt_encode(user, secret)
+            return self._send_json({"jwt": jwt_token, **user})
+            
+        user = self._authenticate()
+        if not user:
+            return
+            
+        if path == "/api/auth/claim-character":
+            cid = payload.get("character_id")
+            if not cid:
+                return self._send_json({"error": "character_id needed"}, 400)
+            try:
+                with _OWNERSHIP_GUARD:
+                    cpath = motor.find_character_folder(cid) / "character.md"
+                    fm, md = motor.read_doc(cpath)
+                    if fm.get("owner"):
+                        return self._send_json({"error": "Already claimed"}, 409)
+                    fm["owner"] = user["sub"]
+                    motor.write_doc(cpath, fm, md)
+                return self._send_json({"ok": True})
+            except Exception as e:
+                return self._send_json({"error": str(e)}, 500)
+                
+        if path == "/api/auth/release-character":
+            cid = payload.get("character_id")
+            if not cid:
+                return self._send_json({"error": "character_id needed"}, 400)
+            try:
+                with _OWNERSHIP_GUARD:
+                    cpath = motor.find_character_folder(cid) / "character.md"
+                    fm, md = motor.read_doc(cpath)
+                    if fm.get("owner") != user["sub"]:
+                        return self._send_json({"error": "Forbidden"}, 403)
+                    if "owner" in fm:
+                        del fm["owner"]
+                    motor.write_doc(cpath, fm, md)
+                return self._send_json({"ok": True})
+            except Exception as e:
+                return self._send_json({"error": str(e)}, 500)
+                
+        self._send_json({"error": "Not found"}, 404)
+
     def _handle_api_get(self, path: str, q: dict) -> None:
         try:
+            if path.startswith("/api/auth/"):
+                if path == "/api/auth/me":
+                    user = self._authenticate()
+                    if user:
+                        return self._send_json(user)
+                    return
+            if path == "/api/characters/mine":
+                user = self._authenticate()
+                if not user: return
+                chars = motor.list_characters()
+                mine = [c for c in chars if c.get("owner") == user["sub"]]
+                return self._send_json(mine)
+            if path == "/api/characters/available":
+                user = self._authenticate()
+                if not user: return
+                chars = motor.list_characters()
+                avail = [c for c in chars if not c.get("owner")]
+                return self._send_json(avail)
+                
+            if path not in ("/api/analises", "/api/analise", "/api/spec", "/api/world/health",
+                             "/api/characters", "/api/auth/config", "/api/character/image"):
+                # All other existing GET routes require authentication
+                if not self._authenticate():
+                    return
+                    
+            if path == "/api/auth/config":
+                return self._send_json({"google_client_id": CONFIG.get("auth", {}).get("google_client_id")})
+                
             # As ANÁLISES geradas por `server/analisa_rodada.py`. Rota de LEITURA
             # pura, servida daqui para caber no mesmo túnel do jogo — a ideia é abrir
             # no celular sem montar servidor à parte.
@@ -829,6 +972,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(ctx)
             if path == "/api/character":
                 return self._send_json(motor.get_character(self._require(q, "character_id")))
+            if path == "/api/character/image":
+                return self._serve_character_image(self._require(q, "character_id"))
             if path == "/api/inventory":
                 return self._send_json(motor.get_inventory(self._require(q, "character_id")))
             if path == "/api/entity":
@@ -925,6 +1070,12 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "informe 'character_id' (uma sessão MCP é UM personagem)"},
                 400)
 
+        user = self._authenticate()
+        if not user:
+            return
+        if not self._authorize_character(user["sub"], cid):
+            return
+
         turno_id = self._query(urlparse(self.path)).get("turno_id")
         sessao = mcp_core.Sessao(_MundoLocal(self, cid, turno_id))
         saidas = []
@@ -988,6 +1139,12 @@ class Handler(BaseHTTPRequestHandler):
         character_id = payload.get("character_id")
         if not character_id:
             return {"ok": False, "erro": "informe 'character_id'", "_status": 400}
+            
+        user = self._authenticate()
+        if not user:
+            return {"ok": False, "erro": "Unauthorized", "_status": 401}
+        if not self._authorize_character(user["sub"], character_id):
+            return {"ok": False, "erro": "Forbidden", "_status": 403}
 
         # CONSULTA ANTES DE TUDO (spec 040): perguntar não é propor. Sai daqui sem
         # prosa, sem juízo, sem trava de turno e sem tocar arquivo — é leitura. Fica
@@ -1143,6 +1300,30 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- estáticos (client) ---------------------------------------------- #
 
+    def _serve_character_image(self, character_id: str) -> None:
+        # O RETRATO fica JUNTO do personagem (`retrato.<ext>` na própria pasta),
+        # não referenciado por URL externa: link de terceiro expira (já expirou
+        # uma vez nesta mesma spec) e o Motor não tem como garantir que segue
+        # no ar. Sem auth (ver `_handle_api_get`): é só uma imagem, e uma tag
+        # `<img>` de navegador não manda `Authorization` de qualquer forma.
+        try:
+            folder = motor.find_character_folder(character_id)
+        except motor.MotorError:
+            return self._send_json({"error": "personagem não encontrado"}, 404)
+        for nome, tipo in _IMAGE_TYPES.items():
+            alvo = folder / f"retrato{nome}"
+            if alvo.exists():
+                dados = alvo.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", tipo)
+                self.send_header("Content-Length", str(len(dados)))
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self._cors()
+                self.end_headers()
+                self.wfile.write(dados)
+                return
+        self._send_json({"error": "sem retrato"}, 404)
+
     def _serve_static(self, path: str) -> None:
         rel = "index.html" if path in ("", "/") else path.lstrip("/")
         target = (CLIENT_DIR / rel).resolve()
@@ -1173,6 +1354,26 @@ def main() -> None:
     args = parser.parse_args()
 
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
+    
+    path = SERVER_DIR / "config.server.json"
+    doc = {}
+    if path.exists():
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            pass
+    auth_conf = doc.get("auth") or {}
+    if auth_conf.get("google_client_id") and not auth_conf.get("secret"):
+        auth_conf["secret"] = os.urandom(32).hex()
+        doc["auth"] = auth_conf
+        try:
+            path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        CONFIG["auth"] = auth_conf
+    auth_enabled = bool(auth_conf.get("google_client_id") or auth_conf.get("secret"))
+    httpd.auth_enabled = auth_enabled
+
     url = f"http://localhost:{args.port}"
     arb = CONFIG["arbiter"]
     print(f"Loreforge v{__version__} no ar. Abra no navegador:  {url}", flush=True)

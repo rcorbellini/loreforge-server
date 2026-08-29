@@ -230,6 +230,14 @@ check("US3: a description escolhida corresponde à banda que saiu",
       item_body.strip() in ("uma lâmina de fio limpo", "uma lâmina torta e sem fio"),
       item_body)
 
+# conserto pós-057 (Conserto 3, aplicado também em forja): retomar peça JÁ
+# CONCLUÍDA precisa dizer "já terminou", não "é de outra oficina".
+r_ja_concl = motor.apply_resolution(FERR, {"forja_ops": [
+    {"tipo": "arma", "retomada": True, "peca": peca.name}]})
+check("Conserto 3: retomar peça já concluída (forja) recusa com 'peca_ja_concluida'",
+      any(x.get("regra") == "peca_ja_concluida" for x in (r_ja_concl.get("rejected") or [])),
+      str(r_ja_concl.get("rejected")))
+
 
 def _forja_completa(cid, d20, **notas):
     """Abre, conclui e devolve o frontmatter final da peça."""

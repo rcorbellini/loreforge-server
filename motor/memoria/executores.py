@@ -80,41 +80,13 @@ POSITIVA, NEGATIVA = "positiva", "negativa"
 # e a valência de cada ato viajam COM o ato (ver `primitivas.remember`/`_rec`), não
 # mais numa tabela central. (Estas cópias aqui já eram inertes desde o split do
 # item 31 §3.)
-
-
-# Domínio de memória (spec 029): mesmo formato de _RELEVANCE_BY_EVENT — todo
-# evento fora daqui cai em "nenhuma" pelo default de _write_memory, nunca
-# erro. Deliberadamente ausentes: "equip", "lock", "mutate", "wield" (ações
-# utilitárias, ninguém progride nelas) e "promise" (fora do escopo decidido
-# nesta spec — fica pra quando o item 22 for revisitado sob este eixo).
-_DOMAIN_BY_EVENT = {
-    # combate
-    "attack": "combate", "defeat": "combate", "assaulted": "combate",
-    "weapon_hit": "combate", "weapon_miss": "combate",
-    "witness_attack": "combate",
-    # crime
-    "theft": "crime", "stolen": "crime", "stolen_from": "crime",
-    "witness_theft": "crime", "theft_twist": "crime",
-    # comercio
-    "trade": "comercio", "transfer": "comercio",
-    "gift_received": "comercio", "gift_given": "comercio",
-    "gift_reluctant": "comercio", "witness_trade": "comercio",
-    "witness_transfer": "comercio", "witness_persuade_give": "comercio",
-    "emprestimo": "comercio", "witness_emprestimo": "comercio",
-    # social
-    "persuade": "social", "accuse": "social", "accused": "social",
-    "witness_accuse": "social", "hearsay": "social",
-    "hearsay_reconto": "social",
-    # deslocamento
-    "travel": "deslocamento", "learn_route": "deslocamento",
-    "carry": "deslocamento", "learn": "deslocamento",
-    "inform": "deslocamento", "taught": "deslocamento",
-    # spec 034: deslocamento testemunhado (chegada/partida) — mesmo domínio
-    # que travel/learn_route/carry já ocupam.
-    "witness_departure": "deslocamento", "witness_arrival": "deslocamento",
-    # cura (spec 032) — primeiro domínio de fase 2
-    "heal": "cura", "healed": "cura", "witness_heal": "cura",
-}
+#
+# spec 058 (research R6): esta linha também hospedava uma cópia MORTA de
+# `_DOMAIN_BY_EVENT` — oito domínios atrás da tabela VIVA (`memoria/primitivas.py`,
+# que `_write_memory` de fato importa e usa). Ninguém no arquivo a referenciava;
+# resíduo da cisão do módulo (item 31 §3). Removida, não estendida: acrescentar
+# `musica` só a ela teria deixado a armadilha de pé — a próxima manutenção
+# encontraria duas tabelas e 50% de chance de editar a errada.
 
 
 _DONO_EVENTOS = {"transfer", "emprestimo", "witness_transfer", "witness_emprestimo"}

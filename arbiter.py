@@ -121,7 +121,11 @@ def _context_for_prompt(context: dict) -> dict:
             "id": self_.get("id"),
             "name": self_.get("name"),
             "attributes": self_.get("attributes"),
-            "skills": self_.get("skills"),
+            # `skills` SAIU daqui (spec 058, US6): era a segunda via para "quão
+            # bom o personagem é" no exato domínio (`musica`) que a proficiência
+            # derivada de memória (`proficiencies_for`) já cobre — com as duas,
+            # o Árbitro veria a régua errada. `character.skills` segue como
+            # campo legado, tolerado, nunca lido pelo server.
             "status": self_.get("status"),
             "personalidade": self_.get("body"),
             "inventario": self_.get("inventory") or [],
@@ -379,7 +383,13 @@ def _scene_index(context: dict) -> dict:
             objects[o["id"]] = o.get("name") or ""
             objects_info[o["id"]] = {"fechado": bool(o.get("fechado")),
                                      "tem_fecho": bool(o.get("tem_fecho")),
-                                     "em_trabalho": bool(o.get("em_trabalho"))}
+                                     # spec 057: RAW (não `bool()`) — igual `_item_entry`
+                                     # já faz para item. Craft é o primeiro domínio a
+                                     # precisar distinguir QUAL tool ocupa um object em
+                                     # processo (`craft_pecas_abertas` filtra por
+                                     # `== "craft"`, não só "há trabalho aqui"); truthiness
+                                     # de string não-vazia preserva todo uso anterior.
+                                     "em_trabalho": o.get("em_trabalho")}
         for it in o.get("contains") or []:
             if it.get("id"):
                 items[it["id"]] = _item_entry(it, porter=None, in_object=o.get("id"))
@@ -424,6 +434,11 @@ def _verb_candidates(idx: dict) -> dict:
     def worn(e):
         return e["porter"] == actor and e["slot"] and e["slot"] != hand
 
+    def _livre(i):
+        """Posse LIVRE ou própria — não posse de outro (conserto pós-057, ver
+        `cook_ingredientes` abaixo para a justificativa completa)."""
+        return motor.dono(i, actor) in (None, actor)
+
     return {
         # vestíveis ao alcance do ator (soltos, em objects, ou já com ele)
         "equip": sorted(i for i, e in items.items()
@@ -461,8 +476,21 @@ def _verb_candidates(idx: dict) -> dict:
         # de calor presente na cena (mesmo universo cru de `shove_to`/`open` —
         # spec 048). As réguas de FONTE_DE_CALOR/COZINHABILIDADE, não um filtro
         # aqui, decidem se o object fornece calor e se os itens combinam.
+        #
+        # Conserto pós-057 (achado da exploração): as cinco chaves de material de
+        # trabalho (esta e `brew_ingredientes`/`kindle_materiais`/
+        # `forge_materiais`/`craft_materiais`) liam o índice físico bruto sem
+        # NENHUMA checagem de posse — dava pra consumir o que outro personagem
+        # presente carregava na mão. `_livre(i)` é o predicado novo
+        # (`craftable_entities`, `percepcao/consultas.py`, aplicado aqui pelo
+        # mesmo índice que as outras chaves usam, não pelo walk de pasta — mais
+        # barato, mesmo resultado): passa por posse LIVRE (`dono() is None`) e
+        # pela própria; para em posse RECONHECIDA de outro. Nem `alcançável`
+        # (`steal`, sem checagem nenhuma) nem `disponível` (`comercio.py`, só
+        # aceita posse COMPROVADA seu — bloquearia pegar uma fibra solta).
         "cook_ingredientes": sorted(i for i, e in items.items()
-                                    if not worn(e) and not e.get("em_trabalho")),
+                                    if not worn(e) and not e.get("em_trabalho")
+                                    and _livre(i)),
         # spec 052 (FR-043a): o LUGAR entra no universo de fontes de calor, ao lado
         # dos objects — molde EXATO de `shove_to`, logo abaixo. A lareira de uma
         # cozinha e as brasas de uma forja costumam estar escritas na prosa do
@@ -491,7 +519,8 @@ def _verb_candidates(idx: dict) -> dict:
         # `brew` não escreve nele, então `em_trabalho` não precisa ser filtrado aqui —
         # um alambique nunca fica ocupado por causa de `brew`.
         "brew_ingredientes": sorted(i for i, e in items.items()
-                                    if not worn(e) and not e.get("em_trabalho")),
+                                    if not worn(e) and not e.get("em_trabalho")
+                                    and _livre(i)),
         "brew_recipiente": sorted(idx["objects"])
                            + ([idx["place_id"]] if idx["place_id"] else []),
         # spec 053 — acender. Reusa o filtro EXATO de `cook_ingredientes`: alcançável,
@@ -499,7 +528,8 @@ def _verb_candidates(idx: dict) -> dict:
         # lá é "metal batido não volta a ser barra", aqui é "a panela no fogo não é
         # lenha". Mesma regra, e herdá-la é reuso; reescrevê-la seria duplicação.
         "kindle_materiais": sorted(i for i, e in items.items()
-                                   if not worn(e) and not e.get("em_trabalho")),
+                                   if not worn(e) and not e.get("em_trabalho")
+                                   and _livre(i)),
         # spec 052 — forjar. `forge_materiais` reusa o filtro de `cook_ingredientes`
         # (mão, chão, dentro de contêiner aberto), MENOS as peças em processo: metal
         # batido não volta a ser barra. `forge_peca` é filtro ESTRUTURAL (o bloco de
@@ -507,7 +537,8 @@ def _verb_candidates(idx: dict) -> dict:
         # a peça da outra oficina aparece e é recusada com motivo próprio, que
         # ensina; escondê-la só produziria silêncio.
         "forge_materiais": sorted(i for i, e in items.items()
-                                  if not worn(e) and not e.get("em_trabalho")),
+                                  if not worn(e) and not e.get("em_trabalho")
+                                  and _livre(i)),
         "forge_fonte": sorted(idx["objects"])
                        + ([idx["place_id"]] if idx["place_id"] else []),
         # MEDIDO na sondagem real (spec 052, T074): com UM enum único de peças, o
@@ -522,6 +553,19 @@ def _verb_candidates(idx: dict) -> dict:
                                   if e.get("em_trabalho") == "forge_weapon"),
         "forge_peca_armadura": sorted(i for i, e in items.items()
                                       if e.get("em_trabalho") == "forge_armor"),
+        # spec 057 — craft. Mesmo molde de `forge_materiais`/`forge_peca_arma`:
+        # materiais alcançáveis, menos peças já em processo; peças em processo
+        # filtradas ESTRUTURALMENTE por `em_trabalho == "craft"` (zero LLM). Cobre
+        # peça-ITEM e peça-OBJECT (craft pode deixar uma prateleira em processo, não
+        # só um item na mão) — `location` em processo fica de fora (US5, fora deste
+        # lote: `_walk_scene` ainda não anda por `location.md` filha nenhuma).
+        "craft_materiais": sorted(i for i, e in items.items()
+                                  if not worn(e) and not e.get("em_trabalho")
+                                  and _livre(i)),
+        "craft_pecas_abertas": sorted(
+            [i for i, e in items.items() if e.get("em_trabalho") == "craft"]
+            + [o for o, info in idx["objects_info"].items()
+               if info.get("em_trabalho") == "craft"]),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
@@ -574,6 +618,10 @@ def _verb_candidates(idx: dict) -> dict:
         "pedir": [],
         "attack_with": sorted(i for i, e in items.items()
                               if e["porter"] == actor and e["slot"] == hand),
+        # spec 058: instrumento de `sing` — NA MÃO, não "ao alcance" (tocar exige
+        # empunhar). Mesmo predicado de `attack_with`.
+        "sing_instrumento": sorted(i for i, e in items.items()
+                                   if e["porter"] == actor and e["slot"] == hand),
         # viaja-se para lugar que ele SABE alcançar (spec 012). Também não sai do
         # contexto: o mapa do que ele sabe é memória de rota, que fica no server.
         "viajar_para": [],
@@ -658,6 +706,17 @@ def scene_candidates(idx: dict) -> dict:
             evidencias[m["id"]] = {"sobre": outro, "resumo": m.get("summary") or ""}
     cand["acusar_memorias"] = evidencias
     cand["acusar_alvo"] = sorted({v["sobre"] for v in evidencias.values()})
+
+    # cantar (spec 058): SÓ se canta o que se lembra — todas as memórias VIVAS de
+    # acontecimento do próprio ator, cada uma com o sujeito derivado do `involved`
+    # dela (`motor.own_memories`). Ao contrário de `acusar_memorias`, não depende
+    # de quem está presente: o feito cantado pode ser sobre alguém que nunca
+    # esteve nesta cena — é o ponto da tool.
+    sing_mem: dict[str, dict] = {}
+    for m in motor.own_memories(idx["actor_id"]):
+        sing_mem[m["id"]] = {"sobre": m["sobre"], "resumo": m["resumo"],
+                             "conteudo": m["conteudo"], "intensity": m["intensity"]}
+    cand["sing_memorias"] = sing_mem
     return cand
 
 
@@ -927,9 +986,11 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     cooked_asked: set = set()  # (ingredientes, fonte_calor) já tentado via cook (spec 048)
     kindled_asked: set = set()  # materiais já tentados via kindle_fire (spec 053)
     forged_asked: set = set()  # (tipo, materiais, fonte) / (tipo, peca) já tentado (spec 052)
+    craft_asked: set = set()  # ("craft", "abrir"/"retomar", ...) já tentado (spec 057)
     butchered_asked: set = set()  # alvo já tentado via butcher neste turno (spec 050)
     forage_asked: set = set()  # onde já tentado via forage neste turno (spec 054)
     brewed_asked: set = set()  # (ingredientes, recipiente) já tentado via brew (spec 055)
+    sung_asked: set = set()  # memoria_id já tentado via sing neste turno (spec 058)
     attacked: set = set()   # alvos já golpeados neste turno (spec 008)
     curados: set = set()    # alvos já socorridos neste turno (spec 032)
     carried: set = set()    # alvos já levantados neste turno (spec 010)
@@ -1153,7 +1214,8 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         eaten_asked=eaten_asked, drunk_asked=drunk_asked, cooked_asked=cooked_asked,
         kindled_asked=kindled_asked,
         butchered_asked=butchered_asked, forged_asked=forged_asked,
-        forage_asked=forage_asked, brewed_asked=brewed_asked,
+        craft_asked=craft_asked,
+        forage_asked=forage_asked, brewed_asked=brewed_asked, sung_asked=sung_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,

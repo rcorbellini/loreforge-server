@@ -29,15 +29,20 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from . import io
+from . import io, registro
 from .io import read_doc, write_doc
 
 BLOCO = "trabalho"
 
-# spec 053: os arquivos de entidade que podem carregar um bloco de trabalho. A ordem
-# importa só para o desempate teórico — uma pasta nunca tem os dois (io._scene_entities
-# usa `elif` desde sempre, e o validador passou a afirmar isso).
-_ARQUIVOS = ("item.md", "object.md")
+# spec 053/057: os arquivos de entidade que podem carregar um bloco de trabalho. A
+# ordem importa só para o desempate teórico — uma pasta nunca tem mais de um
+# (io._scene_entities usa `elif` desde sempre, e o validador passou a afirmar isso).
+# `location.md` entrou na spec 057 (craft): o único domínio até aqui capaz de deixar
+# um LUGAR (não só item/object) em processo — "construir uma casa" precisa do mesmo
+# relógio de ESFORÇO que a lâmina na bigorna já usa, e pôr um relógio próprio dentro
+# de `craft/` reabriria o acoplamento lateral que motivou tirar esta primitiva de
+# `forja/` desde o início.
+_ARQUIVOS = ("item.md", "object.md", "location.md")
 
 
 def _arquivo_de(pasta: Path) -> Path | None:
@@ -72,6 +77,22 @@ def ler(item_folder: Path) -> dict | None:
     fm, _ = read_doc(arquivo)
     bloco = fm.get(BLOCO)
     return bloco if isinstance(bloco, dict) else None
+
+
+def origin_de(pasta: Path) -> str | None:
+    """`origin` da entidade nesta pasta, seja qual for o tipo (spec 057, conserto
+    pós-exploração). Consumidor: `forja`/`craft`, pra distinguir "nunca foi
+    peça" de "já foi peça e concluiu" quando `ler()` devolve None — a peça
+    concluída (`encerrar()`) perde o bloco `trabalho`, mas continua carregando
+    `origin: emergente`; um item qualquer do mundo autoral não. Sinal, não
+    prova — uma colheita/abate também é `emergente` sem nunca ter sido peça
+    (spec 054/050 não usam `criar_peca`), então a recusa que consome isto MUST
+    ler como palpite útil ("provavelmente já terminou"), nunca como certeza."""
+    arquivo = _arquivo_de(pasta)
+    if arquivo is None:
+        return None
+    fm, _ = read_doc(arquivo)
+    return fm.get("origin")
 
 
 def por_esforco(bloco: dict) -> bool:
@@ -112,19 +133,29 @@ def restante_s(bloco: dict) -> float:
 # --------------------------------------------------------------------------- #
 
 def criar_peca(local_folder: Path, corpo: str, bloco: dict,
-               name: str = "Trabalho em curso", weight_kg: float = 0.3) -> tuple[str, Path]:
+               name: str = "Trabalho em curso", weight_kg: float = 0.3,
+               filename: str = "item.md", extra_fm: dict | None = None
+               ) -> tuple[str, Path]:
     """Instancia a peça em processo NO LUGAR onde o ato começou.
 
     Devolve (id, pasta). Passa por `io.create_entity` — mesmo `write_doc`, mesmo
     World Validator, sem atalho (Princípio VI). O `bloco` já vem montado pelo
-    domínio: esta primitiva não sabe o que é banda nem prato."""
-    peca_id = io.new_id("peca")
-    pasta = io.create_entity(local_folder, peca_id, "item.md", {
-        "type": "item", "id": peca_id, "name": name,
-        "weight_kg": round(float(weight_kg), 3) or 0.3,
-        "origin": "emergente",
-        BLOCO: dict(bloco),
-    }, corpo)
+    domínio: esta primitiva não sabe o que é banda nem prato.
+
+    `filename`/`extra_fm` (spec 057): generaliza para `object.md`/`location.md`
+    além do `item.md` default — os seis chamadores existentes não passam nenhum
+    dos dois e continuam byte-a-byte iguais. `weight_kg` só entra no frontmatter
+    quando a peça é um item (location não pesa; object não pesa hoje); `extra_fm`
+    carrega o que só faz sentido por tipo (ex.: `size` obrigatório de location)."""
+    tipo = filename.removesuffix(".md")
+    peca_id = io.new_id("local" if tipo == "location" else "peca")
+    fm = {"type": tipo, "id": peca_id, "name": name, "origin": "emergente",
+          BLOCO: dict(bloco)}
+    if filename == "item.md":
+        fm["weight_kg"] = round(float(weight_kg), 3) or 0.3
+    if extra_fm:
+        fm.update(extra_fm)
+    pasta = io.create_entity(local_folder, peca_id, filename, fm, corpo)
     return peca_id, pasta
 
 
@@ -198,15 +229,23 @@ def peca_pendente_de(actor_folder: Path, *, apenas_prazo: bool = False) -> tuple
     é o certo, não só o barato — quem cozinha não pode se deslocar (o próprio gate
     impede), e quem forja com sessão aberta está na bigorna. Se alguém levar a peça
     para outro lugar, o ator deixa de estar ocupado: é o comportamento desejado,
-    não efeito colateral."""
+    não efeito colateral.
+
+    Varre ITEM, OBJECT e LOCATION (spec 057): até aqui só item tinha `ator` — a
+    fonte de fogo (object) nunca prende ninguém (spec 053, sem `ator`). Craft é o
+    primeiro domínio a deixar um OBJECT ou uma LOCATION em processo LIGADOS a
+    quem o começou (uma prateleira craftada, um cômodo em construção), então o
+    escopo de busca generaliza junto."""
     place_folder = actor_folder.parent
     if not place_folder.is_dir():
         return None
     ator_id = io._char_fm(actor_folder).get("id")
     if not ator_id:
         return None
-    _, _, items = io._scene_entities(place_folder)
-    for pasta in items.values():
+    _, objects, items = io._scene_entities(place_folder)
+    pastas = list(items.values()) + list(objects.values()) \
+        + list(pecas_location_em(place_folder).values())
+    for pasta in pastas:
         bloco = ler(pasta)
         if not bloco or bloco.get("ator") != ator_id:
             continue
@@ -215,6 +254,31 @@ def peca_pendente_de(actor_folder: Path, *, apenas_prazo: bool = False) -> tuple
         if sessao_aberta(bloco):
             return pasta, bloco
     return None
+
+
+def pecas_location_em(place_folder: Path) -> dict[str, Path]:
+    """`location.md` FILHAS de `place_folder` com bloco `trabalho` — id -> pasta.
+
+    `io._scene_entities` não anda por `location.md` (aninhamento não é "presença
+    na cena" do mesmo jeito que item/object/character são — é topologia, spec
+    035). Uma location EM CONSTRUÇÃO ainda não é um lugar de verdade (ninguém
+    "entra" nela), então quem trabalha nela continua fisicamente na location
+    PAI — é de lá que `peca_pendente_de`/a retomada de craft precisam enxergá-la.
+    Varredura RASA (só filhos diretos): craft só cria subpasta de primeiro nível
+    (Decisão do executor, US5) — não há caso de location-em-processo mais funda."""
+    achadas: dict[str, Path] = {}
+    if not place_folder.is_dir():
+        return achadas
+    for child in place_folder.iterdir():
+        if not child.is_dir():
+            continue
+        arquivo = child / "location.md"
+        if not arquivo.exists():
+            continue
+        fm, _ = read_doc(arquivo)
+        if fm.get("id") and BLOCO in fm:
+            achadas[fm["id"]] = child
+    return achadas
 
 
 def is_busy(actor_folder: Path) -> bool:
@@ -260,6 +324,72 @@ def resolver_vencidas() -> None:
             if r.get("extinto"):
                 io.marcar_extinto(pasta)
             _notificar(bloco, pasta, r)
+            _testemunhar_conclusao_prazo(bloco, pasta)
+
+
+def esforco_pronto(bloco: dict) -> bool:
+    """Peça de ESFORÇO cujo tempo já cobre o que falta — o critério da
+    resolução preguiçosa de esforço (revisão pós-057), espelhando `concluido()`
+    mas sem exigir que a sessão já tenha sido fechada por uma retomada.
+
+    Dois jeitos de estar pronta: (a) já fechada e com `tempo_trabalhado_s`
+    suficiente (`concluido(bloco)` — pode ter vindo de uma interrupção, ver
+    `apply_op`), ou (b) AINDA aberta, mas o tempo real decorrido desde
+    `trabalhando_desde` já cobre `restante_s` — o mesmo cálculo que
+    `creditar_e_fechar` faria, só que sem mutar nada (a mutação de verdade é
+    responsabilidade de quem chama, via retomada sintética)."""
+    if por_prazo(bloco):
+        return False
+    if concluido(bloco):
+        return True
+    desde = bloco.get("trabalhando_desde")
+    if not desde:
+        return False
+    return (time.time() - desde) >= restante_s(bloco)
+
+
+def pendentes_de_esforco() -> list[tuple[Path, dict]]:
+    """Peças de ESFORÇO prontas pra concluir — mesma varredura mundial de
+    `vencidas_por_prazo`, critério diferente (tempo ACUMULADO, não uma data)."""
+    out = []
+    for nome in _ARQUIVOS:
+        for arquivo in io.WORLD_DIR.rglob(nome):
+            fm, _ = read_doc(arquivo)
+            bloco = fm.get(BLOCO)
+            if isinstance(bloco, dict) and esforco_pronto(bloco):
+                out.append((arquivo.parent, bloco))
+    return out
+
+
+def resolver_esforco_pendente() -> None:
+    """A conclusão PREGUIÇOSA do relógio de ESFORÇO (revisão pós-057) — molde
+    de `resolver_vencidas()`, mas sem reinventar a conclusão: monta uma
+    RETOMADA SINTÉTICA (`{"peca": id, "narracao": "", "retomada": True}`) e
+    despacha pelo MESMO canal que uma retomada de verdade usaria
+    (`registro.get(bloco["tool"] + "_ops")`, via `turno.apply_op` — a porta
+    única). Mover pro personagem, gerar rota de location, creditar o domínio
+    certo na memória: tudo isso já mora em `craft`/`forja`, e continua lá —
+    esta função só decide QUANDO chamar o que já existe (Princípio XII: a
+    resolução é operação do dono do bloco, não de um domínio irmão, nem desta
+    primitiva).
+
+    Import de `turno` é LOCAL (mesma razão de `memoria`, acima): `motor/turno.py`
+    importa este módulo no topo (pro gate de interrupção), e o oposto no topo
+    fecharia ciclo."""
+    from . import turno
+    with io.WRITE_LOCK:
+        for pasta, bloco in pendentes_de_esforco():
+            ator_id = bloco.get("ator")
+            canal = f"{bloco.get('tool')}_ops"
+            if not ator_id or registro.get(canal) is None:
+                continue
+            try:
+                actor_folder = io.find_character_folder(ator_id)
+            except io.MotorError:
+                continue
+            turno.apply_op(ator_id, canal,
+                           {"peca": pasta.name, "narracao": "", "retomada": True},
+                           actor_folder=actor_folder)
 
 
 # spec 053: a frase do desfecho é do MOTOR, fixa por tool — não do Árbitro. `cook` já
@@ -307,6 +437,40 @@ def _notificar(bloco: dict, pasta: Path, resultado: dict) -> None:
         status["action"] = fato
         fm["status"] = status
         write_doc(arquivo, fm, body)
+
+
+# spec 057 (US4, Mecanismo B): qual evento de testemunha cada `tool` de PRAZO
+# gera na CONCLUSÃO — só `cook`/`brew` (têm ator, conferem posse via
+# `_DONO_EVENTOS`). `kindle_fire` fica de fora: acender já é o ato observável
+# (Mecanismo A, na abertura); apagar não é um evento novo de interesse
+# (FR-020/FR-021 da spec — fogo nunca confere posse).
+_EVENTO_PRAZO_POR_TOOL = {"cook": "cook_concluido", "brew": "brew_concluido"}
+
+
+def _testemunhar_conclusao_prazo(bloco: dict, pasta: Path) -> None:
+    """O lado de TESTEMUNHA da conclusão preguiçosa (Mecanismo B).
+
+    Por que este hook precisa existir, separado de `_notificar`: a conclusão de
+    PRAZO nunca passa pelo pipeline de `Fato` (`resolver_proposta` → `react_witness`)
+    — `resolver_vencidas` roda de dentro de uma CONSULTA (`get_context`), não de
+    uma mutação de tool. `_WITNESS_CANAIS`/`react_witness` só despacham `Fato`s
+    que esse pipeline produz; sem este hook, a conclusão de `cook`/`brew` seria
+    testemunhada por NINGUÉM, para sempre — só a abertura (essa sim, um tool call
+    comum) alimentaria `dono()`.
+
+    Import de `memoria` é LOCAL (não no topo do módulo) para não fechar um ciclo:
+    `motor/memoria/executores.py` já importa `trabalho` no nível do módulo."""
+    chave = _EVENTO_PRAZO_POR_TOOL.get(bloco.get("tool"))
+    ator = bloco.get("ator")
+    if not chave or not ator:
+        return
+    from . import memoria
+    chars, _, _ = io._scene_entities(pasta.parent)
+    if not chars:
+        return
+    ator_folder = chars.get(ator)
+    memoria._record_witness(ator, ator_folder, chars,
+                            {chave: [{"peca_id": pasta.name}]})
 
 
 def vencidas_por_prazo() -> list[tuple[Path, dict]]:

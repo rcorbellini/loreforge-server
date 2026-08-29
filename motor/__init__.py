@@ -66,6 +66,7 @@ from .percepcao import (  # noqa: F401
     observe_entity,
     prose_of,
     recognition_of,
+    own_memories,
     remembered_about,
     scene_recognitions,
 )
@@ -264,6 +265,7 @@ from .memoria import (  # noqa: F401
     sentiment_toward,
     has_trauma_from,
     ttl_for,
+    dono,
 )
 
 
@@ -348,6 +350,27 @@ from .botica import (  # noqa: F401
     _h_botica,
     duracao_segundos_preparo,
     roll_preparar_check,
+)
+
+
+# --- motor/craft (spec 057) ---
+from .craft import (  # noqa: F401
+    _apply_craft_ops,
+    _h_craft,
+    banda_final as craft_banda_final,
+    duracao_segundos_craft,
+    roll_craft_check,
+)
+
+
+# --- motor/musica (spec 058) ---
+from .musica import (  # noqa: F401
+    _apply_sing_ops,
+    _h_sing,
+    bonus_instrumento,
+    degraus_por_desfecho,
+    registro_de_intensidade,
+    roll_sing_check,
 )
 
 

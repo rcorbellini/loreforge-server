@@ -150,6 +150,7 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
                    f"Cozinhei {nome}.")
         applied.append({
             "ingredientes": ingredientes, "fonte_calor": fonte_calor, "banda": banda,
+            "peca_id": _peca_id,  # spec 057: exposto para o leque de testemunha
             "virada": bool(roll_info.get("virada")),
             "memory": {"content": content, "intensity": intensity, "involved": [],
                        "valence": None,

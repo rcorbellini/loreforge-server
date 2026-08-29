@@ -80,6 +80,7 @@ from .consultas import (  # noqa: F401
     read_doc,
     recognition_of,
     recall,
+    own_memories,
     remembered_about,
     rotas,
     scene_recognitions,

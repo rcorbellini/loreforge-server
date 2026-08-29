@@ -206,7 +206,13 @@ _MUTABLE_ROOT_BY_KIND = {"character": "status", "object": "state", "item": "stat
 
 
 _IMMUTABLE_ROOTS_BY_KIND = {
-    "character": {"attributes", "skills", "id", "name", "type", "controlled_by"},
+    # `skills` SAIU daqui (spec 058, US6): não é mais um campo de identidade
+    # reconhecido — deixou de ser obrigatório e deixou de subir ao contexto do
+    # Árbitro. Mutar `skills.*` continua bloqueado do mesmo jeito (cai no
+    # segundo guard, "só 'status.*' é mutável", já que não é a raiz mutável de
+    # `character`), só a MENSAGEM de recusa muda de "identidade é imutável"
+    # para "só 'status.*' é mutável" — comportamento protegido idêntico.
+    "character": {"attributes", "id", "name", "type", "controlled_by"},
     "object": {"id", "name", "type", "interactions"},
     "item": {"id", "name", "type", "interactions"},
 }
@@ -397,6 +403,15 @@ _WHY_BY_REGRA = {
     "material_imprestavel": "esse material não presta para trabalho nenhum",
     "sem_calor_de_forja": "esse fogo não dá conta de trabalhar metal",
     "sem_ferramental": "não há aqui com que trabalhar metal",
+    # spec 057 — craft. `ja_trabalhando`/`material_inacessivel`/`peca_inacessivel`/
+    # `descansando` são REUSADOS da forja (mesmo fato, mesma frase — craft segue o
+    # mesmo molde de trabalho retomável).
+    "sem_viabilidade": "não há nada aqui que sustente o que você quer fazer",
+    "peca_de_outro_trabalho": "esse trabalho foi começado para outra coisa — não é isto que está em processo",
+    # conserto pós-057 (achado da exploração): "sem bloco de trabalho" quase
+    # sempre significa "já terminou", não "é de outra coisa" — reusado por
+    # forja também (`origin_de`, `motor/trabalho.py`).
+    "peca_ja_concluida": "esse trabalho já terminou; não há mais o que retomar ali",
     "alvo_inacessivel": "não está ao alcance para esquartejar",
     "alvo_nao_morto": "não há como esquartejar quem ainda pode se mexer",
     "ja_esquartejado": "esse corpo já foi todo revirado; não sobrou nada a tirar",

@@ -37,8 +37,19 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # spec 052: `ferraria` (arma) e `armaria` (armadura) — DOIS domínios, não um.
 # Substituem a reserva de `oficio` que a doc anunciava: manter as três seria uma
 # opção morta no manifesto. Praticar um NÃO faz o outro progredir (FR-033).
+# spec 057 (revisão): `craft` ganhou domínio PRÓPRIO, `construtor` — não mais
+# variável por criação. Pedir ao Árbitro pra escolher entre 8 domínios (e um
+# atributo) a cada tentativa é o mesmo erro que `forja` já evitava (spec 052:
+# `_DOMINIO`/`_ATRIBUTO` fixos no executor, nunca julgados): um modelo pequeno,
+# sem material nenhum apontado, sobra sem grão pra decidir e cola no primeiro
+# vocabulário forte que vir no prompt — foi assim que um boneco de cera saiu
+# classificado como "herbalismo", puxado da descrição do LUGAR (Boticário da
+# Raiz Torta), não da narração. `oficio` fica como resíduo histórico (nenhum
+# emissor novo usa), mantido só porque memórias antigas já gravadas com esse
+# domain continuam válidas.
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
-          "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica", "nenhuma"}
+          "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica", "oficio",
+          "construtor", "musica", "nenhuma"}
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.
@@ -92,7 +103,14 @@ REQUIRED_TOP = {
     # travessia, e o viajante saltaria de rota em rota sem nunca estar num lugar.
     # Quebra de compatibilidade consciente (FR-010c) — o mundo tinha 7 lugares.
     "location": ["id", "name", "size"],
-    "character": ["id", "name", "controlled_by", "attributes", "skills", "status"],
+    # `skills` SAIU dos obrigatórios (spec 058, US6): o campo subia ao contexto
+    # do Árbitro (`arbiter.py`, projeção de `self`) e virou uma SEGUNDA via
+    # para "quão bom o personagem é" no exato domínio (`musica`) que a spec
+    # passou a derivar de memória de verdade (`proficiencies_for`). Um
+    # `character.md` legado que ainda declare `skills` continua VÁLIDO — a
+    # checagem de TIPO abaixo (`_validate_character`) segue intacta, só a
+    # AUSÊNCIA deixou de ser erro.
+    "character": ["id", "name", "controlled_by", "attributes", "status"],
     "route": ["id", "name", "from", "to", "travel_time_base", "bidirectional",
               "prerequisites"],
     "memory": ["id", "timestamp_start", "timestamp_end", "intensity", "state"],
@@ -157,6 +175,16 @@ def _validate_character(fm: dict) -> list[str]:
                 errors.append(f"character: atributo '{a}' deve ser inteiro.")
     elif attrs is not None:
         errors.append("character: 'attributes' deve ser um mapa dos 6 atributos.")
+    owner = fm.get("owner")
+    if owner is not None and owner != "":
+        if not isinstance(owner, str) or not owner.startswith("google:"):
+            errors.append("character: 'owner' deve ser texto iniciado com 'google:'.")
+    image_url = fm.get("image_url")
+    if image_url is not None and image_url != "":
+        # absoluta (http/https) ou relativa ao server (ex.: /api/character/image
+        # — o retrato servido do próprio disco, spec 056: URL de terceiro expira).
+        if not isinstance(image_url, str) or not image_url.startswith(("http://", "https://", "/")):
+            errors.append("character: 'image_url' deve ser uma URL http(s) ou um caminho começando com '/'.")
     status = fm.get("status")
     if status is not None and not isinstance(status, dict):
         errors.append("character: 'status' deve ser um mapa.")
@@ -236,6 +264,11 @@ def _validate_location(fm: dict) -> list[str]:
         errors.append(
             f"location: 'size' inválido: '{size}' (permitidos: {', '.join(SIZES)})."
         )
+    # spec 057: location passou a poder carregar um bloco `trabalho` (craft pode
+    # deixar um lugar em CONSTRUÇÃO — uma casa não nasce pronta de um ato só).
+    # Mesmo buraco que a 053 fechou para `object`: sem isto, um bloco malformado
+    # passaria sem erro nenhum.
+    errors.extend(_validate_trabalho(fm, "location"))
     return errors
 
 

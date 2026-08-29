@@ -15,7 +15,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from . import acougue, combate, comercio, conhecimento, conteiner, cozinha, cura, deslocamento, estado, fatos, intencoes, io, itens, memoria, narrate, percepcao, registro
+from . import acougue, combate, comercio, conhecimento, conteiner, cozinha, cura, deslocamento, estado, fatos, intencoes, io, itens, memoria, narrate, percepcao, registro, trabalho
 # os executores não são mais importados AQUI: cada tool registra o próprio handler no
 # seu módulo (spec 025). O despachante (apply_op) só consulta `registro`; importar os
 # módulos acima já popula a tabela. O turno só usa os helpers de FINALIZAÇÃO abaixo.
@@ -58,6 +58,17 @@ def apply_op(character_id: str, canal: str, op: dict, rolls=None,
             actor_folder = find_character_folder(character_id)
         if rolls is None:
             rolls = []
+        # ESFORÇO para com outra ação (revisão pós-057): craft/forja não travam
+        # o ator (ao contrário de PRAZO), mas fazer QUALQUER outra coisa fecha a
+        # sessão aberta — o crédito de tempo vale só até aqui, nunca até uma
+        # martelada que nunca veio. `op.get("peca")` é a única marca de "esta É
+        # a retomada daquela peça"; qualquer outro valor (inclusive ausente, o
+        # caso comum) encerra. A CONCLUSÃO em si não mora aqui — fica pro lazy
+        # de `trabalho.resolver_esforco_pendente` (mesmo padrão de PRAZO: quem
+        # fecha não é quem materializa).
+        pendente = trabalho.peca_pendente_de(actor_folder)
+        if pendente is not None and pendente[0].name != op.get("peca"):
+            trabalho.creditar_e_fechar(pendente[0])
         res = {canal: [op]}
         if context:
             res.update(context)

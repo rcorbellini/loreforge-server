@@ -167,10 +167,56 @@ _DOMAIN_BY_EVENT = {
     # (qualquer banda); as recusas de mérito (brew_refused_*) ficam DE FORA de
     # propósito — não alimentam a proficiência.
     "brew_otimo": "botica", "brew": "botica", "brew_ruim": "botica",
+    # spec 057 — retrofit de testemunha (leque público, `_witness_facts`). Só o
+    # lado da TESTEMUNHA precisa de entrada aqui: `_write_memory` (chamada por
+    # `_record_witness`) nunca recebe `domain` explícito, então cai neste
+    # fallback por `evento`. O lado do ATOR (evento `craft`/`craft_falha`/
+    # `craft_excepcional`) NUNCA entra aqui de propósito — `_memoria_ator`
+    # sempre passa `domain` explícito. `craft` tem domínio FIXO desde a revisão
+    # pós-057 (`construtor`, `motor/craft/executores.py::_DOMINIO` — deixou de
+    # ser o juízo caso a caso que esta nota descrevia antes), então este piso
+    # de testemunha passou a ser o mesmo valor real, não mais um residual de
+    # FR-008 provavelmente errado.
+    "witness_craft": "construtor",
+    # RESOLVIDO NA US4/T034: forja tem DOIS domínios (`ferraria`/`armaria`, spec
+    # 052) — o branch de `witness_forja` em `_witness_facts` agora passa
+    # `fato["dominio"]` por-instância (lido de `op["tipo"]`), e `_record_witness`
+    # repassa como override (`domain=fato.get("dominio")`, ver o comentário lá).
+    # Esta entrada só sobra como PISO — nunca deveria disparar na prática, mas
+    # existe pro dia em que `dominio` faltar no fato por algum motivo.
+    "witness_forja": "ferraria",
+    "witness_cozinha": "cozinha", "witness_botica": "botica",
+    "witness_forage": "herbalismo", "witness_esquartejar": "acougue",
+    "witness_fogo": "fogo",
+    # musica (spec 058) — oitavo domínio de fase 2. `sing_ruim` carimba TAMBÉM
+    # (cantar mal também fica — falha não-silenciosa, ao contrário das recusas
+    # de mérito das outras sete tools de ofício: cantar não TEM recusa de
+    # mérito, `sing` sempre acontece). `witness_musica` é o lado da plateia
+    # (ouvir também ensina um pouco, mesma decisão da 057 para testemunhas).
+    "sing_otimo": "musica", "sing": "musica", "sing_ruim": "musica",
+    "witness_musica": "musica",
 }
 
 
-_DONO_EVENTOS = {"transfer", "emprestimo", "witness_transfer", "witness_emprestimo"}
+_DONO_EVENTOS = {
+    "transfer", "emprestimo", "witness_transfer", "witness_emprestimo",
+    # spec 057 — retrofit de posse por testemunha (o conceito do mantenedor:
+    # "dono" é quem os outros SABEM que é, nunca campo `owner`). `witness_forage`
+    # e `witness_fogo` NÃO entram: colher tem múltiplas porções sem autor único
+    # claro, e acender fogo não confere posse (FR-020/FR-021 da spec).
+    "witness_craft", "witness_forja", "witness_cozinha", "witness_botica",
+    "witness_esquartejar",
+    # o lado do AUTOR (spec 057): sem NENHUMA testemunha, `dono()` só tem a
+    # memória do próprio criador para reconhecer a posse — e o item recém-
+    # criado nem sempre está "com" ele fisicamente (craft o deixa solto na
+    # location, não na mão), então o fallback de `fisica.carried_item_ids`
+    # não cobre isso. Todos os eventos que `_memoria_ator` pode gravar,
+    # abertura incluída — a peça em processo já é a MESMA entidade (mesmo
+    # `about`=peça_id) que o resultado final, e reconhecer o autor durante a
+    # construção é o comportamento certo (US6: quem quer interromper age
+    # sobre a PEÇA, `dono()` não é o que trava isso).
+    "craft", "craft_excepcional", "craft_falha", "craft_start", "craft_session",
+}
 
 
 _PUBLICO = "publico"   # ruído de ato ostensivo: visto por todos os presentes
@@ -401,7 +447,8 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
                         about: str, involved: list[str],
                         intensity: str = "small", summary: str = "",
                         frag: str = "",
-                        valence: dict[str, str] | None = None
+                        valence: dict[str, str] | None = None,
+                        ouvido_de: str | None = None,
                         ) -> tuple[str | None, int]:
     """UMA memória por assunto que SE REPETE — renovada, nunca duplicada.
 
@@ -426,6 +473,15 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
     fato mais importante da vida do personagem. Aqui a repetição RENOVA e ADENSA: o
     prazo empurra para frente e o texto passa a dizer que se insistiu em vão — o
     que é a informação que faltava, agora em uma memória só.
+
+    `ouvido_de` (spec 058, US1: renovação do RECONTO de `sing` — FR-027, "cantar
+    o mesmo episódio para o mesmo ouvinte renova, nunca eleva a intensidade").
+    Ausente (`None`, default) preserva o comportamento de todo chamador anterior
+    a esta spec — nenhum deles propagava proveniência. Quando informado, grava
+    na criação E atualiza a cada renovação (o teller mais recente é quem conta
+    agora); a INTENSIDADE, note, NUNCA é reescrita na renovação (só `vezes`,
+    `timestamp_end`, `involved`, `valence` crescem) — é isso que faz "nunca
+    eleva" ser garantia estrutural, não vigilância manual do chamador.
 
     Devolve (id, vezes).
     """
@@ -459,11 +515,14 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
             cauda = _reincidencia(vezes, frag) if frag else _insistencia(vezes)
             corpo = texto + cauda
             fm["summary"] = (summary.strip() or _short_summary(corpo)) + cauda
+            if ouvido_de is not None:
+                fm["ouvido_de"] = ouvido_de
             write_doc(path, fm, corpo)
             return fm.get("id"), vezes
     return _write_memory(character_folder, texto, intensity=intensity,
                          involved=involved, about=about, summary=summary,
-                         evento=evento, valence=valence), 1
+                         evento=evento, valence=valence,
+                         ouvido_de=ouvido_de), 1
 
 
 def _remember_route(character_folder: Path, route_id: str,
@@ -685,9 +744,17 @@ def _renew_memory(character_folder: Path, entity_id: str | None = None,
 
 
 def _record_hearsay(ouvinte_folder: Path, fontes_fm: list | dict, sobre: str,
-                    trecho: str, narrador_id: str) -> str | None:
+                    trecho: str, narrador_id: str, degraus: int = 1,
+                    about: str | None = None) -> str | None:
     """Grava no ouvinte a memória de RECONTO — UMA, do conjunto das fontes (spec 017,
     generalizada no item 52).
+
+    `degraus` (spec 058): QUANTAS faixas de intensidade o reconto baixa em relação
+    à MAIOR fonte — 0/1/2, default 1 (o comportamento de sempre, byte-idêntico:
+    `ask_about` nunca passa este parâmetro). É o que dá a `sing` o efeito medido
+    pelo mantenedor ("melhor proficiência = a canção perde menos força"): 0 faixas
+    é o feito chegando com a força de quem viveu (nunca MAIS forte que a fonte —
+    `_lower_intensity` nunca sobe, só desce ou mantém), 2 é o piso `small`.
 
     `fontes_fm` é a LISTA das lembranças que o narrador tinha sobre o assunto, e
     `trecho` é o Z: o que ele CONTOU, em uma peça só, escrito pela Mente do mundo. Um
@@ -711,14 +778,25 @@ def _record_hearsay(ouvinte_folder: Path, fontes_fm: list | dict, sobre: str,
       - VALÊNCIA: a união das valências das fontes. O Árbitro não reavalia.
       - `ouvido_de`: o narrador imediato, secreto. No 3º grau ele não entra em
         `involved` — a defesa do sigilo na origem.
+
+    `about` (spec 058, FR-027): SÓ `sing` passa isto — `ask_about` nunca passa,
+    e o comportamento dele fica byte-idêntico (a chave é `about is None`, não
+    um novo parâmetro de comportamento condicional espalhado). Quando
+    informado, o reconto é RENOVADO por `_remember_recurring` em vez de criar
+    um arquivo por performance — cantar o MESMO feito à MESMA plateia toda
+    noite converge para uma memória por ouvinte (`vezes` crescendo), e a
+    intensidade NUNCA sobe na renovação (garantia estrutural de
+    `_remember_recurring`, não vigilância aqui).
     """
     fontes = [fontes_fm] if isinstance(fontes_fm, dict) else list(fontes_fm or [])
     if not fontes:
         return None
     boato = any(memory_ouvido_de(f) is not None for f in fontes)
-    intensidade = _lower_intensity(min(
+    intensidade = min(
         (f.get("intensity") or "medium" for f in fontes),
-        key=lambda i: _INTENSITY_ORDER.get(i, 99)))
+        key=lambda i: _INTENSITY_ORDER.get(i, 99))
+    for _ in range(max(0, int(degraus))):
+        intensidade = _lower_intensity(intensidade)
     narradores_das_fontes = {memory_ouvido_de(f) for f in fontes} - {None}
     sujeitos, valence = [], {}
     for f in fontes:
@@ -732,12 +810,17 @@ def _record_hearsay(ouvinte_folder: Path, fontes_fm: list | dict, sobre: str,
     else:
         involved = sujeitos + [narrador_id]     # 2º grau: narrador nomeado (público)
         corpo = f"{name_of(narrador_id)} me contou: {trecho}"
+    summary = (f"dizem de {name_of(sobre)}" if boato
+              else f"{name_of(narrador_id)} contou de {name_of(sobre)}")
+    if about is not None:
+        return _remember_recurring(
+            ouvinte_folder, corpo, evento="hearsay_reconto", about=about,
+            involved=involved, intensity=intensidade, summary=summary,
+            valence=valence or None, ouvido_de=narrador_id)[0]
     return _write_memory(
         ouvinte_folder, corpo,
         intensity=intensidade, involved=involved, valence=valence or None,
-        ouvido_de=narrador_id, evento="hearsay_reconto",
-        summary=(f"dizem de {name_of(sobre)}" if boato
-                 else f"{name_of(narrador_id)} contou de {name_of(sobre)}"),
+        ouvido_de=narrador_id, evento="hearsay_reconto", summary=summary,
     )
 
 
@@ -1372,6 +1455,157 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
                           "recorrente": f"acusacao\x00{character_id}\x00{alvo}",
                           "reincidencia": "os vi nisso",
                           "evento": "witness_accuse"})
+    # P4 — CRAFT (spec 057): só ABERTURA/CONCLUSÃO viram fato (R8) — retomada
+    # intermediária não carrega `fase` nenhuma e cai fora daqui. `about` aponta
+    # o AUTOR (`character_id`, quem craftou) direto: é o que faz `dono()`
+    # reconhecer quem criou, sem depender de campo `owner` nenhum (spec 036).
+    # `base: medium` (não `small`) DE PROPÓSITO: o conceito de posse que esta
+    # spec introduz ("dono é quem os outros SABEM que é") só funciona se a
+    # testemunha lembrar MESMO sem familiaridade prévia com o autor — a maioria
+    # das testemunhas de uma criação são estranhos na cena, não vínculos
+    # antigos. `small` exige `familiarity_with > piso` (`_witness_intensity`),
+    # o que faria posse por testemunha falhar no caso comum. `medium` é
+    # "sempre memorável", o mesmo patamar de golpe/socorro — criar algo na
+    # frente de alguém é, por desenho, tão memorável quanto isso.
+    for op in outcome.get("craft_ops_applied") or []:
+        fase = op.get("fase")
+        peca_id = op.get("peca")
+        if fase not in ("abertura", "conclusao") or not peca_id:
+            continue
+        verbo = "terminar de fazer" if fase == "conclusao" else "começar a fazer"
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} {verbo} algo.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_craft", "about": character_id})
+    # P5 — RETROFIT DOS SEIS OFÍCIOS LEGADOS (spec 057, US4). Mesmo raciocínio de
+    # `witness_craft` acima: `base: "medium"` de propósito nos quatro que entram
+    # em `_DONO_EVENTOS` (forja/cozinha/botica/esquartejar) — posse por
+    # testemunha só funciona se estranhos também lembrarem. `forage`/`fogo`
+    # ficam em `"small"` (não conferem posse, `_DONO_EVENTOS` não os inclui) e
+    # sem `about` (não há dono a apontar).
+    _DOMINIO_FORJA = {"arma": "ferraria", "armadura": "armaria"}
+    for op in outcome.get("forja_ops_applied") or []:
+        peca_id = op.get("peca")
+        if not peca_id:
+            continue
+        # `fase` não é um campo do payload de forja (ao contrário de craft) —
+        # deriva-se de `retomada`/`concluido`, que a peça JÁ carimba (T033: não
+        # precisou tocar `forja/executores.py`, os dois booleanos já bastam).
+        if not op.get("retomada"):
+            fase = "abertura"
+        elif op.get("concluido"):
+            fase = "conclusao"
+        else:
+            fase = "retomada"      # sessão intermediária — fora do filtro
+        if fase not in ("abertura", "conclusao"):
+            continue
+        verbo = "terminar de forjar" if fase == "conclusao" else "começar a forjar"
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} {verbo} uma peça de metal.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_forja", "about": character_id,
+                      "dominio": _DOMINIO_FORJA.get(op.get("tipo"))})
+    # PRAZO — só a ABERTURA passa por aqui (a conclusão é o Mecanismo B, fora do
+    # pipeline de `Fato`: `trabalho._testemunhar_conclusao_prazo`, chamada de
+    # dentro de `resolver_vencidas`). Cada chamada aplicada de `cozinha_ops`/
+    # `botica_ops` É a abertura — não há branch de retomada nestas tools.
+    for op in outcome.get("cozinha_ops_applied") or []:
+        peca_id = op.get("peca_id")
+        if not peca_id:
+            continue
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} começar a cozinhar algo.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_cozinha", "about": character_id})
+    for op in outcome.get("botica_ops_applied") or []:
+        peca_id = op.get("peca_id")
+        if not peca_id:
+            continue
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} começar a preparar algo.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_botica", "about": character_id})
+    # PRAZO — Mecanismo B (spec 057, contracts/witness-retrofit.md):
+    # `trabalho._testemunhar_conclusao_prazo` monta este outcome sintético de
+    # DENTRO de `resolver_vencidas` (fora do pipeline de `Fato` inteiro — a
+    # conclusão preguiçosa nunca passa por `resolver_proposta`). `character_id`
+    # aqui já É o ator (quem `trabalho.py` resolveu de `bloco["ator"]`), não
+    # um observador — mesmo papel que os outros branches, só a ORIGEM do
+    # outcome que muda.
+    for op in outcome.get("cook_concluido") or []:
+        peca_id = op.get("peca_id")
+        if not peca_id:
+            continue
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} terminar de cozinhar algo.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_cozinha", "about": character_id})
+    for op in outcome.get("brew_concluido") or []:
+        peca_id = op.get("peca_id")
+        if not peca_id:
+            continue
+        fatos.append({"envolvidos": [character_id, peca_id],
+                      "texto": f"Vi {ator} terminar de preparar algo.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_botica", "about": character_id})
+    # SÍNCRONO — ato único, sem fase. `forage` não confere posse (múltiplas
+    # porções sem autor claro); `esquartejar` confere (a carne é de quem
+    # esquartejou, mesmo que o corpo fosse de outro personagem).
+    for op in outcome.get("forage_ops_applied") or []:
+        onde = op.get("onde")
+        itens = op.get("itens") or []
+        if not itens:
+            continue
+        fatos.append({"envolvidos": [character_id, *itens],
+                      "texto": f"Vi {ator} colher plantas em {io.name_of(onde)}.",
+                      "base": "small", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_forage"})
+    for op in outcome.get("esquartejar_ops_applied") or []:
+        alvo = op.get("alvo")
+        itens = op.get("itens") or []
+        if not itens:
+            continue
+        fatos.append({"envolvidos": [character_id, alvo, *itens],
+                      "texto": f"Vi {ator} esquartejar {_char_name(alvo)}.",
+                      "base": "medium", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_esquartejar", "about": character_id})
+    for op in outcome.get("fogo_ops_applied") or []:
+        fogo_id = op.get("fogo")
+        if not fogo_id:
+            continue
+        fatos.append({"envolvidos": [character_id, fogo_id],
+                      "texto": f"Vi {ator} acender um fogo.",
+                      "base": "small", "val_ator": None, "ruido": _PUBLICO,
+                      "evento": "witness_fogo"})
+    # P6 — CANTAR (spec 058). `envolvidos: [character_id]` — SÓ o cantor, de
+    # propósito (research R5): o SUJEITO do episódio cantado NÃO entra aqui, e
+    # por isso NÃO é excluído da plateia — ele ouve cantarem sobre ele e ganha
+    # esta mesma memória de reputação, ao contrário do reconto do feito (que
+    # `_apply_sing_ops` já grava direto via `_record_hearsay`, excluindo-o).
+    # `recorrente` chaveia por CANTOR (não por noite): a plateia de uma taverna
+    # fixa não acumula um arquivo por apresentação.
+    # `base` varia com o DESFECHO (research R3): `medium` em ótimo/ruim/
+    # fracasso (uma noite excepcional OU um vexame se lembram de qualquer um,
+    # mesmo estranho — mesmo raciocínio de `witness_craft` acima); `small` em
+    # `comum` (a noite mediana só gruda em quem já convive — aqui o piso de
+    # saliência de `_witness_intensity` é a régua CERTA, não um obstáculo).
+    for op in outcome.get("musica_ops_applied") or []:
+        if not op.get("ouvintes"):
+            continue          # cantou sozinho: ninguém para testemunhar
+        desfecho = op.get("desfecho")
+        bem = desfecho in ("otimo", "comum")
+        texto = (f"Ouvi {ator} cantar, e cantou bem." if bem else
+                 f"Ouvi {ator} tentar cantar, mas não saiu bem.")
+        fatos.append({
+            "envolvidos": [character_id],
+            "texto": texto,
+            "base": "medium" if desfecho != "comum" else "small",
+            "val_ator": POSITIVA if bem else NEGATIVA,
+            "ruido": _PUBLICO,
+            "recorrente": f"musica\x00{character_id}",
+            "reincidencia": "o ouvi cantar",
+            "evento": "witness_musica",
+        })
     return fatos
 
 
@@ -1460,14 +1694,29 @@ def _record_witness(character_id: str, actor_folder: Path,
                 val = {character_id: fato["val_ator"]} if fato["val_ator"] else None
             if fato.get("recorrente"):
                 # o mesmo ato repetido não vira N lembranças na plateia
+                #
+                # CONSERTO (spec 058, research R2): faltava `valence=val` aqui —
+                # o ramo normal (else, abaixo) sempre passou; este não. Ficou
+                # encoberto porque o único usuário até aqui (`witness_accuse`)
+                # declara `val_ator: None` (regra do fato, `_witness_facts`),
+                # então o `val` calculado acima já era `None` e a ausência não
+                # mudava nada. `witness_musica` (spec 058) É valente por desenho
+                # — sem esta linha, a reputação do cantor nunca se moveria.
                 mem_id, _ = _remember_recurring(
                     wfolder, texto, evento=fato.get("evento"),
                     about=fato["recorrente"], involved=inv, intensity=intens,
-                    frag=fato.get("reincidencia", ""))
+                    frag=fato.get("reincidencia", ""), valence=val)
             else:
+                # `domain` (spec 057, US4/T034): override POR-INSTÂNCIA, só usado
+                # por `witness_forja` (dois domínios reais — ferraria/armaria —
+                # que `_DOMAIN_BY_EVENT` não consegue distinguir por EVENTO
+                # sozinho). Ausente em todo fato pré-057: cai no fallback de
+                # sempre (`_DOMAIN_BY_EVENT.get(evento, "nenhuma")`), zero mudança
+                # de comportamento para quem não passa `dominio`.
                 mem_id = _write_memory(wfolder, texto, kind=ACONTECIMENTO,
                                        intensity=intens, involved=inv, valence=val,
-                                       evento=fato.get("evento"), about=alvo_dono)
+                                       evento=fato.get("evento"), about=alvo_dono,
+                                       domain=fato.get("dominio"))
             created.append({"target": wid, "id": mem_id, "event": "witness"})
     return created
 

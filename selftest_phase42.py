@@ -119,6 +119,14 @@ def run() -> int:
             return app.Handler.resolver_proposta(self, nome, payload)
         def _refuse_if_down(self, *a):
             return None
+        # spec 056: `resolver_proposta` passou a autenticar antes de tudo — este
+        # dublê de Handler não tem `self.server` (não é um socket de verdade),
+        # então cai direto no modo legado (mesmo retorno de `_authenticate` sem
+        # `auth_enabled`), sem tentar ler nada de rede.
+        def _authenticate(self):
+            return {"sub": "local", "email": "", "name": "local"}
+        def _authorize_character(self, *a):
+            return True
 
     via_funil = _H().resolver_proposta("consultar_memoria", {
         "character_id": "torvin-ferreiro", "sobre": "Elga",

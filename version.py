@@ -21,10 +21,28 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.21.0"
+__version__ = "2.23.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
+# (2.22.1 — spec 057, quatro consertos da exploração pós-implementação de craft.
+#  (a) `REGUA_CRAFT` reforçada: banda `falha` precisa comunicar DEFEITO concreto na
+#  `descricao_baixa` (o modelo real deixava fracasso quase indistinguível de sucesso).
+#  (b) `craftable_entities` (`percepcao/consultas.py`) — TERCEIRO predicado de posse,
+#  nem `alcançável` (`steal`, sem checagem) nem `disponível` (`comercio`, exige posse
+#  comprovada — bloquearia material livre): passa por posse livre e própria, para em
+#  posse RECONHECIDA de outro. Aplicado aos 5 enum_sources de material de trabalho
+#  (`craft_materiais`/`forge_materiais`/`cook_ingredientes`/`brew_ingredientes`/
+#  `kindle_materiais`) — antes, dava pra consumir o que outro personagem presente
+#  segurava na mão. (c) `peca_ja_concluida`, recusa nova (forja E craft): "sem bloco
+#  de trabalho" quase sempre é "já terminou", não "é de outra capacidade" — as duas
+#  causas estavam conflated numa frase só. (d) craft agora GERA uma `route` ao
+#  concluir uma `location` — achado sério: confirmado que aninhamento de pasta
+#  sozinho NUNCA bastou pra alcançar um lugar (o único mecanismo é `enter_route`,
+#  enum de destinos só vem de `route` declarada); sem isto a location criada nascia
+#  ilhada. Testado de ponta a ponta: `enter_route` de verdade move um personagem pra
+#  dentro da location criada e volta (bidirecional). Nenhuma superfície de tool nova
+#  — por isso PATCH, não MINOR.)
 # (1.1.1 — spec 025, 021 Fase C: refactor do fluxo de turno sem superfície nova.
 #  Executores auto-suficientes (leem a própria cena, aplicam-e-registram), o funil
 #  apply_resolution desidratado a sequenciador fino + _finalize_turn, os dois band-aids
@@ -61,6 +79,65 @@ __version__ = "2.21.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.23.0": "spec 058 — CANTAR. Tool nova `sing`: canta uma lembrança VIVA "
+             "própria para quem estiver presente — SEM régua de admissão, SEM "
+             "gate, SEM recusa de mérito (\"cantar não é cozinhar\": o "
+             "personagem abre a boca e canta, sempre; a única negativa é o "
+             "portão de estado, dormindo). Propagação reusa a PRIMITIVA de "
+             "boato da spec 017 (`_record_hearsay`, estendida com `degraus` e "
+             "`about` — renovação, nunca inflar arquivo por reprise), nunca "
+             "chama `ask_about`. Rolagem `d20+mod(CHA)+nivel_musica+bonus` vs "
+             "DC FIXA (não `persuade_dc` — medido que a LLM inverte a ordem "
+             "dos feitos ao tentar julgar tamanho de episódio; o teto do "
+             "reconto vem de `intensity`, campo já gravado). Régua de "
+             "instrumento lida da PROSA do item na mão (medida "
+             "determinística: 2/0/10). Cantar sozinho é permitido e conta "
+             "como prática. Domínio `musica` (11º de fase 2). CONSERTO em "
+             "`motor/juizo.py`: uma resposta com quebra de linha crua dentro "
+             "de string JSON era perdida em silêncio — saneada agora para "
+             "TODA capacidade julgada. CONSERTO em `_record_witness`: o ramo "
+             "recorrente do leque de testemunha não propagava `valence` "
+             "(byte-idêntico para o único usuário anterior, `witness_accuse`, "
+             "que sempre tinha valência nula). REVOGADO `character.skills` — "
+             "saiu dos obrigatórios e da projeção de `self` ao Árbitro (era a "
+             "segunda via para \"quão bom ele é\" no domínio que esta spec "
+             "passa a derivar de memória de verdade); `.md` legado com o "
+             "campo continua válido, só ignorado.",
+    "2.22.0": "spec 057 — CRAFT GENÉRICO + retrofit de testemunha. Tool nova "
+              "`craft`: narração livre + `materiais` (param explícito, mesmo "
+              "padrão de forge/cook/brew) cria item, object OU location numa "
+              "chamada só — o Árbitro classifica TIPO, domínio, atributo e "
+              "duração junto da nota de VIABILIDADE; o Motor escolhe "
+              "item.md/object.md/location.md sem a Mente saber disso de "
+              "antemão. Três caminhos no executor, não dois: síncrono (conclui "
+              "no ato, molde forage/esquartejar), assíncrono (peça em processo "
+              "no relógio de ESFORÇO, molde forja — primeira chamada nunca "
+              "conclui), retomada (zero LLM). `trabalho.py` generalizado para "
+              "`location.md` (terceiro tipo de arquivo com bloco `trabalho`) — "
+              "`criar_peca` ganha `filename`/`extra_fm`. `posicao` (US5): item "
+              "nasce solto ou com o personagem por julgamento; object sempre "
+              "fixo na location; location sempre subpasta NOVA da location "
+              "atual, nunca gera `route`; item assíncrono só migra pro autor "
+              "na CONCLUSÃO (a peça em processo mora na location o tempo "
+              "todo — é uma COISA no mundo, sobrevive a expulsão/ausência). "
+              "Domínio `oficio` REINTRODUZIDO com sentido novo — residual, "
+              "não a reserva que 052 substituiu (ver seção Domínios). "
+              "RETROFIT (US4, achado real da Fase 0 do plano): os seis "
+              "ofícios legados (forja/cozinha/botica/forage/esquartejar/"
+              "fogo) nunca alimentavam o leque de testemunha — trabalhar em "
+              "público não deixava rastro em quem via. Dois mecanismos, não "
+              "um: Mecanismo A (`_WITNESS_CANAIS`/`_witness_facts`, pipeline "
+              "de `Fato`) cobre abertura de todos + conclusão de "
+              "ESFORÇO/síncronos; Mecanismo B (`trabalho."
+              "_testemunhar_conclusao_prazo`, hook NOVO em `resolver_vencidas`) "
+              "cobre a conclusão de PRAZO (cozinha/botica), que resolve "
+              "preguiçosamente dentro de uma CONSULTA (`get_context`) e nunca "
+              "passa pelo pipeline de mutação. `witness_forja` carrega domínio "
+              "POR-INSTÂNCIA (ferraria/armaria — `_record_witness` ganha "
+              "override `domain=fato.get(\"dominio\")`, `_write_memory` já "
+              "aceitava). Posse (`dono()`, spec 036) por cinco dos sete "
+              "eventos — `witness_forage`/`witness_fogo` ficam de fora "
+              "(FR-020/021). Nenhum campo `owner` em entidade nenhuma.",
     "2.21.0": "spec 055 — PREPARAR. Tool nova `brew`: combina N ingredientes sobre um "
               "recipiente (`object` ou o LUGAR), molde EXATO de `cook` — não uma tool "
               "nova em espécie, `cook` com vocabulário de botica. Duas réguas de gate "

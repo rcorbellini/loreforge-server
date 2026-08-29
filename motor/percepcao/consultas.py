@@ -302,6 +302,42 @@ def offerable_entities(personagem_id: str) -> dict[str, dict]:
     return _walk_scene(loc, _para, incluir_barrado=False)
 
 
+def craftable_entities(personagem_id: str) -> dict[str, dict]:
+    """O que `personagem_id` pode CONSUMIR COMO MATERIAL sem tomar de ninguém —
+    um TERCEIRO primitivo, distinto dos outros dois (spec 057, achado da
+    exploração pós-implementação de craft): nem `reachable_entities`
+    (`alcançável`, o que `steal`/pegar usa — sem checagem de dono NENHUMA, de
+    propósito, é o que faz roubar funcionar), nem `offerable_entities`
+    (`disponível`, o que `comercio.py` usa, exclusivamente — para em
+    `dono(nó, você) != você`, que também é `True` pra item SEM dono nenhum,
+    porque `None != você`; oferecer exige posse COMPROVADA, e isso bloquearia
+    pegar uma fibra solta que ninguém nunca reivindicou).
+
+    Aqui a condição de parada é `dono(nó, personagem_id) not in (None,
+    personagem_id)` — passa por posse LIVRE (`dono() is None`) e pela própria,
+    para só em posse RECONHECIDA de outro. É o meio-termo que craft precisa:
+    pegar o que está solto no mundo, sem pedir licença pro que já é de alguém.
+
+    Consumidor: `craft_materiais`/`forge_materiais`/`cook_ingredientes`/
+    `brew_ingredientes`/`kindle_materiais` (`arbiter.py::scene_candidates`) —
+    as cinco tools de trabalho que consomem material da cena real. Antes desta
+    função, todas as cinco liam um índice físico bruto sem filtro de posse
+    nenhum (confirmado na exploração: dava pra consumir o que outro
+    personagem presente carregava na mão, sem checagem)."""
+    loc = _location_folder_of(personagem_id)
+    if loc is None:
+        return {}
+
+    def _para(f: Path, fm: dict, tipo: str) -> bool:
+        if is_blocked(personagem_id, f, fm):
+            return True
+        if tipo == "object":
+            return False
+        return dono(fm.get("id"), personagem_id) not in (None, personagem_id)
+
+    return _walk_scene(loc, _para, incluir_barrado=False)
+
+
 def _visible_item_refs(char_folder: Path) -> list[dict]:
     """Itens visíveis de um personagem para TERCEIROS: os filhos diretos
     (vestidos/segurados), com o slot e a física de cada um. O conteúdo dos
@@ -408,9 +444,13 @@ def get_context(character_id: str) -> dict:
     Spec 053: a segunda família virou GENÉRICA — `trabalho.resolver_vencidas`
     resolve todo prazo vencido do mundo (prato, fonte de fogo, o que vier),
     no mesmo ponto e no mesmo padrão que `deslocamento.lazy_evaluate` estabeleceu.
+    Revisão pós-057: `trabalho.resolver_esforco_pendente` é a MESMA ideia pro
+    outro relógio (craft/forja) — critério de tempo ACUMULADO em vez de uma
+    data fixa, mas a mesma resolução preguiçosa, no mesmo lugar.
     """
     lazy_evaluate()
     trabalho.resolver_vencidas()
+    trabalho.resolver_esforco_pendente()
 
     char_folder = find_character_folder(character_id)
     place_folder = char_folder.parent
@@ -607,6 +647,8 @@ def list_characters() -> list[dict]:
             "id": fm.get("id"),
             "name": fm.get("name"),
             "location": loc_name,
+            "owner": fm.get("owner"),
+            "image_url": fm.get("image_url"),
         })
     return chars
 
@@ -921,6 +963,54 @@ def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
         -(m.get("timestamp_start") or 0),
     ))
     return out[:_MEMORY_CONTEXT_CAP]
+
+
+def own_memories(character_id: str) -> list[dict]:
+    """As memórias VIVAS de tipo ACONTECIMENTO que o próprio personagem guarda —
+    consulta de SERVER (spec 058). Base do enum de `sing`: só se canta o que se
+    lembra.
+
+    Irmã de `remembered_about`, e a diferença é o que motiva a existência dela:
+    `remembered_about(quem, sobre)` exige um `sobre` já escolhido ("o que penso
+    de fulano"); aqui não há fulano — o cantor pode cantar sobre um herói que
+    nunca esteve na cena, e o enum precisa oferecer TODAS as lembranças, cada
+    uma com o PRÓPRIO sujeito. `sobre` sai do `involved` de cada memória: o
+    primeiro envolvido que não é o narrador. Uma memória sem nenhum outro
+    envolvido (rara — a vivência é só dele) fica de fora: não há sujeito para
+    a canção.
+
+    Sem CAP e sem ordenação por saliência (ao contrário de `remembered_about`):
+    é o Árbitro, lendo a `description` da tool com a listagem inteira, quem
+    escolhe — cortar a lista aqui esconderia lembranças que o jogador queria
+    ver oferecidas.
+    """
+    try:
+        folder = find_character_folder(character_id)
+    except MotorError:
+        return []
+    mem_dir = folder / "memories"
+    if not mem_dir.is_dir():
+        return []
+    _expire_memories(folder)
+    now = time.time()
+    out = []
+    for path in sorted(mem_dir.glob("*.md")):
+        fm, body = read_doc(path)
+        if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
+            continue
+        if not _is_alive(fm, now):
+            continue
+        sobre = next((x for x in memory_involved(fm) if x and x != character_id),
+                     None)
+        if not sobre:
+            continue
+        out.append({
+            "id": fm.get("id"), "sobre": sobre,
+            "resumo": (fm.get("summary") or "").strip() or _short_summary(body),
+            "conteudo": body.strip() or (fm.get("summary") or ""),
+            "intensity": fm.get("intensity"),
+        })
+    return out
 
 
 # --------------------------------------------------------------------------- #

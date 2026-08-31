@@ -282,6 +282,97 @@ def _accommodate(dest_root: Path, item_id: str, item_folder: Path,
     return dest_root, "character", None           # sem saída: a recusa segue valendo
 
 
+def bring_to_hand(actor_folder: Path, item_id: str) -> tuple[dict | None, dict | None]:
+    """EMPUNHAR o que já se carrega — o espelho de `_accommodate` (item 44).
+
+    A spec 044 resolveu o lado de QUEM RECEBE: chegou algo e a mão está cheia, o
+    mundo ACOMODA em vez de recusar. O lado simétrico continuou punitivo: um item
+    que o personagem JÁ CARREGA — guardado na bolsa, ou segurado de cortesia (sem
+    `state.slot`, o pré-004 que o validador ainda avisa) — não conta como "na mão",
+    e toda tool que exige instrumento empunhado o trata como inexistente.
+
+    O CASO QUE A CRIOU (2026-08-30). O Sorin carrega a pena e o tinteiro. `write`
+    exigia `state.slot: mao`, e a pena está com `slot: null` — então o instrumento
+    que ele tem no bolso era invisível para a tool. Fazer o jogador gastar um turno
+    de `take` para pôr na mão o que ele já carrega é a mesma punição que os itens
+    44/45 mediram e o mantenedor recusou: "o jogo fica muito punitivo".
+
+    Duas saídas, a MESMA ordem e o MESMO espírito do `_accommodate`:
+
+    (A) Há vaga na pega: o item sobe para a mão, e pronto.
+    (B) A pega está cheia: guarda em contêiner aberto algo que já estava na mão e
+        ocupa a vaga aberta. Nunca o item da própria ação, nunca o chão.
+
+    NÃO desempunha o que está VESTIDO: tirar armadura para escrever é decisão do
+    personagem, não gesto implícito do mundo — isso é `unequip`, e continua sendo.
+    Não mexe em carga: o item já é carregado por ele, o peso não muda.
+
+    Devolve (empunhou|None, rejection|None). `empunhou` é o que precisa ser NARRADO
+    (Princípio X: efeito que ninguém pediu não pode ser silencioso); (None, None)
+    significa que já estava na mão e nada aconteceu.
+    """
+    actor_fm, _ = read_doc(actor_folder / "character.md")
+    pega = grasp_slot_of(actor_fm) or HAND_SLOT
+    achado = _find_item_under(actor_folder, item_id)
+    if achado is None:
+        # NÃO inventa recusa: o item não está com ele, e cada chamador tem a
+        # própria frase para isso (`sem_instrumento` em `write`, o bônus que
+        # zera em `sing`). Uma primitiva que rouba o vocabulário do chamador
+        # troca uma recusa precisa por uma genérica.
+        return None, None
+    item_folder, item_fm = achado
+    slot_atual = (item_fm.get("state") or {}).get("slot")
+    if slot_atual == pega:
+        return None, None                     # já está na mão: nada a fazer
+    if slot_atual:
+        # vestido num slot do corpo — não é o caso desta primitiva
+        return None, _rejection({"item": item_id},
+                                _fail("item_vestido", item=item_id))
+
+    maos = list(slots_in_use(actor_folder).get(pega) or [])
+    guardou = None
+    if check_mao(actor_fm.get("id"), maos,
+                 slot_capacity(actor_fm, pega)) is not None:
+        # (B) a pega está cheia: abrir uma vaga guardando o que já estava lá.
+        for ocupado in maos:
+            if ocupado == item_id:
+                continue                      # nunca o item da própria ação
+            preso = _find_item_under(actor_folder, ocupado)
+            if preso is None:
+                continue
+            preso_folder, preso_fm = preso
+            abrigo = open_container_for(actor_folder, preso_fm, preso_folder)
+            if abrigo is None:
+                continue
+            destino = abrigo / preso_folder.name
+            if destino.exists():
+                continue
+            io.move_entity(preso_folder, destino)
+            _set_item_slot(destino, None)     # guardado não é segurado
+            abrigo_fm, _ = read_doc(abrigo / "item.md")
+            guardou = {"item": ocupado, "para": abrigo_fm.get("id")}
+            break
+        else:
+            # sem saída: a recusa segue valendo, agora honesta.
+            return None, _rejection({"item": item_id},
+                                    _fail("maos_ocupadas",
+                                          personagem=actor_fm.get("id"),
+                                          item=item_id))
+
+    # (A) sobe para a mão. Filho direto de personagem <=> state.slot (spec 004).
+    destino = actor_folder / item_folder.name
+    if destino != item_folder:
+        if destino.exists():
+            return None, _rejection({"item": item_id},
+                                    _fail("item_inacessivel", item=item_id))
+        io.move_entity(item_folder, destino)
+    _set_item_slot(destino, pega)
+    empunhou = {"item": item_id}
+    if guardou:
+        empunhou["guardou"] = guardou
+    return empunhou, None
+
+
 def transfer_item(
     item_id: str, actor_folder: Path, dest_id, scene: dict,
     rolls: list | None = None,

@@ -15,7 +15,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import fisica, io, memoria, registro, rolagem, rotas, trabalho
+from .. import fisica, io, itens, memoria, registro, rolagem, rotas, trabalho
 from ..fisica import (
     DOWN_CONDITIONS,
 )
@@ -444,6 +444,16 @@ def _apply_write_ops(character_id: str, actor_folder: Path, resolution: dict,
         if alvo_folder is None:
             rejected.append(_fail("item_sumiu", alvo=alvo))
             continue
+        # EMPUNHAR O QUE JÁ SE CARREGA (2026-08-30). Era estrito: o instrumento
+        # tinha de JÁ estar na mão, e a pena guardada na bolsa — ou segurada de
+        # cortesia, sem `state.slot` — valia o mesmo que não existir. Custava um
+        # turno de `take` para pôr na mão o que o personagem já carrega, a mesma
+        # punição que os itens 44/45 mediram. Agora o Motor o traz, abrindo vaga
+        # na pega se precisar; `empunhou` viaja no applied para virar frase.
+        empunhou, rej_mao = itens.bring_to_hand(actor_folder, instrumento)
+        if rej_mao is not None:
+            rejected.append(rej_mao)
+            continue
         instr_folder = actor_folder / instrumento
         instr_fm = (read_doc(instr_folder / "item.md")[0]
                    if (instr_folder / "item.md").exists() else None)
@@ -489,6 +499,7 @@ def _apply_write_ops(character_id: str, actor_folder: Path, resolution: dict,
 
         applied.append({
             "alvo": alvo, "instrumento": instrumento, "memoria_id": memoria_id,
+            **({"empunhou": empunhou} if empunhou else {}),
             "memory": {
                 "content": f"Escrevi em {name_of(alvo)}.", "intensity": "small",
                 "involved": [], "valence": None, "event": "write",

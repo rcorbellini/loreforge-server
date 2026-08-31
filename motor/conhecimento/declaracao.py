@@ -620,7 +620,18 @@ _LIMIAR_GATE_WRITE = 5
 
 @inworld("write_ops_applied")
 def _iw_write(op):
-    return f"escreveu sobre {name_of(op.get('alvo'))}"
+    frase = f"escreveu sobre {name_of(op.get('alvo'))}"
+    # O gesto de EMPUNHAR é do MUNDO, não do jogador — e o Princípio X proíbe que
+    # ele aconteça calado (mesma regra do `acomodou` do item 44). Vai na MESMA
+    # frase porque é um gesto só: pegar a pena faz parte de escrever.
+    emp = op.get("empunhou")
+    if isinstance(emp, dict):
+        frase = f"tomou {name_of(emp.get('item'))} e " + frase
+        guardou = emp.get("guardou")
+        if isinstance(guardou, dict):
+            frase += (f", guardando {name_of(guardou.get('item'))} em "
+                      f"{name_of(guardou.get('para'))} para abrir a mão")
+    return frase
 
 
 def _write_desc(scene):

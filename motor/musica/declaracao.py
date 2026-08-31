@@ -96,12 +96,23 @@ REGUA_SING = _regua_sing(True, "")
 def _iw_sing(op):
     desfecho = op.get("desfecho")
     if not op.get("ouvintes"):
-        return "cantou, embora não houvesse ninguém para ouvir"
-    if desfecho == "otimo":
-        return "cantou, e a sala inteira parou para escutar"
-    if desfecho == "comum":
-        return "cantou, e alguns pararam para escutar"
-    return "tentou cantar, mas a voz não pegou"
+        frase = "cantou, embora não houvesse ninguém para ouvir"
+    elif desfecho == "otimo":
+        frase = "cantou, e a sala inteira parou para escutar"
+    elif desfecho == "comum":
+        frase = "cantou, e alguns pararam para escutar"
+    else:
+        frase = "tentou cantar, mas a voz não pegou"
+    # tomar o instrumento é gesto do MUNDO (Princípio X, mesma regra do
+    # `acomodou` do item 44 e do `empunhou` de `write`): não pode ser calado.
+    emp = op.get("empunhou")
+    if isinstance(emp, dict):
+        frase = f"tomou {motor.name_of(emp.get('item'))} e " + frase
+        guardou = emp.get("guardou")
+        if isinstance(guardou, dict):
+            frase += (f", guardando {motor.name_of(guardou.get('item'))} em "
+                      f"{motor.name_of(guardou.get('para'))} para abrir a mão")
+    return frase
 
 
 def _sing_desc(scene):

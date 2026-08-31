@@ -114,6 +114,7 @@ from .itens import (  # noqa: F401
     _apply_equip_ops,
     _apply_item_transfers,
     _apply_movement,
+    bring_to_hand,
     transfer_item,
     _find_item_folder_in_scene,
     _find_item_under,

@@ -607,13 +607,23 @@ def _leave_trace(location_folder: Path, quem: str, direcao: str, evento: str) ->
     elif total <= 5:
         ttl = max(_RASTRO_TTL_MIN, ttl - _RASTRO_TTL_STEP)
     rastro_id = new_id("rastro")
-    folder = location_folder / rastro_id
     fm = {
         "type": "rastro", "id": rastro_id, "quem": quem, "direcao": direcao,
         "evento": evento, "criado_em": now, "ttl_seconds": ttl,
         "intensity": intensity,
     }
-    write_doc(folder / "rastro.md", fm, "Uma marca recente de passagem.")
+    # UMA PASTA DE RASTROS POR ESTRUTURA, com os registros soltos dentro
+    # (2026-08-30) — o mesmo desenho de `memories/` e `intentions/`.
+    #
+    # A spec 034 gravava `<lugar>/<rastro-id>/rastro.md`: uma PASTA por marca,
+    # com um arquivo só dentro. Isso fazia um registro parecer uma ENTIDADE da
+    # cena, indistinguível de personagem/item/objeto/lugar — que são os únicos
+    # que merecem pasta própria, porque aninham. Medido no mundo real: 235
+    # marcas viraram 235 diretórios dentro dos lugares (67 só na praça do
+    # mercado, 46 na taverna), e toda varredura de cena passava por eles.
+    # Rastro é registro, não entidade: mora junto, em arquivo solto.
+    write_doc(location_folder / "rastros" / f"{rastro_id}.md", fm,
+              "Uma marca recente de passagem.")
     return rastro_id
 
 

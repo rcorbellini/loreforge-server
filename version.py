@@ -21,10 +21,24 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.24.0"
+__version__ = "2.25.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
+# (2.25.0 — EMPUNHAR o que já se carrega, e o LAYOUT dos registros no mundo.
+#  (a) `itens.bring_to_hand`, o espelho do `_accommodate` do item 44: o instrumento
+#  de `write`/`sing` deixa de precisar estar JÁ na mão — basta que o personagem o
+#  CARREGUE, e o Motor o traz, abrindo vaga na pega (guardando o que estava lá) se
+#  preciso; sem saída, a recusa `maos_ocupadas` segue valendo, agora honesta.
+#  Vestido nunca sobe sozinho (isso é `unequip`, decisão do personagem), e o gesto
+#  é NARRADO (Princípio X). Custava um turno de `take` para pegar o que já se tinha
+#  no bolso. (b) RASTRO vira registro, não entidade: `<lugar>/rastros/<id>.md`, o
+#  mesmo desenho de `memories/`/`intentions/`, em vez de uma PASTA por marca —
+#  eram 235 diretórios dentro dos lugares (67 só na praça). (c) toda ROTA passa a
+#  morar na menor estrutura que contém as duas pontas, em vez de num `routes/` na
+#  raiz do mundo; nenhum código dependia disso (`find_route` faz rglob), e o
+#  caminho de runtime do `craft` já gravava assim. Migradores:
+#  `migra_rastros.py` e `migra_rotas.py`.)
 # (2.24.0 — spec 059: `write` — escrever num documento. Dois modos: ANCORADO
 #  (`memoria_id`, transcrição verbatim do `conteudo` da memória, sem distorção —
 #  o inverso exato do boato) e LIVRE (`texto`, VOZ sem ancoragem). Dois gates de

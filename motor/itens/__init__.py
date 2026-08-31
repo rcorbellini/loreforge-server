@@ -19,6 +19,7 @@ from .primitivas import (  # noqa: F401
     roll_embriaguez_check,
     roll_steal_check,
     roll_toxicidade_check,
+    bring_to_hand,
     transfer_item,
 )
 from .executores import (  # noqa: F401

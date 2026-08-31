@@ -350,6 +350,120 @@ check("guarda-ok. chamada válida (texto livre) passa pela guarda e aplica",
 check("guarda-ok. o texto realmente chegou ao item, pelo caminho público inteiro",
       "Escrito pela guarda real." in _corpo(quadro), _corpo(quadro))
 
+
+# --------------------------------------------------------------------------- #
+# EMPUNHAR O QUE JÁ SE CARREGA (2026-08-30) — `itens.bring_to_hand`, o espelho
+# do `_accommodate` do item 44. O instrumento deixou de precisar estar JÁ na
+# mão: basta que o personagem o CARREGUE, e o Motor o traz — abrindo vaga na
+# pega se for preciso. Sem isto, a pena guardada na bolsa (ou segurada de
+# cortesia, sem `state.slot`) valia o mesmo que não existir, e escrever custava
+# um turno de `take` antes.
+# --------------------------------------------------------------------------- #
+print("\n--- (empunhar) o instrumento que já se carrega ------------------------")
+
+
+def _mk_item_guardado(actor_folder, iid, slot=None, size="PP", peso=0.1,
+                      dentro=None, nome="Pena Guardada"):
+    """Item SOB o personagem, com `state.slot` livre (guardado/cortesia)."""
+    base = dentro if dentro is not None else actor_folder
+    d = base / iid
+    d.mkdir(parents=True, exist_ok=True)
+    slot_yaml = f"state:\n  slot: {slot}\n" if slot else ""
+    (d / "item.md").write_text(
+        f"---\ntype: item\nid: {iid}\nname: {nome}\norigin: editorial\n"
+        f"size: {size}\nweight_kg: {peso}\n{slot_yaml}---\n"
+        f"Uma pena de ganso e um tinteiro tampado.\n", encoding="utf-8")
+    return d
+
+
+def _slot_de(folder):
+    fm, _ = motor.read_doc(folder / "item.md")
+    return (fm.get("state") or {}).get("slot")
+
+
+# (A) MÃO LIVRE — o item sobe sozinho.
+livre = _mk_char("maolivre-p59", "Mão Livre")
+pena_livre = _mk_item_guardado(livre, "pena-guardada-p59")
+emp, rej = motor.bring_to_hand(livre, "pena-guardada-p59")
+check("empunhar-A. com mão livre, o item guardado sobe para a mão",
+      rej is None and _slot_de(livre / "pena-guardada-p59") == motor.HAND_SLOT,
+      f"rej={rej} slot={_slot_de(livre / 'pena-guardada-p59')}")
+check("empunhar-A. o gesto é DECLARADO para virar frase (Princípio X)",
+      isinstance(emp, dict) and emp.get("item") == "pena-guardada-p59", str(emp))
+
+# idempotente: chamar de novo com o item já na mão não mexe em nada.
+emp2, rej2 = motor.bring_to_hand(livre, "pena-guardada-p59")
+check("empunhar-A. já na mão: nada acontece e nada se narra",
+      emp2 is None and rej2 is None, f"{emp2} / {rej2}")
+
+# (B) MÃOS CHEIAS, COM BOLSA — guarda algo para abrir a vaga.
+cheio = _mk_char("maocheia-p59", "Mãos Cheias")
+_mk_item_guardado(cheio, "tralha-a-p59", slot="mao", nome="Tralha A")
+_mk_item_guardado(cheio, "tralha-b-p59", slot="mao", nome="Tralha B")
+bolsa = cheio / "bolsa-p59"
+bolsa.mkdir(parents=True, exist_ok=True)
+(bolsa / "item.md").write_text(
+    "---\ntype: item\nid: bolsa-p59\nname: Bolsa\norigin: editorial\n"
+    "size: P\nweight_kg: 0.5\nstate:\n  slot: mao\n"
+    "container:\n  max_size: P\n  max_items: 4\n  fechado: false\n---\n"
+    "Uma bolsa de couro, aberta.\n", encoding="utf-8")
+pena_cheia = _mk_item_guardado(cheio, "pena-cheia-p59", dentro=bolsa)
+emp3, rej3 = motor.bring_to_hand(cheio, "pena-cheia-p59")
+check("empunhar-B. mãos cheias: abre vaga guardando o que já estava lá",
+      rej3 is None and _slot_de(cheio / "pena-cheia-p59") == motor.HAND_SLOT,
+      f"rej={rej3}")
+check("empunhar-B. o que foi guardado é DECLARADO junto (nada calado)",
+      isinstance(emp3, dict) and isinstance(emp3.get("guardou"), dict),
+      str(emp3))
+check("empunhar-B. nunca desloca o item da própria ação",
+      (emp3 or {}).get("guardou", {}).get("item") != "pena-cheia-p59", str(emp3))
+
+# (C) MÃOS CHEIAS, SEM ONDE GUARDAR — a recusa segue valendo, honesta.
+travado = _mk_char("travado-p59", "Travado")
+_mk_item_guardado(travado, "tralha-c-p59", slot="mao", nome="Tralha C")
+_mk_item_guardado(travado, "tralha-d-p59", slot="mao", nome="Tralha D")
+pena_travada = _mk_item_guardado(travado, "pena-travada-p59")
+emp4, rej4 = motor.bring_to_hand(travado, "pena-travada-p59")
+check("empunhar-C. sem contêiner onde guardar, recusa `maos_ocupadas`",
+      rej4 is not None and rej4.get("regra") == "maos_ocupadas", str(rej4))
+check("empunhar-C. e a recusa não é silenciosa (tem frase de mundo)",
+      bool((rej4 or {}).get("why")), str(rej4))
+check("empunhar-C. nada se moveu: a pena continua onde estava",
+      _slot_de(travado / "pena-travada-p59") is None,
+      str(_slot_de(travado / "pena-travada-p59")))
+
+# (D) VESTIDO não é empunhável por gesto implícito — isso é `unequip`.
+vestido = _mk_char("vestido-p59", "Vestido")
+_mk_item_guardado(vestido, "gibao-p59", slot="torso", nome="Gibão")
+emp5, rej5 = motor.bring_to_hand(vestido, "gibao-p59")
+check("empunhar-D. o que está VESTIDO não sobe à mão sozinho",
+      rej5 is not None and rej5.get("regra") == "item_vestido", str(rej5))
+
+# (E) o que ele NÃO carrega cai fora sem inventar recusa — cada chamador tem a sua.
+emp6, rej6 = motor.bring_to_hand(livre, "coisa-que-nao-existe-p59")
+check("empunhar-E. item que ele não carrega: sem recusa própria do primitivo",
+      emp6 is None and rej6 is None, f"{emp6} / {rej6}")
+
+# (F) FIM A FIM: escrever com a pena GUARDADA, sem `take` antes.
+autor = _mk_char("autor-p59", "Autor")
+_mk_item_guardado(autor, "pena-f-p59", nome="Pena e Tinteiro")
+folha = _mk_item_cena(LUGAR, "folha-p59", "Uma folha de pergaminho em branco.",
+                      nome="Folha de Pergaminho")
+res_f = motor.apply_resolution("autor-p59", {"write_ops": [{
+    "alvo": "folha-p59", "instrumento": "pena-f-p59",
+    "texto": "Escrito sem gastar um turno pegando a pena.",
+    "superficie": 9, "instrumento_nota": 9}]})
+aplicados = res_f.get("write_ops_applied") or []
+check("empunhar-F. escreve com a pena GUARDADA, sem `take` antes",
+      len(aplicados) == 1 and "sem gastar um turno" in _corpo(folha),
+      str(res_f.get("rejected")))
+check("empunhar-F. o gesto de tomar a pena viaja no applied (vira frase)",
+      isinstance((aplicados[0] if aplicados else {}).get("empunhou"), dict),
+      str(aplicados))
+check("empunhar-F. e a pena de fato ficou na mão",
+      _slot_de(autor / "pena-f-p59") == motor.HAND_SLOT,
+      str(_slot_de(autor / "pena-f-p59")))
+
 print("\n" + "=" * 70)
 if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + ", ".join(FAILS))

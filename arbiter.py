@@ -618,22 +618,27 @@ def _verb_candidates(idx: dict) -> dict:
         "pedir": [],
         "attack_with": sorted(i for i, e in items.items()
                               if e["porter"] == actor and e["slot"] == hand),
-        # spec 058: instrumento de `sing` — NA MÃO, não "ao alcance" (tocar exige
-        # empunhar). Mesmo predicado de `attack_with`.
+        # spec 058: instrumento de `sing` — algo que ele CARREGUE e possa empunhar.
+        # Era estrito ("já na mão") e isso deixava o alaúde guardado na bolsa
+        # invisível para a tool; hoje o Motor o traz à mão na aplicação
+        # (`bring_to_hand`, o espelho do `_accommodate` do item 44). Vestido fica
+        # de fora: tirar armadura para tocar é `unequip`, decisão do personagem.
         "sing_instrumento": sorted(i for i, e in items.items()
-                                   if e["porter"] == actor and e["slot"] == hand),
+                                   if e["porter"] == actor
+                                   and e["slot"] in (None, hand)),
         # spec 059: alvo de `write` — só ITENS (não objects/chars/local, ver
         # research.md R3 da 059): `rewrite_description` precisa do nome de
         # arquivo por tipo, e nenhum caso de uso desta spec escreve em pessoa,
         # objeto de cenário ou no próprio lugar.
         "write_alvo": sorted(items),
-        # spec 059: instrumento de `write` — NA MÃO, MESMO predicado de
-        # `sing_instrumento`/`attack_with` (research.md R4/R6). Obrigatório
-        # (não opcional como o de `sing`): sem ele, `write` some da face
-        # (FR-001b — ver `omit_if_empty` não se aplica aqui, o parâmetro é
-        # `required`).
+        # spec 059: instrumento de `write` — MESMO predicado do `sing_instrumento`
+        # (research.md R4/R6): algo que ele CARREGUE e possa empunhar, não só o
+        # que já está na mão. Obrigatório (não opcional como o de `sing`): sem
+        # NADA que sirva, `write` some da face (FR-001b — o parâmetro é
+        # `required`, `omit_if_empty` não se aplica aqui).
         "write_instrumento": sorted(i for i, e in items.items()
-                                    if e["porter"] == actor and e["slot"] == hand),
+                                    if e["porter"] == actor
+                                    and e["slot"] in (None, hand)),
         # viaja-se para lugar que ele SABE alcançar (spec 012). Também não sai do
         # contexto: o mapa do que ele sabe é memória de rota, que fica no server.
         "viajar_para": [],

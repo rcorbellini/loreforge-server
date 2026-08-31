@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro
+from .. import fisica, io, itens, memoria, registro
 from ..io import _fail, read_doc
 from ..memoria import _char_name, _is_alive, _record_hearsay, memory_involved
 
@@ -70,13 +70,21 @@ def _apply_sing_ops(character_id: str, actor_folder: Path, resolution: dict,
         # a proposta do corpo é palpite até aqui (contracts/sing-tool.md). Some
         # entre a guarda e a aplicação (raríssimo, fase única): o bônus zera,
         # NUNCA recusa a canção — cantar não tem gate, só o que ele ganha muda.
+        empunhou = None
         if instrumento is not None:
+            # EMPUNHAR O QUE JÁ SE CARREGA (2026-08-30): o alaúde guardado na
+            # bolsa deixava de valer bônus por não estar na mão. O Motor o traz
+            # (`itens.bring_to_hand`, espelho do `_accommodate` do item 44). Se
+            # nem assim couber na pega, o bônus zera — como já zerava —, e a
+            # canção segue: cantar não tem gate, só o que ele ganha muda.
+            empunhou, _rej_mao = itens.bring_to_hand(actor_folder, instrumento)
             instr_folder = actor_folder / instrumento
             instr_fm = (read_doc(instr_folder / "item.md")[0]
                        if (instr_folder / "item.md").exists() else {})
             if fisica.item_slot(instr_fm) != fisica.HAND_SLOT:
                 instrumento = None
                 nota_instrumento = 0
+                empunhou = None
         mem_path = actor_folder / "memories" / f"{memoria_id}.md"
         if not mem_path.exists():
             continue   # revalidação: sumiu entre a guarda e a aplicação (raro)
@@ -132,6 +140,7 @@ def _apply_sing_ops(character_id: str, actor_folder: Path, resolution: dict,
         applied.append({
             "memoria_id": memoria_id, "sobre": sobre, "instrumento": instrumento,
             "desfecho": desfecho, "letra": letra,
+            **({"empunhou": empunhou} if empunhou else {}),
             "ouvintes": ouvintes_reputacao,
             "virada": bool(roll_info.get("virada")),
             "reconto_ids": reconto_ids,

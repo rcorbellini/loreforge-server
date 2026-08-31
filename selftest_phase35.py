@@ -88,7 +88,9 @@ def mems_de(cid):
 
 
 def rastros_em(loc):
-    return list((motor.WORLD_DIR / loc).glob("rastro-*"))
+    """Os rastros de um lugar — arquivos soltos em `<lugar>/rastros/`, o mesmo
+    desenho de `memories/` (2026-08-30). Antes era uma PASTA por marca."""
+    return list((motor.WORLD_DIR / loc / "rastros").glob("rastro-*.md"))
 
 
 def res(**parts):
@@ -498,7 +500,7 @@ check("marca nasce no DESTINO mesmo sem ninguém para testemunhar",
       len(depois_rd) > len(antes_rd), str(depois_rd - antes_rd))
 
 _novo_rastro = list(depois_rd - antes_rd)[0]
-_fm_rastro, _ = motor.read_doc(_novo_rastro / "rastro.md")
+_fm_rastro, _ = motor.read_doc(_novo_rastro)
 check("a marca identifica quem passou e a direção (ground-truth)",
       _fm_rastro.get("quem") == "sozinho-r" and _fm_rastro.get("direcao"),
       str(_fm_rastro))
@@ -529,14 +531,14 @@ motor._roll_trace_d20 = lambda: 20
 antes_alta = set(rastros_em(TAVERNA))
 andar("rola-alta", ROTA_TF)
 novo_alta = list(set(rastros_em(TAVERNA)) - antes_alta)[0]
-fm_alta, _ = motor.read_doc(novo_alta / "rastro.md")
+fm_alta, _ = motor.read_doc(novo_alta)
 
 _mk_char(TAVERNA, "rola-baixa", "RolaBaixa")
 motor._roll_trace_d20 = lambda: 1
 antes_baixa = set(rastros_em(TAVERNA))
 andar("rola-baixa", ROTA_TF)
 novo_baixa = list(set(rastros_em(TAVERNA)) - antes_baixa)[0]
-fm_baixa, _ = motor.read_doc(novo_baixa / "rastro.md")
+fm_baixa, _ = motor.read_doc(novo_baixa)
 
 check("rolagem alta desloca o ttl para CIMA (nunca explode a faixa)",
       fm_alta["ttl_seconds"] >= fm_baixa["ttl_seconds"],

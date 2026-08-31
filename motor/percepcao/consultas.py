@@ -965,7 +965,7 @@ def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
     return out[:_MEMORY_CONTEXT_CAP]
 
 
-def own_memories(character_id: str) -> list[dict]:
+def own_memories(character_id: str, require_sobre: bool = True) -> list[dict]:
     """As memórias VIVAS de tipo ACONTECIMENTO que o próprio personagem guarda —
     consulta de SERVER (spec 058). Base do enum de `sing`: só se canta o que se
     lembra.
@@ -975,9 +975,14 @@ def own_memories(character_id: str) -> list[dict]:
     de fulano"); aqui não há fulano — o cantor pode cantar sobre um herói que
     nunca esteve na cena, e o enum precisa oferecer TODAS as lembranças, cada
     uma com o PRÓPRIO sujeito. `sobre` sai do `involved` de cada memória: o
-    primeiro envolvido que não é o narrador. Uma memória sem nenhum outro
-    envolvido (rara — a vivência é só dele) fica de fora: não há sujeito para
-    a canção.
+    primeiro envolvido que não é o narrador.
+
+    `require_sobre` (spec 059, default `True` — preserva `sing` byte a byte):
+    uma memória SEM nenhum outro envolvido (rara para cantar — a vivência é só
+    dele) fica de fora quando `True`, porque não há sujeito para a canção. Mas
+    é justamente o caso comum de um preparo/colheita solitário (`brew`/`cook`/
+    `forage`) — o boticário sozinho na botica —, e `write` (spec 059) precisa
+    dessas memórias no enum: `require_sobre=False` as inclui, com `sobre=None`.
 
     Sem CAP e sem ordenação por saliência (ao contrário de `remembered_about`):
     é o Árbitro, lendo a `description` da tool com a listagem inteira, quem
@@ -1002,7 +1007,7 @@ def own_memories(character_id: str) -> list[dict]:
             continue
         sobre = next((x for x in memory_involved(fm) if x and x != character_id),
                      None)
-        if not sobre:
+        if not sobre and require_sobre:
             continue
         out.append({
             "id": fm.get("id"), "sobre": sobre,

@@ -438,6 +438,15 @@ _WHY_BY_REGRA = {
     "sem_recipiente": "isso não serve de recipiente pra preparar nada",
     "nao_combina": "isso não forma preparo nenhum junto",
     "ja_preparando": "já está com as mãos em outro preparo",
+    # spec 059 — escrever. Os dois gates de admissão (superfície, instrumento)
+    # e as revalidações de arquivo (item/memória sumiram entre a guarda e a
+    # aplicação — raríssimo, fase única).
+    "item_sumiu": "o que você ia escrever sumiu da cena",
+    "sem_instrumento": "isso não está mais na sua mão",
+    "nao_e_superficie": "isso não é algo em que se escreva",
+    "nao_serve_pra_escrever": "isso não serve pra escrever",
+    "memoria_sumiu": "essa lembrança já não está mais viva",
+    "nada_a_escrever": "não há o que escrever",
 }
 
 

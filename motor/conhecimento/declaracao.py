@@ -579,3 +579,127 @@ LEARN_ROUTES = tool_spec(ToolSpec(
     enum_sources={"rotas": "rotas_do_mundo"},
     apply=_learn_routes,
 ))
+
+
+# --------------------------------------------------------------------------- #
+# `write` (spec 059) — o inverso de `learn_routes`: em vez de LER prosa e
+# produzir conhecimento, ESCREVE prosa a partir do que o personagem já sabe/
+# quer dizer. Dois modos, mutuamente exclusivos: ANCORADO (`memoria_id` —
+# transcrição verbatim, sem distorção, do `conteudo` de uma memória própria) e
+# LIVRE (`texto` — VOZ, sem ancoragem). Dois gates de admissão, os únicos
+# julgamentos desta tool (nenhuma rolagem depois deles) — texto e limiar
+# MEDIDOS contra `llama3.1:8b` (specs/059-write-document/research.md, R4).
+# --------------------------------------------------------------------------- #
+
+CONTRATO_GATE_WRITE = """\
+Um personagem quer escrever sobre um objeto, usando algo que tem na mão. Julgue
+DUAS coisas, só pela DESCRIÇÃO de cada um — nunca pelo nome, raridade ou valor.
+
+Nota da SUPERFÍCIE (0-10): o quanto a descrição do ALVO sugere algo em que se
+escreve (página, quadro, pergaminho, parede lisa, couro, madeira lisa...).
+  0  claramente NÃO é algo em que se escreve (arma, comida, moeda, ferramenta
+     sem superfície)
+  10 claramente é algo em que se escreve
+Em DÚVIDA, penda para CIMA — um objeto comum descrito como "liso" ou "com
+espaço" já basta.
+
+Nota do INSTRUMENTO (0-10): o quanto a descrição do que está NA MÃO sugere algo
+com que se escreve (pena, carvão, giz, ponta que risca ou mancha...).
+  0  claramente NÃO serve para escrever (comida, moeda, algo sem ponta nem tinta)
+  10 claramente serve para escrever
+Em DÚVIDA, penda para CIMA.
+
+Responda SOMENTE com um objeto JSON, nada antes nem depois, EXATAMENTE assim:
+
+{"superficie": <inteiro 0-10>, "instrumento": <inteiro 0-10>}"""
+
+# limiar fixado por medição (research.md R4): saídas reais são bimodais (0 ou
+# 10); 5 é o ponto médio e separa os 36/36 casos medidos nas duas formulações.
+_LIMIAR_GATE_WRITE = 5
+
+
+@inworld("write_ops_applied")
+def _iw_write(op):
+    return f"escreveu sobre {name_of(op.get('alvo'))}"
+
+
+def _write_desc(scene):
+    # a listagem de `write_memorias` segue o molde de `_sing_desc` (medido na
+    # 058: sem ela a Mente escolhe a memória errada) — só que aqui `sobre` pode
+    # faltar (memórias solitárias, research.md R2), e a description precisa
+    # dizer isso em vez de quebrar.
+    memorias = scene.cand.get("write_memorias") or {}
+    def _linha(mid, info):
+        alvo_txt = (f"sobre {motor.name_of(info['sobre'])}" if info.get("sobre")
+                   else "sem outro envolvido")
+        return f"{mid} ({alvo_txt}: '{info['resumo']}')"
+    listagem = "; ".join(_linha(mid, info) for mid, info in sorted(memorias.items()))
+    base = ("Escreve, sobre um item presente, um texto que se acrescenta ao que "
+            "já está escrito nele (nunca apaga). Informe EXATAMENTE um de dois: "
+            "`memoria_id` (transcreve, palavra por palavra, uma lembrança sua — "
+            "para ensinar algo que você realmente sabe) ou `texto` (escreve o "
+            "que quiser, livre — um recado, um pedido, um bilhete). Precisa de "
+            "algo NA MÃO que sirva para escrever.")
+    if listagem:
+        base += f" Lembranças disponíveis para transcrever: {listagem}."
+    return base
+
+
+def _write(name: str, args: dict, ctx) -> tuple[dict, bool]:
+    alvo = args.get("alvo")
+    alvos = ctx.cand.get("write_alvo") or []
+    if alvo not in alvos:
+        return ctx.err(f"'{alvo}' não é algo em que se possa escrever agora",
+                       "alvo", ctx.validos({i: ctx.items[i] for i in alvos})), False
+
+    instrumentos = ctx.cand.get("write_instrumento") or []
+    instrumento = args.get("instrumento")
+    if instrumento not in instrumentos:
+        return ctx.err(f"'{instrumento}' não está na sua mão", "instrumento",
+                       ctx.validos({i: ctx.items[i] for i in instrumentos})), False
+
+    memoria_id = args.get("memoria_id") or None
+    texto_livre = (args.get("texto") or "").strip() or None
+    if bool(memoria_id) == bool(texto_livre):
+        return ctx.err("informe EXATAMENTE um dos dois: 'memoria_id' (para "
+                       "transcrever uma lembrança sua) ou 'texto' (para "
+                       "escrever livremente)"), False
+    memorias = ctx.cand.get("write_memorias") or {}
+    if memoria_id and memoria_id not in memorias:
+        return ctx.err(f"'{memoria_id}' não é uma memória sua válida",
+                       "memoria_id",
+                       [{"id": mid, "nome": info["resumo"]}
+                        for mid, info in sorted(memorias.items())]), False
+
+    payload = {"alvo": ctx.describe(alvo), "instrumento": ctx.describe(instrumento)}
+    julgado = juizo.julgamento(
+        ctx.ask(CONTRATO_GATE_WRITE, json.dumps(payload, ensure_ascii=False, indent=2)),
+        {"superficie": 5, "instrumento": 5})
+
+    rej, rolled = ctx.apply_arbitrated("write_ops", {
+        "alvo": alvo, "instrumento": instrumento, "memoria_id": memoria_id,
+        "texto": texto_livre, "superficie": julgado["superficie"],
+        "instrumento_nota": julgado["instrumento"]})
+    if rej:
+        return ctx.arb_deny(rolled, ("write", alvo), {"alvo": alvo}, rej)
+    return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
+
+
+WRITE = tool_spec(ToolSpec(
+    names=("write",),
+    juizo=(
+        ("superficie", CONTRATO_GATE_WRITE),
+        ("instrumento_nota", CONTRATO_GATE_WRITE),
+    ),
+    description=_write_desc,
+    params={"alvo": _STR, "instrumento": _STR, "memoria_id": _STR, "texto": _STR,
+            "superficie": _NOTA, "instrumento_nota": _NOTA},
+    required=("alvo", "instrumento"),
+    enum_sources={
+        "alvo": "write_alvo",
+        "instrumento": "write_instrumento",
+        "memoria_id": lambda s: sorted(s.cand.get("write_memorias") or {}),
+    },
+    omit_if_empty=("memoria_id",),
+    apply=_write,
+))

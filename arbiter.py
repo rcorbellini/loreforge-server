@@ -622,6 +622,18 @@ def _verb_candidates(idx: dict) -> dict:
         # empunhar). Mesmo predicado de `attack_with`.
         "sing_instrumento": sorted(i for i, e in items.items()
                                    if e["porter"] == actor and e["slot"] == hand),
+        # spec 059: alvo de `write` — só ITENS (não objects/chars/local, ver
+        # research.md R3 da 059): `rewrite_description` precisa do nome de
+        # arquivo por tipo, e nenhum caso de uso desta spec escreve em pessoa,
+        # objeto de cenário ou no próprio lugar.
+        "write_alvo": sorted(items),
+        # spec 059: instrumento de `write` — NA MÃO, MESMO predicado de
+        # `sing_instrumento`/`attack_with` (research.md R4/R6). Obrigatório
+        # (não opcional como o de `sing`): sem ele, `write` some da face
+        # (FR-001b — ver `omit_if_empty` não se aplica aqui, o parâmetro é
+        # `required`).
+        "write_instrumento": sorted(i for i, e in items.items()
+                                    if e["porter"] == actor and e["slot"] == hand),
         # viaja-se para lugar que ele SABE alcançar (spec 012). Também não sai do
         # contexto: o mapa do que ele sabe é memória de rota, que fica no server.
         "viajar_para": [],
@@ -717,6 +729,17 @@ def scene_candidates(idx: dict) -> dict:
         sing_mem[m["id"]] = {"sobre": m["sobre"], "resumo": m["resumo"],
                              "conteudo": m["conteudo"], "intensity": m["intensity"]}
     cand["sing_memorias"] = sing_mem
+
+    # escrever (spec 059): TODAS as memórias VIVAS de acontecimento do próprio
+    # ator, INCLUSIVE as sem outro envolvido (`require_sobre=False`, research.md
+    # R2) — diferente de `sing_memorias`, porque o caso motivador (a receita do
+    # boticário) é justamente uma vivência solitária. `sobre` pode vir `None`;
+    # a description trata esse caso (ver `motor/conhecimento/declaracao.py`).
+    write_mem: dict[str, dict] = {}
+    for m in motor.own_memories(idx["actor_id"], require_sobre=False):
+        write_mem[m["id"]] = {"sobre": m["sobre"], "resumo": m["resumo"],
+                              "conteudo": m["conteudo"], "intensity": m["intensity"]}
+    cand["write_memorias"] = write_mem
     return cand
 
 

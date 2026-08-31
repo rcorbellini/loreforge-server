@@ -406,3 +406,99 @@ def _apply_unanswered_ops(character_id: str, actor_folder: Path, resolution: dic
 def _h_unanswered(cid, af, res, rolls):
     applied, rejected, created = _apply_unanswered_ops(cid, af, res, rolls)
     return applied, rejected, created
+
+
+def _apply_write_ops(character_id: str, actor_folder: Path, resolution: dict,
+                     rolls: list | None = None) -> tuple[list, list]:
+    """Escrever num item (spec 059) — o inverso de `_apply_learn_ops`.
+
+    Por op (`alvo`, `instrumento`, `memoria_id` OU `texto`, `superficie`,
+    `instrumento_nota`): revalida alvo/instrumento sobre os ARQUIVOS, checa os
+    dois gates de admissão (já julgados no corpo — `declaracao.py`, `MEDIDOS`),
+    resolve o texto (verbatim da memória citada, lida FRESCA do arquivo — nunca
+    do que a guarda cacheou — ou livre) e ACRESCENTA à prosa existente via
+    `rewrite_description` — nunca substitui (FR-007/008). Nenhuma rolagem: os
+    dois gates são a única incerteza desta tool, e não decidem por dado."""
+    from .declaracao import _LIMIAR_GATE_WRITE   # a régua mora com a declaração
+    applied, rejected = [], []
+    ops = [o for o in (resolution.get("write_ops") or []) if isinstance(o, dict)]
+    if not ops:
+        return applied, rejected
+    actor_fm, _ = read_doc(actor_folder / "character.md")
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):
+        rejected.append(_fail("descansando"))
+        return applied, rejected
+    _present_chars, _present_objects, present_items = io._scene_entities(
+        actor_folder.parent)
+
+    for op in ops:
+        alvo = op.get("alvo")
+        instrumento = op.get("instrumento")
+        try:
+            superficie = int(op.get("superficie") or 0)
+            instrumento_nota = int(op.get("instrumento_nota") or 0)
+        except (TypeError, ValueError):
+            superficie, instrumento_nota = 0, 0
+
+        alvo_folder = present_items.get(alvo)
+        if alvo_folder is None:
+            rejected.append(_fail("item_sumiu", alvo=alvo))
+            continue
+        instr_folder = actor_folder / instrumento
+        instr_fm = (read_doc(instr_folder / "item.md")[0]
+                   if (instr_folder / "item.md").exists() else None)
+        if instr_fm is None or fisica.item_slot(instr_fm) != fisica.HAND_SLOT:
+            rejected.append(_fail("sem_instrumento", instrumento=instrumento))
+            continue
+
+        # os dois GATES (research.md R4 — MEDIDO, limiar 5): admissão, não
+        # qualidade — abaixo do limiar recusa por inteiro, sem meio-termo.
+        if superficie < _LIMIAR_GATE_WRITE:
+            rejected.append(_fail("nao_e_superficie", alvo=alvo))
+            continue
+        if instrumento_nota < _LIMIAR_GATE_WRITE:
+            rejected.append(_fail("nao_serve_pra_escrever", instrumento=instrumento))
+            continue
+
+        memoria_id = op.get("memoria_id")
+        if memoria_id:
+            mem_path = actor_folder / "memories" / f"{memoria_id}.md"
+            if not mem_path.exists():
+                rejected.append(_fail("memoria_sumiu", memoria_id=memoria_id))
+                continue
+            mem_fm, mem_body = read_doc(mem_path)
+            if mem_fm.get("type") != "memory" or not _is_alive(mem_fm, time.time()):
+                rejected.append(_fail("memoria_sumiu", memoria_id=memoria_id))
+                continue
+            # TRANSCRIÇÃO VERBATIM (FR-010a): o `conteudo` é o BODY da própria
+            # memória, lido FRESCO do arquivo — nunca reformulado pela Mente.
+            texto_novo = mem_body.strip() or (mem_fm.get("summary") or "").strip()
+        else:
+            texto_novo = (op.get("texto") or "").strip()
+        if not texto_novo:
+            rejected.append(_fail("nada_a_escrever"))
+            continue
+
+        _, corpo_atual = read_doc(alvo_folder / "item.md")
+        # FR-007/008: ACRESCENTA, nunca substitui; base vazia não deixa marca.
+        corpo_final = (f"{corpo_atual.rstrip()}\n\n{texto_novo}"
+                      if corpo_atual.strip() else texto_novo)
+        io.rewrite_description(alvo_folder, "item.md", corpo_final)
+
+        fisica.spend_fatigue(character_id, "baixo")
+
+        applied.append({
+            "alvo": alvo, "instrumento": instrumento, "memoria_id": memoria_id,
+            "memory": {
+                "content": f"Escrevi em {name_of(alvo)}.", "intensity": "small",
+                "involved": [], "valence": None, "event": "write",
+                "domain": "nenhuma", "about": alvo,
+            },
+        })
+    return applied, rejected
+
+
+@registro.handler("write_ops")
+def _h_write(cid, af, res, rolls):
+    applied, rejected = _apply_write_ops(cid, af, res, rolls)
+    return applied, rejected, []  # memória do ator via react_actor_memory (spec 038)

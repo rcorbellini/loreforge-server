@@ -21,10 +21,18 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.23.0"
+__version__ = "2.24.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
+# (2.24.0 — spec 059: `write` — escrever num documento. Dois modos: ANCORADO
+#  (`memoria_id`, transcrição verbatim do `conteudo` da memória, sem distorção —
+#  o inverso exato do boato) e LIVRE (`texto`, VOZ sem ancoragem). Dois gates de
+#  admissão lidos de prosa (superfície aceita escrita? instrumento na mão serve
+#  pra escrever?), nenhuma rolagem depois deles. Zero primitiva nova: reusa
+#  `read_doc`/`rewrite_description` (`eat` já as usa). `own_memories()` ganha
+#  `require_sobre=False` para incluir memórias sem outro envolvido — o caso do
+#  boticário sozinho, que `sing_memorias` excluiria.)
 # (2.22.1 — spec 057, quatro consertos da exploração pós-implementação de craft.
 #  (a) `REGUA_CRAFT` reforçada: banda `falha` precisa comunicar DEFEITO concreto na
 #  `descricao_baixa` (o modelo real deixava fracasso quase indistinguível de sucesso).

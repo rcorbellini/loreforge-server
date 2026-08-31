@@ -24,11 +24,23 @@ PROTOCOL = "2025-06-18"
 def input_schema(cap: dict) -> dict:
     """O schema de uma capacidade, no formato que um host MCP entende.
 
-    Os alvos viram `enum` — só o que existe NAQUELA cena. É isto que faz a diferença
-    contra pedir JSON em prosa: o schema é IMPOSTO pelo runtime de tool-calling, em
-    vez de sugerido no prompt. As falhas medidas com llama3.1:8b (lista onde se
-    espera string, campo obrigatório omitido) são exatamente as que um schema
-    imposto não deixa acontecer.
+    Os alvos viram `enum` — só o que existe NAQUELA cena.
+
+    **CORREÇÃO POR MEDIÇÃO (spec 060, 2026-08-31).** Aqui se afirmava que "o schema é
+    IMPOSTO pelo runtime de tool-calling, em vez de sugerido no prompt". Isso é
+    **FALSO** para Ollama + `llama3.1:8b`: o runtime renderiza o enum como TEXTO no
+    template do modelo, e um id fora dele saiu em **4 de 5** chamadas
+    (`tests/exploracao/sondagem_enum_alvo_dificil.py`). A premissa estava no ar desde a
+    spec 043 e alimentou o diagnóstico do item 52.5.
+
+    O que o schema DE FATO entrega, e continua valendo: a FORMA (tipo do campo, campo
+    obrigatório presente) — as falhas de `lista onde se espera string` e `campo omitido`
+    que a 043 mediu. O que ele NÃO entrega é o CONTEÚDO do enum.
+
+    Quem contém de verdade é a revalidação do Motor, e é por isso que ela nunca pôde ser
+    dispensada. E é por isso que a spec 060 tirou o enum de id do que desce à Mente: ele
+    custava 35% do bloco de capacidades, paralisava no alvo ambíguo e fazia o modelo
+    SUBSTITUIR em silêncio no alvo ausente — sem impor nada em troca.
 
     `prosa` é OBRIGATÓRIA (FR-019/FR-035): a régua lê COMO se tentou, e sem ela não
     há o que narrar. Numa chamada de tool não existe campo irmão onde pendurá-la.

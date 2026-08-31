@@ -202,9 +202,8 @@ KINDLE_FIRE = tool_spec(ToolSpec(
     # 2/5). Também não alardeia o custo: a variante com "ato irreversível" derrubou a
     # chamada legítima a 0/3 — aviso de custo suprime uso, não educa.
     description=("Acende uma fonte de calor no lugar, queimando os materiais informados. "
-     "Em `materiais` vão as coisas que devem virar combustível; a ferramenta de fazer "
-     "faísca não entra — o mundo já considera sozinho o que está em mãos. O mundo "
-     "julga, pela descrição, se aquilo pega fogo."),
+     "Em `materiais` vão as coisas que devem virar combustível; a ferramenta de "
+     "fazer faísca não entra na lista."),
     params={"materiais": {"type": "array", "items": {"type": "string"}},
             "combustibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "favorabilidade": {"type": "integer", "minimum": 0, "maximum": 10},

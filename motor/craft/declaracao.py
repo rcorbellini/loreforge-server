@@ -193,8 +193,8 @@ CRAFT = tool_spec(ToolSpec(
         "DOIS USOS EXCLUSIVOS: para COMEÇAR, passe 'narracao' (e, se usar "
         "material, 'materiais'); para CONTINUAR um trabalho já em processo, "
         "passe 'narracao' (o que faz nesta sessão) e 'peca'. Sem lista de "
-        "receitas: narre a intenção, o mundo decide se é viável e com que "
-        "qualidade, lendo os materiais e o lugar. O trabalho pode levar tempo "
+        "receitas: narre a intenção. Os materiais e o lugar contam. O "
+        "trabalho pode levar tempo "
         "real e ser retomado quantas vezes forem precisas."
     ),
     params={

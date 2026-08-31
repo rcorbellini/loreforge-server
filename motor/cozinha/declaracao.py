@@ -221,8 +221,8 @@ COOK = tool_spec(ToolSpec(
     ),
     description=("Cozinha, combinando os ingredientes escolhidos (em qualquer lugar ao "
      "alcance — mão, chão, dentro de um contêiner aberto) sobre uma fonte de calor "
-     "presente na cena. O mundo decide, lendo as descrições, se a fonte fornece calor "
-     "de verdade, se os ingredientes formam um prato, e o quanto vai ficar bom. "
+     "presente na cena. A fonte precisa dar calor de verdade, e os ingredientes "
+     "precisam formar um prato. "
      "Cozinhar leva tempo de verdade; o prato não fica pronto na hora, e nada mais "
      "pode ser feito enquanto ele está no fogo. Ingredientes que não fazem sentido "
      "juntos, ou uma fonte sem calor de verdade, são recusados."),

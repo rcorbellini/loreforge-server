@@ -52,6 +52,30 @@ def check(name, cond, detail=""):
 
 # O vocabulário que NUNCA pode aparecer no texto exposto. Cada entrada é um caso
 # real que já esteve numa descrição deste projeto — não é lista defensiva teórica.
+# A RÉGUA DA RELEVÂNCIA (spec 060, US4) — de que o `VAZAMENTOS` abaixo é um CASO
+# PARTICULAR.
+#
+# Quem lê a description é A MENTE, e para ela não existe Motor, Árbitro nem
+# arquitetura: ela não sabe a que o termo "o mundo" se refere. Tem uma situação
+# diante de si e um conjunto de ferramentas, e faz duas perguntas — isto me ajuda
+# aqui? como eu chamo? Frase que explica o FUNCIONAMENTO INTERNO não responde
+# nenhuma das duas: ocupa espaço, dilui atenção, e não muda decisão nenhuma.
+#
+# Não é economia, é relevância — e não é princípio novo: o item 54 já tinha
+# chegado nele MEDINDO uma tool só. Ao revisar `forage`, a variante que removia
+# "o mundo julga, pela descrição, se X" empatou com as outras, e a conclusão
+# escrita foi "texto sem função medida para quem consome a API não fica só por
+# hábito". A frase sobreviveu nas outras oito por hábito, até a spec 060.
+#
+# O `VAZAMENTOS` proíbe o vazamento GROSSEIRO (d20, DC, nome de spec); este
+# proíbe a categoria inteira de que ele é um exemplo.
+ARQUITETURA = re.compile(
+    r"o mundo (julga|decide|resolve|considera|escolhe|entende|lê|sabe|já)"
+    r"|quem decide é o mundo"
+    r"|lendo as descri|pela descri",
+    re.I,
+)
+
 VAZAMENTOS = re.compile(
     r"\b0-10\b"              # a faixa da nota
     r"|\bnota\b"             # a nota em si
@@ -111,6 +135,12 @@ def run() -> int:
     # 2. Toda capacidade TEM descrição, e ela diz alguma coisa. Uma descrição vazia
     #    passaria no teste de vazamento e não serviria para nada — a Mente ficaria
     #    com um nome nu e voltaria a não saber o que pode tentar.
+    # A RÉGUA DA RELEVÂNCIA (spec 060, US4). Ver `ARQUITETURA` acima.
+    arquitetos = [n for n, sp in specs if ARQUITETURA.search(_texto(sp) or "")]
+    check("nenhuma description explica o FUNCIONAMENTO do sistema (spec 060)",
+          not arquitetos,
+          "explicam arquitetura em vez de ajudar a decidir: " + ", ".join(arquitetos))
+
     curtas = [n for n, s in specs
               if len((_texto(s) or "").strip()) < 40]
     check("toda capacidade tem descrição com substância", not curtas,

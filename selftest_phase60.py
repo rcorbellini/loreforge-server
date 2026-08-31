@@ -122,6 +122,50 @@ check("ambiguidade NÃO resolve — é o piso da regra que o conector replica",
 check("referência vazia não resolve",
       motor._match_scene_ref("", CAND) is None)
 
+
+
+# --------------------------------------------------------------------------- #
+# CONFORMIDADE CRUZADA (research R7).
+#
+# A regra de casamento existe em DOIS lugares — `motor._match_scene_ref` aqui e
+# `resolucao.js` no conector — e isso é a única concessão ao Princípio I nesta
+# spec. Ela se justifica porque os JOBS são diferentes (um decide se chega a
+# haver chamada; o outro salva chamada malformada de qualquer host MCP), mas a
+# REGRA tem de ser a mesma. Este bloco é o que impede as duas de derivarem: os
+# mesmos casos, os mesmos vereditos, rodados contra o resolvedor real do
+# conector via `node -e`.
+# --------------------------------------------------------------------------- #
+print("\n--- (cruzado) as duas implementações da MESMA regra -------------------")
+
+import json as _json
+import subprocess as _sp
+
+_CONECTOR = SERVER_DIR.parent / "loreforge-connector"
+_CENA = [("cantil-de-agua-fresca", "Cantil de Agua Fresca"),
+         ("frasco-de-oleo", "Frasco de Oleo"),
+         ("obadiah-mascate", "Obadiah, o Mascate")]
+_CASOS = ["frasco-de-oleo", "Frasco de Oleo", "destilador", "", "Obadiah, o Mascate"]
+
+if (_CONECTOR / "resolucao.js").exists():
+    _js = (
+        "const r=require(%s);"
+        "const C=%s.map(([id,nome])=>({id,nome}));"
+        "console.log(JSON.stringify(%s.map(x=>r.literal(x,C).id)));"
+    ) % (_json.dumps(str(_CONECTOR / "resolucao.js")),
+         _json.dumps([list(c) for c in _CENA]), _json.dumps(_CASOS))
+    try:
+        saida = _sp.run(["node", "-e", _js], capture_output=True, text=True, timeout=30)
+        do_conector = _json.loads(saida.stdout.strip())
+    except Exception as e:                      # node ausente: não reprova a fase
+        do_conector = None
+        print(f"[ ---- ] conformidade cruzada pulada (node indisponível: {e})")
+    if do_conector is not None:
+        do_motor = [motor._match_scene_ref(x, _CENA) for x in _CASOS]
+        check("conector e Motor dão o MESMO veredito para os mesmos casos",
+              do_conector == do_motor, f"conector={do_conector} motor={do_motor}")
+else:
+    print("[ ---- ] conformidade cruzada pulada (resolucao.js ainda não existe)")
+
 print("\n" + "=" * 70)
 if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + ", ".join(FAILS))

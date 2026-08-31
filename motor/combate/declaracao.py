@@ -93,9 +93,9 @@ ATTACK = tool_spec(ToolSpec(
     juizo=(("vantagem", REGUA_VANTAGEM),),
     description=("Golpeia OUTRO personagem presente. 'alvo' é QUEM APANHA — nunca quem "
      "age. 'arma' é um item na mão de quem age (omita para golpe "
-     "desarmado; item que não é arma serve como improvisado). Se acertou, "
-     "e o quanto feriu, quem decide é o mundo — nunca dê o desfecho por "
-     "certo. Contra alguém já caído o golpe é deliberado e fatal."),
+     "desarmado; item que não é arma serve como improvisado). Nunca dê o "
+     "desfecho por certo: descreva a tentativa. Contra alguém já caído o "
+     "golpe é deliberado e fatal."),
     params={"alvo": {"type": "string"},
             "vantagem": {"type": "integer", "minimum": 0, "maximum": 10},
             "arma": {"type": "string"}},

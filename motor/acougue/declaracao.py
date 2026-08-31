@@ -108,13 +108,11 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return ctx.err(f"'{alvo}' não está disponível para esquartejar", "alvo",
                        ctx.validos({c: ctx.chars[c] for c in disponiveis})), False
     if alvo in ctx.butchered_asked:
-        return ctx.err("esquartejar esse corpo já foi tentado neste turno — o "
-                       "desfecho sai na aplicação; NÃO repita: siga para outra "
-                       "ação ou narrate"), False
+        return ctx.err("esquartejar esse corpo já foi tentado neste turno — o " "desfecho sai na aplicação; NÃO repita: siga para outra " "ação ou narrate"), False
     # spec 050 — CONTRATO DE ANÁLISE: a régua combinada lê só o corpo-alvo.
     julgado = juizo.julgamento(
         ctx.ask(REGUA_ESQUARTEJAR, json.dumps({
-            "alvo": ctx.describe(alvo),
+           "alvo": ctx.describe(alvo),
         }, ensure_ascii=False, indent=2)),
         campos={"esquartejabilidade": 5, "rendimento": 5},
         texto_campos={"nome": "", "descricao": ""})
@@ -136,7 +134,7 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
     rej, rolled = ctx.apply_arbitrated("esquartejar_ops", {
         **base, "esquartejabilidade": esquartejabilidade, "rendimento": rendimento,
-        "nome": julgado["nome"], "descricao": julgado["descricao"]})
+       "nome": julgado["nome"], "descricao": julgado["descricao"]})
     if rej:
         return ctx.arb_deny(rolled, ("butcher", alvo), base, rej)
     return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
@@ -150,16 +148,11 @@ BUTCHER = tool_spec(ToolSpec(
         ("nome", REGUA_ESQUARTEJAR),
         ("descricao", REGUA_ESQUARTEJAR),
     ),
-    description=("Esquarteja um corpo que já está morto, extraindo carne crua. O "
-     "mundo decide, lendo a descrição, se aquele corpo é feito de carne e o quanto "
-     "dela está aproveitável. Um corpo sem matéria orgânica (pedra, osso, "
-     "construto) não rende nada, e um corpo já esquartejado não pode ser "
-     "esquartejado de novo. Nunca causa a morte de ninguém — só age sobre quem já "
-     "está morto."),
+    description=("Esquarteja um corpo que já está morto, extraindo carne crua. Um corpo sem matéria orgânica (pedra, osso, " "construto) não rende nada, e um corpo já esquartejado não pode ser " "esquartejado de novo. Nunca causa a morte de ninguém — só age sobre quem já " "está morto."),
     params={"alvo": _STR,
-            "esquartejabilidade": {"type": "integer", "minimum": 0, "maximum": 10},
-            "rendimento": {"type": "integer", "minimum": 0, "maximum": 10},
-            "nome": _STR, "descricao": _STR},
+           "esquartejabilidade": {"type": "integer", "minimum": 0, "maximum": 10},
+           "rendimento": {"type": "integer", "minimum": 0, "maximum": 10},
+           "nome": _STR, "descricao": _STR},
     required=("alvo", "esquartejabilidade", "rendimento", "nome", "descricao"),
     enum_sources={"alvo": "butcher_alvo"},
     apply=_butcher,

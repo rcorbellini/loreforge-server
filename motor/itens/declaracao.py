@@ -564,9 +564,8 @@ STEAL = tool_spec(ToolSpec(
     juizo=(("exposicao", REGUA_FURTO),),
     description=("FURTA um item de outro presente, SEM consentimento — o item é do "
      "ALVO. O que é vistoso e o que está preso ao corpo não se tiram do "
-     "mesmo jeito, e um dono atento não é um dono distraído: o mundo lê a "
-     "cena e decide. Se FLAGRADO, o dono guarda rancor GRAVE, como se "
-     "agredido."),
+     "mesmo jeito, e um dono atento não é um dono distraído. Se FLAGRADO, o "
+     "dono guarda rancor GRAVE, como se agredido."),
     params={"alvo": _STR, "item": _STR,
             "exposicao": {"type": "integer", "minimum": 0, "maximum": 10}},
     required=("alvo", "item", "exposicao"),
@@ -586,9 +585,8 @@ EAT = tool_spec(ToolSpec(
         ("consumo", REGUA_COMER),
         ("nova_descricao", REGUA_COMER),
     ),
-    description=("Come um item comestível presente ou na sua mão — o mundo decide "
-     "se é comida, quanto sacia e quanto arrisca. Recusado se não for algo que "
-     "se coma."),
+    description=("Come um item comestível presente ou na sua mão. Recusado se não "
+     "for algo que se coma."),
     params={"item": _STR,
             "comestibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "saciedade": {"type": "integer", "minimum": 0, "maximum": 10},
@@ -837,10 +835,9 @@ DRINK = tool_spec(ToolSpec(
         ("nova_descricao", REGUA_BEBER_ITEM),
     ),
     description=("Bebe de um item (cantil, copo, garrafa) presente/na sua mão, "
-     "OU direto de uma fonte ambiental presente (rio, poço) — o mundo decide, "
-     "lendo a descrição, se é bebível, o quanto hidrata, o quanto embriaga e o "
-     "quanto arrisca. Um alvo claramente não-bebível é recusado. Uma fonte "
-     "ambiental nunca se esgota."),
+     "OU direto de uma fonte ambiental presente (rio, poço). Um alvo "
+     "claramente não-bebível é recusado. Uma fonte ambiental nunca se "
+     "esgota."),
     params={"alvo": _STR,
             "bebibilidade": {"type": "integer", "minimum": 0, "maximum": 10},
             "hidratacao": {"type": "integer", "minimum": 0, "maximum": 10},

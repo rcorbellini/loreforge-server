@@ -325,10 +325,8 @@ _DESC_COMUM = (
     "SÃO DOIS USOS EXCLUSIVOS: para COMEÇAR uma peça, passe 'materiais' e "
     "'fonte_calor'; para CONTINUAR uma peça que já está no meio do trabalho, passe "
     "SÓ 'peca'. O trabalho leva tempo real e pode ser interrompido e retomado quantas "
-    "vezes for preciso, até a peça ficar pronta. O mundo decide, lendo as descrições, "
-    "se os materiais servem e o quanto valem, se o fogo dá conta de metal, e se há com "
-    "que trabalhar no lugar. Material imprestável, fogo que não funde metal ou um lugar "
-    "sem ferramental são recusados."
+    "vezes for preciso, até a peça ficar pronta. Material imprestável, fogo que não "
+    "funde metal ou um lugar sem ferramental são recusados."
 )
 
 _PARAMS_COMUNS = {

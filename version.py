@@ -21,10 +21,30 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.25.0"
+__version__ = "2.26.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
+# (2.26.0 — spec 060: a cadeia que completa, e o pedido que emagrece. Quatro
+#  etapas, todas medidas antes de aplicadas. (US1) O TURNO CONTINUA NO SUCESSO:
+#  `_porPropostas` só chamava `continuar()` na RECUSA, então o passo que dava
+#  certo encerrava a vez e A Mente nunca era perguntada "e agora?" — um sussurro
+#  de dois passos rendia um (medido: 1.0 chamada por rodada em 35 rodadas, e o
+#  controle de duas tools INDEPENDENTES falhava igual, então não era encadear).
+#  Continuar é 44% mais barato que recomeçar: 4 chamadas e 36.863 tokens viram 3
+#  e 20.726, porque o prefixo fica no cache. (US2) O ID NÃO CHEGA MAIS À MENTE:
+#  ela aponta pelo NOME e o conector resolve — o enum não era imposto pelo
+#  runtime (id fora dele saía 4/5), paralisava no ambíguo (mudo 5/5) e SUBSTITUÍA
+#  em silêncio no ausente (examinou o fogão para quem pediu o destilador, 5/5).
+#  Id inventado deixa de ser possível: ela nunca vê um. (US3) A cena desce em
+#  PROSA — o formato mais barato E mais certeiro dos cinco medidos (20/20 contra
+#  19/20 do JSON). (US4) As descrições passam pela RÉGUA DA RELEVÂNCIA: toda
+#  frase responde "o que isto faz na situação?" ou "como eu chamo?"; a que
+#  responde "como o sistema funciona por trás" sai, porque quem lê é A Mente e
+#  para ela não existe Motor nem Árbitro. Onze descrições limpas, com lint
+#  próprio no `selftest_phase44` — de que o anti-vazamento vira caso particular.
+#  REVOGADO por medição: "o schema é IMPOSTO pelo runtime de tool-calling"
+#  (spec 043 / item 52.5) é FALSO para Ollama + llama3.1:8b.)
 # (2.25.0 — EMPUNHAR o que já se carrega, e o LAYOUT dos registros no mundo.
 #  (a) `itens.bring_to_hand`, o espelho do `_accommodate` do item 44: o instrumento
 #  de `write`/`sing` deixa de precisar estar JÁ na mão — basta que o personagem o

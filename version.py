@@ -21,10 +21,29 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.26.0"
+__version__ = "2.27.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
+# (2.27.0 — spec 061: a intenção na mão do JOGADOR. Três portas de escrita
+#  (`/api/intention/create|update|close`) para o DONO criar, corrigir e ABANDONAR
+#  os compromissos do personagem dele, com ZERO LLM no caminho — nem Árbitro, nem
+#  Mente, nem juízo, nem rolagem. É a metade que se sabia resolver do item 53.3: o
+#  Torvin carregou dois dias a promessa de buscar cravos que estavam na mão de
+#  quem estava ao lado dele (27 tentativas legítimas esgotadas), e a Elga ficou
+#  parada com um compromisso com alguém que ela viu partir. Em nenhum dos dois o
+#  personagem errou — o jogo é que não tinha porta de saída. O Princípio III
+#  sobrevive porque quem escreve continua sendo o Motor: o que muda é de onde vem
+#  o gatilho, e o item 40 já previu isto por nome ("front-face self-action"). Não
+#  há juízo sendo contornado porque intenção NUNCA teve régua, não tem TTL e a
+#  própria Mente já a reescreve no lugar. ZERO campo novo, ZERO primitiva nova, e
+#  o `validator.py` intocado: `create_intention`/`update_intention`/
+#  `close_intention` já existiam. "Abandonar" marca `status`, não apaga
+#  (Princípio IV) — e a tela diz ABANDONAR, porque dizer "excluir" e não excluir
+#  seria o jogo mentindo. Autorização no molde de `claim-character` (spec 056),
+#  com a MESMA resposta para "não é seu" e "não existe", para a recusa não virar
+#  oráculo de existência. Escrita REJEITA durante turno em voo, preservando o
+#  invariante de que um turno não vê o mundo mudar debaixo dele.)
 # (2.26.0 — spec 060: a cadeia que completa, e o pedido que emagrece. Quatro
 #  etapas, todas medidas antes de aplicadas. (US1) O TURNO CONTINUA NO SUCESSO:
 #  `_porPropostas` só chamava `continuar()` na RECUSA, então o passo que dava

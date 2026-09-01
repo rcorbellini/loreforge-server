@@ -788,6 +788,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_registro()
         if parsed.path.startswith("/api/auth/"):
             return self._handle_auth_post(parsed.path, self._query(parsed))
+        # spec 061: o dono escrevendo os próprios compromissos, sem LLM
+        if parsed.path.startswith("/api/intention/"):
+            return self._handle_intencao_post(parsed.path)
         self._send_json({"error": "rota não encontrada"}, 404)
 
     # ---- API -------------------------------------------------------------- #
@@ -828,6 +831,157 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json({"error": "Character not found"}, 404)
             return False
+
+    # === A INTENÇÃO NA MÃO DO JOGADOR (spec 061) ============================ #
+    #
+    # Escrita no mundo SEM Árbitro, e o Princípio III sobrevive porque quem
+    # escreve continua sendo o Motor — o que muda é de onde vem o gatilho. O item
+    # 40 do backlog previu isto por nome ("front-face self-action"), e a
+    # justificativa é a agência: o jogador É o dono da vontade daquele
+    # personagem. Não há juízo sendo contornado porque NÃO HÁ JUÍZO — intenção
+    # nunca passou por régua, não tem TTL e a própria Mente já a reescreve no
+    # lugar (spec 026).
+    #
+    # O que motivou: o Torvin carregou por dois dias a promessa de buscar cravos
+    # que o Obadiah segurava na mão ao lado dele, esgotando 27 tentativas
+    # legítimas; a Elga ficou dois turnos parada com um compromisso com alguém
+    # que ela viu partir. Em nenhum dos dois o personagem errou — o jogo é que
+    # não tinha porta de saída.
+
+    # Teto do texto da intenção (spec 061, research R3). Ela entra no prompt de
+    # TODO turno, então prosa sem teto é custo por turno, para sempre. 2.000 é dez
+    # vezes a maior intenção real do mundo. É guarda de RECURSO, não regra de
+    # jogo — e a mensagem de recusa diz isso, para não parecer que o mundo julgou
+    # o plano.
+    LIMITE_TEXTO_INTENCAO = 2000
+
+    def _autorizar_intencao(self, cid: str):
+        """Quem pede pode escrever nas intenções deste personagem?
+
+        Devolve a pasta do personagem, ou None (já tendo respondido ao cliente).
+
+        A MESMA RESPOSTA para "não é seu" e "não existe" (research R5): quem não
+        pode escrever não descobre o que existe testando ids. A distinção fica no
+        log do servidor, para quem tem a máquina — a informação existe, só não
+        viaja pela rede.
+        """
+        user = self._authenticate()
+        if not user:
+            return None                      # `_authenticate` já respondeu 401
+        if not cid:
+            self._send_json({"error": "character_id needed"}, 400)
+            return None
+        negado = {"error": "Forbidden"}
+        try:
+            folder = motor.find_character_folder(cid)
+        except Exception:
+            devlog.log("intencao: personagem inexistente", cid)
+            self._send_json(negado, 403)     # mesma resposta do "não é seu"
+            return None
+        with _OWNERSHIP_GUARD:
+            fm, _ = motor.read_doc(folder / "character.md")
+            dono = fm.get("owner")
+            # MODO LOCAL (research R4): sem auth, `_authenticate` devolve
+            # `sub: "local"`. Aí um personagem SEM dono continua editável — senão
+            # a feature só existiria para quem pareou conta, e o jogo local
+            # ficaria sem a porta de saída que é o ponto inteiro dela.
+            if not getattr(self.server, "auth_enabled", False) and not dono:
+                return folder
+            if dono != user["sub"]:
+                devlog.log("intencao: personagem de outro dono", f"{cid} != {user['sub']}")
+                self._send_json(negado, 403)
+                return None
+        return folder
+
+    def _turno_em_voo(self, cid: str) -> bool:
+        """Este personagem está no meio de um turno?
+
+        A escrita do jogador REJEITA enquanto o turno corre, com a mesma trava e a
+        mesma disciplina (rejeitar, não enfileirar) do segundo `/act`. Não é
+        conservadorismo: protege o invariante de que UM TURNO NÃO VÊ O MUNDO MUDAR
+        DEBAIXO DELE. Se a intenção fosse reescrita no meio, a Mente teria
+        decidido com uma coisa e o registro do turno guardaria outra — e passaria
+        a mentir sobre o que ela viu.
+        """
+        with _TURNS_GUARD:
+            if cid in _TURNS_IN_FLIGHT:
+                self._send_json({"error": "ele está agindo agora — tente de novo "
+                                          "em instantes"}, 409)
+                return True
+        return False
+
+    def _texto_de_intencao(self, payload: dict):
+        """O texto, validado. Devolve a string ou None (já tendo respondido).
+
+        Piso e teto (research R3). O teto é de RECURSO, não de mérito, e a
+        mensagem precisa deixar isso claro: julgar o plano é exatamente o que esta
+        porta não faz.
+        """
+        texto = (payload.get("content") or payload.get("texto") or "")
+        if not isinstance(texto, str) or not texto.strip():
+            self._send_json({"error": "a intenção precisa dizer alguma coisa"}, 400)
+            return None
+        if len(texto) > self.LIMITE_TEXTO_INTENCAO:
+            self._send_json({"error": f"texto longo demais "
+                                      f"({len(texto)} de {self.LIMITE_TEXTO_INTENCAO} "
+                                      f"caracteres) — é limite de tamanho, não "
+                                      f"julgamento do que você escreveu"}, 400)
+            return None
+        return texto.strip()
+
+    def _handle_intencao_post(self, path: str) -> None:
+        """As três operações do dono sobre os compromissos do personagem dele.
+
+        ZERO LLM em todo o caminho: nem Árbitro, nem Mente, nem juízo, nem
+        rolagem. O dono digita, o Motor grava — e é só isso que acontece.
+        """
+        # mesmo jeito de ler corpo que `_handle_auth_post` já usa
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            payload = json.loads(self.rfile.read(length) if length else b"{}")
+        except json.JSONDecodeError:
+            return self._send_json({"error": "JSON inválido"}, 400)
+        cid = payload.get("character_id")
+        folder = self._autorizar_intencao(cid)
+        if folder is None:
+            return
+        if self._turno_em_voo(cid):
+            return
+
+        if path == "/api/intention/create":
+            texto = self._texto_de_intencao(payload)
+            if texto is None:
+                return
+            with motor.WRITE_LOCK:
+                iid = motor.create_intention(folder, texto)
+            return self._send_json({"ok": True, "id": iid})
+
+        iid = payload.get("intention_id")
+        if not iid:
+            return self._send_json({"error": "intention_id needed"}, 400)
+
+        if path == "/api/intention/update":
+            texto = self._texto_de_intencao(payload)
+            if texto is None:
+                return
+            with motor.WRITE_LOCK:
+                ok = motor.update_intention(folder, iid, texto)
+            if not ok:
+                # inexistente OU já não-ativa. O que acabou não se reescreve — uma
+                # continuação nasce como intenção nova, com id próprio (spec 026).
+                return self._send_json({"error": "esse compromisso não está "
+                                                 "aberto"}, 409)
+            return self._send_json({"ok": True, "id": iid})
+
+        if path == "/api/intention/close":
+            with motor.WRITE_LOCK:
+                ok = motor.close_intention(folder, iid, status="abandonada")
+            if not ok:
+                return self._send_json({"error": "esse compromisso não está "
+                                                 "aberto"}, 409)
+            return self._send_json({"ok": True, "id": iid})
+
+        self._send_json({"error": "rota não encontrada"}, 404)
 
     def _handle_auth_post(self, path: str, q: dict) -> None:
         length = int(self.headers.get("Content-Length", 0))

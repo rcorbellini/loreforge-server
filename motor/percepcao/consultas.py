@@ -400,6 +400,31 @@ def _nested_item_refs(container_folder: Path) -> list[dict]:
     return refs
 
 
+def _conhecidos_por_memoria(memorias: list, presentes: set) -> dict:
+    """id -> nome de quem ele SABE NOMEAR mas não está aqui (spec 060).
+
+    Sai do `involved` das lembranças vivas, que já descia no contexto — o que
+    faltava era o NOME, e ele não é segredo: está escrito no texto da própria
+    lembrança. Serve ao conector para converter "Ossa, a Cavadora" em id e deixar
+    a proposta CHEGAR ao mundo, que recusa com frase de mundo ("não é alguém a
+    quem você possa perguntar agora") em vez de o cliente engolir a tentativa.
+
+    É o item 53.1 tendo o que precisa: a memória estende o alcance, e quem recusa
+    é a execução, não um pré-filtro.
+    """
+    fora = {}
+    for mem in memorias or []:
+        for ref in (mem.get("involved") or []):
+            if not ref or ref in presentes or ref in fora:
+                continue
+            nome = io.name_of(ref)
+            # `name_of` cai no id cru quando não acha — e aí não há nome a
+            # oferecer: registrar o id como se fosse nome só criaria ruído.
+            if nome and nome != ref:
+                fora[ref] = nome
+    return fora
+
+
 def _location_lineage(place_folder: Path) -> dict | None:
     """A location mais PRÓXIMA que contém `place_folder`, com um ponteiro
     recursivo `pertence_a` pra quem contém ELA — mesma forma da árvore de
@@ -541,6 +566,13 @@ def get_context(character_id: str) -> dict:
     self_fm, self_body = read_doc(char_folder / "character.md")
     _self_pega = grasp_slot_of(self_fm)  # spec 019: slot de pega do ator (mão/boca)
     routes = [] if in_transit else _available_routes(place_fm.get("id"))
+    # a cena EVOCA: quem está presente e onde se está decidem o que volta à
+    # mente, junto com o que está vívido por si (spec 013)
+    memorias_ativas = get_active_memories(
+        char_folder,
+        evoked_by={c["id"] for c in characters_present if c.get("id")}
+        | ({place_fm.get("id")} if place_fm.get("id") else set()),
+    )
 
     return {
         "location": {
@@ -556,15 +588,34 @@ def get_context(character_id: str) -> dict:
         "objects_present": objects_present,
         # a cena EVOCA: quem está presente e onde se está decidem o que volta à
         # mente, junto com o que está vívido por si (spec 013)
-        "memories": get_active_memories(
-            char_folder,
-            evoked_by={c["id"] for c in characters_present if c.get("id")}
-            | ({place_fm.get("id")} if place_fm.get("id") else set()),
-        ),
+        "memories": memorias_ativas,
         # o que o personagem PRETENDE — nunca o que viveu (spec 026). Consultivo
         # de client (Princípio IX nível 2), disponível à Mente antes de decidir,
         # por sussurro ou pelo gatilho autônomo.
         "intentions": intencoes.get_active_intentions(char_folder),
+        # QUEM ELE SABE NOMEAR, mesmo não estando aqui (spec 060, 2026-08-31).
+        #
+        # O par id -> nome de tudo que aparece no `involved` das memórias vivas
+        # dele e que NÃO está na cena. Não é informação nova: o id já descia no
+        # `involved`, e o nome ele conhece — está escrito no texto da própria
+        # lembrança ("Vi Ossa, a Cavadora partir, rumo a Forja de Ferro").
+        #
+        # PARA QUE SERVE, e o caso que a criou: a memória ESTENDE O ALCANCE (item
+        # 53.1) — o personagem propõe sobre quem ele LEMBRA, e o desfecho certo é
+        # o mundo recusar na execução, com frase de mundo, não alguém pré-filtrar
+        # a proposta. A Elga tem intenção ativa de ajudar a Ossa e uma lembrança
+        # de tê-la visto PARTIR; ao tentar agir sobre ela, o conector não
+        # conseguia sequer converter o nome em id, e a recusa saía como "isso não
+        # corresponde a nada" — falha de nomear — em vez de "ela não está aqui",
+        # que é fato do mundo e diz a ela o que fazer a seguir.
+        #
+        # Não fere o Princípio IX: nome não é juízo, e o id nunca chega à LLM —
+        # ele para no conector, que é quem converte.
+        "conhecidos": _conhecidos_por_memoria(
+            memorias_ativas,
+            presentes={c["id"] for c in characters_present if c.get("id")}
+            | {i["id"] for i in items_present if i.get("id")}
+            | {o["id"] for o in objects_present if o.get("id")}),
         "self": {
             "id": self_fm.get("id"),
             "name": self_fm.get("name"),

@@ -83,7 +83,7 @@ def main(aplicar: bool, somente_memorias: bool = False) -> int:
         grupos[(d.name, corpo.strip())].append((p, fm))
         summary = (fm.get("summary") or "").strip()
         if summary and motor._is_alive(fm):
-            por_summary[(d.name, summary)].append((p, corpo.strip()))
+            por_summary[(d.name, summary)].append((p, fm, corpo))
 
     fundidos = apagados = 0
     for (dono, _corpo), itens in sorted(grupos.items()):
@@ -113,24 +113,58 @@ def main(aplicar: bool, somente_memorias: bool = False) -> int:
     if not aplicar:
         print("\nRode com --aplicar para valer.")
 
-    # --- 3) memórias: REPORTA (nunca funde) summary colidente com corpo ----- #
-    # spec 062, US2: o oposto do caso acima — corpo DIFERENTE, summary IGUAL,
+    # --- 3) memórias: summary colidente com corpo DIFERENTE ------------------ #
+    # spec 062, US2: o oposto da fusão acima — corpo DIFERENTE, summary IGUAL,
     # são fatos DIFERENTES mal-rotulados (achado real: as três memórias `giant`
     # de cura da Nerissa, cada uma sobre uma pessoa distinta, compartilhando
-    # "socorreu alguém que quase não se levantava mais"). Fundir perderia
-    # informação; só um humano sabe QUEM nomear em cada summary — por isso
-    # nunca aplica, mesmo com --aplicar.
-    colisoes = 0
+    # "socorreu alguém que quase não se levantava mais"). NUNCA funde — perderia
+    # informação.
+    #
+    # A MAIORIA (105/105 medido) NÃO É VAGUEZA AUTORAL — é `_short_summary`
+    # truncando em 60 chars (`memoria/primitivas.py:1968`) um `content` que já
+    # era distinguível. "Mudou em mim: action — Mira se inclina perto de Hulda
+    # e…" é o MESMO prefixo para quatro conversas diferentes; a divergência
+    # (murmura baixinho vs. baixa a voz vs. ...) vem logo depois do corte.
+    # `evento: mutate`/`accused`/outros — o mecanismo é o mesmo em qualquer
+    # summary derivado de `content` sem summary próprio.
+    #
+    # CONSERTO MECÂNICO, sem LLM e sem invenção: regrava o summary com uma
+    # janela BEM maior (200, contra os 60 do fallback de exibição) — o texto já
+    # existe no `content`, só a janela de corte era curta demais para separar.
+    # SE isso não bastar para o grupo virar único (ex.: a Nerissa antes desta
+    # spec — três feitos que só um humano sabe nomear), o grupo fica de fora e
+    # é reportado, nunca escrito.
+    JANELA_SUMMARY_SEM_COLISAO = 200
+    resolvidos = irresolvidos = 0
     for (dono, summary), entradas in sorted(por_summary.items()):
-        corpos = {c for _p, c in entradas}
-        if len(entradas) > 1 and len(corpos) > 1:
-            colisoes += 1
-            print(f"\n[colisão] {dono}: {len(entradas)} memórias com summary "
-                  f"'{summary}' e corpos diferentes:")
-            for p, _c in entradas:
+        corpos = {c.strip() for _p, _fm, c in entradas}
+        if len(entradas) <= 1 or len(corpos) <= 1:
+            continue
+        novos = [motor._short_summary(corpo, limit=JANELA_SUMMARY_SEM_COLISAO)
+                 for _p, _fm, corpo in entradas]
+        if len(set(novos)) == len(novos):
+            resolvidos += 1
+            print(f"\n[corrigido] {dono}: {len(entradas)} memórias com summary "
+                  f"'{summary}' — regeneradas, agora distintas:")
+            for (p, fm, corpo), novo in zip(entradas, novos):
+                print(f"   {p} -> '{novo}'")
+                if aplicar:
+                    fm["summary"] = novo
+                    motor.write_doc(p, fm, corpo)
+        else:
+            irresolvidos += 1
+            print(f"\n[colisão SEM conserto mecânico] {dono}: {len(entradas)} "
+                  f"memórias com summary '{summary}' — mesmo numa janela maior, "
+                  "o texto continua igual; precisa de mão humana (como as "
+                  "memórias de cura da Nerissa antes da spec 062):")
+            for p, _fm, _c in entradas:
                 print(f"   {p}")
-    print(f"\nSUMMARY COLIDENTE — {colisoes} colisão(ões) "
-          "(corpo diferente, mesmo summary — não fundido, corrigir à mão).")
+
+    print(f"\nSUMMARY COLIDENTE — {resolvidos} grupo(s) "
+          + ("CORRIGIDOS." if aplicar else "corrigíveis (dry-run).")
+          + f" {irresolvidos} grupo(s) precisam de mão humana.")
+    if not aplicar and resolvidos:
+        print("Rode com --aplicar para gravar os summaries corrigidos.")
     return 0
 
 

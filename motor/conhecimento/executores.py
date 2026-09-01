@@ -390,13 +390,26 @@ def _apply_unanswered_ops(character_id: str, actor_folder: Path, resolution: dic
         # duplicação fez (35 das 40 memórias vivas do Tobias eram esta recusa, e
         # eram elas que o faziam perguntar de novo).
         chave = f"{informante}\u0000{assunto or rota or ''}"
+        # O VERBO É DE CADA LADO. A assimetria das duas frases (quem perguntou
+        # guarda O QUE OUVIU; quem respondeu guarda O QUE FEZ) já existia no
+        # `_texto_sem_resposta` — mas a CAUDA de reincidência não a acompanhava, e
+        # os DOIS lados recebiam "e não foi a primeira vez que PERGUNTEI". Visto em
+        # jogo: a memória da Nerissa dizia que ELA tinha perguntado, quando ela
+        # tinha respondido.
+        #
+        # Só o lado de QUEM RESPONDEU ganha `frag`. O de quem perguntou continua
+        # sem, caindo no `_insistencia` — de propósito: "Já insisti algumas vezes,
+        # sempre em vão" é redação escolhida a dedo, e melhor que o que a escala
+        # genérica produziria. A generalização serve ao lado que não tinha frase;
+        # não é motivo para piorar o que já estava bom.
         _rec_unico(created, character_id,
                    t_perguntou.format(quem=name_of(informante)),
                    "unanswered", envolvidos, about=f"perguntei\u0000{chave}")
         _rec_unico(created, informante,
                    t_respondeu.format(quem=name_of(character_id)),
                    "unanswered", envolvidos,
-                   about=f"perguntaram\u0000{character_id}\u0000{assunto or rota or ''}")
+                   about=f"perguntaram\u0000{character_id}\u0000{assunto or rota or ''}",
+                   frag="me perguntaram")
         applied.append({"informante": informante, "sobre": sobre,
                         "motivo": motivo, "rota": op.get("rota")})
     return applied, [], created

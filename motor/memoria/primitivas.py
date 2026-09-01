@@ -984,18 +984,26 @@ def _rec(created: list, quem: str, texto: str, evento: str, involved: list,
 
 
 def _rec_unico(created: list, quem: str, texto: str, evento: str, involved: list,
-               *, about: str, intensity: str = "small") -> None:
+               *, about: str, intensity: str = "small", frag: str = "") -> None:
     """Como `_rec`, mas para o fato que SE REPETE: renova em vez de duplicar.
 
     A chave é o `about` — quem chama decide o que conta como "o mesmo assunto"
     (o par informante+assunto, no caso da pergunta que não rendeu). Ver
-    `_remember_recurring` para o porquê de isto existir."""
+    `_remember_recurring` para o porquê de isto existir.
+
+    `frag` é o VERBO em 1ª pessoa de quem lembra ("perguntei", "me perguntaram"),
+    e existe porque sem ele os dois lados de um mesmo fato recebiam a MESMA frase.
+    Visto em jogo: a memória da Nerissa dizia *"Irmão Tobias me perguntou sobre X
+    — eu não soube dizer. E não foi a primeira vez que PERGUNTEI."* Ela não
+    perguntou nada; ela respondeu. Sem o `frag`, `_remember_recurring` cai no
+    `_insistencia`, que fala de pergunta e por isso só serve a um dos lados."""
     try:
         folder = find_character_folder(quem)
     except MotorError:
         return
     mem_id, vezes = _remember_recurring(folder, texto, evento=evento, about=about,
-                                        involved=involved, intensity=intensity)
+                                        involved=involved, intensity=intensity,
+                                        frag=frag)
     if mem_id is not None:
         created.append({"target": quem, "id": mem_id, "event": evento,
                         "vezes": vezes})

@@ -671,6 +671,42 @@ check("mesmo evento com `about` diferente NÃO funde (são coisas distintas)",
       len([p for p in _mems.glob("*.md") if p.name not in _antes_k]) == 2)
 
 
+# --------------------------------------------------------------------------- #
+# O VERBO DE CADA LADO (2026-08-31, visto em JOGO, não na suíte).
+#
+# A pergunta que não rendeu grava nos DOIS lados, com frases DIFERENTES de
+# propósito (quem perguntou guarda o que OUVIU; quem respondeu, o que FEZ) — é o
+# preparo para a mentira que o item 52.6 registra. Mas a CAUDA de reincidência
+# não acompanhava a assimetria: os dois lados recebiam "e não foi a primeira vez
+# que PERGUNTEI".
+#
+# Visto no mundo real: a memória da Nerissa dizia "Irmão Tobias me perguntou
+# sobre X — eu não soube dizer. E não foi a primeira vez que perguntei." Ela não
+# perguntou nada; ela respondeu.
+#
+# O conserto NÃO foi generalizar os dois: quem pergunta continua com a redação
+# escolhida a dedo ("Já insisti algumas vezes, sempre em vão"), que é melhor que
+# a escala genérica produziria. Generalização serve ao lado que não tinha frase;
+# não é motivo para piorar o que já estava bom.
+# --------------------------------------------------------------------------- #
+print("\n--- (verbo) a cauda de reincidência acompanha o lado -------------------")
+
+from motor.memoria.primitivas import _reincidencia, _insistencia   # noqa: E402
+
+check("quem PERGUNTOU mantém a redação escolhida a dedo",
+      "insisti" in _insistencia(3) and "em vão" in _insistencia(3),
+      _insistencia(3))
+check("quem RESPONDEU não diz que perguntou",
+      "que perguntei" not in _reincidencia(2, "me perguntaram")
+      and "me perguntaram" in _reincidencia(2, "me perguntaram"),
+      _reincidencia(2, "me perguntaram"))
+check("a escala do lado que responde acompanha as três faixas",
+      all("me perguntaram" in _reincidencia(n, "me perguntaram") for n in (2, 3, 7)),
+      str([_reincidencia(n, "me perguntaram") for n in (2, 3, 7)]))
+check("e continua sem NÚMERO dos dois lados (Princípio V)",
+      not any(c.isdigit() for c in
+              _reincidencia(7, "me perguntaram") + _insistencia(7)))
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + ", ".join(FAILS))

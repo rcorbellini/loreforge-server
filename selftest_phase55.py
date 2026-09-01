@@ -261,6 +261,49 @@ check("US2: nenhuma das duas notas (nem os pares nome/description) aparece na FA
       str(sorted(props_forage)))
 
 # =========================================================================== #
+# spec 062, US2: A COLHEITA NÃO PODE SE CHAMAR COMO A FONTE — recusa
+# DETERMINÍSTICA no executor, sem depender do juízo do Árbitro se comportar
+# (a régua é a primeira camada; isto é a que garante). `name_of(TAVERNA)` é
+# "Taverna do Gancho". Medido contra o modelo real em
+# specs/062-tiebreak-and-distinct-names/medicoes/regua-colher.md: igualdade
+# exata não bastava (a régua original produzia "Macieira" para uma fonte
+# "Macieira da Praça"), então o guarda casa pelo NÚCLEO (prefixo até a
+# fronteira de palavra) — não substring qualquer: substring pura rejeitava
+# "Ervas" colhido de "Canteiro de Ervas" logo abaixo (US1/object), que é nome
+# LEGÍTIMO — o recipiente se chama pelo que contém, o produto vem no FIM do
+# nome da fonte, não no início.
+# =========================================================================== #
+
+_mk_char("nomeador-p55", "Nomeador de Teste")
+NOM = "nomeador-p55"
+
+motor.apply_resolution(NOM, {"forage_ops": [
+    forage_op(TAVERNA, nome_seleta="Taverna do Gancho")]})
+check("US2/spec062: nome_seleta IGUAL à fonte -> recusa determinística",
+      len(memorias_evento(NOM, "forage_seleta")) == 0)
+
+motor.apply_resolution(NOM, {"forage_ops": [
+    forage_op(TAVERNA, nome_mato="Taverna")]})
+check("US2/spec062: nome_mato é PREFIXO da fonte ('Taverna' em 'Taverna do "
+     "Gancho') -> recusa determinística (igualdade exata teria deixado passar)",
+      len(memorias_evento(NOM, "forage_mato")) == 0
+      and len(memorias_evento(NOM, "forage_util")) == 0
+      and len(memorias_evento(NOM, "forage_seleta")) == 0)
+
+motor.apply_resolution(NOM, {"forage_ops": [forage_op(TAVERNA, nome_seleta="Gancho")]})
+check("US2/spec062: SUFIXO da fonte ('Gancho' em 'Taverna do Gancho') NÃO "
+     "colide — é o padrão 'recipiente-de-produto' (mesmo caso de 'Canteiro "
+     "de Ervas' -> 'Ervas'), colheita legítima",
+      len(memorias_evento(NOM, "forage_mato") + memorias_evento(NOM, "forage_util")
+          + memorias_evento(NOM, "forage_seleta")) >= 1)
+
+motor.apply_resolution(NOM, {"forage_ops": [forage_op(TAVERNA)]})
+check("US2/spec062: nomes que NÃO colidem (default do helper) seguem criando "
+     "itens normalmente — o guarda não pune colheita legítima",
+      len(memorias_evento(NOM, "forage_mato") + memorias_evento(NOM, "forage_util")
+          + memorias_evento(NOM, "forage_seleta")) >= 2)
+
+# =========================================================================== #
 # US3 — proficiência em "herbalismo" soma DIRETO na rolagem de riqueza,
 # decidindo a PRÓPRIA banda com o MESMO d20; skills.herbalismo NUNCA é lido
 # =========================================================================== #

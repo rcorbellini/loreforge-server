@@ -155,6 +155,15 @@ check("a tool passa a ser oferecida",
       any(t["name"] == "travel_to"
           for t in arbiter.build_tools(motor.get_context(TORVIN))))
 
+# spec 062, US4: MIRANTE ficou alcançável AGORA, e nenhuma memória o menciona
+# (`_remember_route` grava `about`, não `involved`, e é filtrado por `kind` de
+# qualquer forma) — antes desta spec ele não tinha nome em `conhecidos`
+# nenhum, mesmo já estando no enum que a Mente vê. É o caso real medido:
+# forja-de-ferro/porto-negro/taverna-do-gancho apareciam com id cru.
+check("SPEC 062: destino alcançável SEM memória nenhuma tem nome em `conhecidos`",
+      motor.get_context(TORVIN).get("conhecidos", {}).get(MIRANTE) == "Mirante do Corvo",
+      str(motor.get_context(TORVIN).get("conhecidos", {}).get(MIRANTE)))
+
 # o saber VENCE: é a distinção que a spec 013 construiu, valendo na prática
 for mem in motor._iter_memories(TORVIN):
     if motor.memory_about(mem) == "subida-do-corvo":

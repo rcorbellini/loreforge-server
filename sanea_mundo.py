@@ -68,7 +68,11 @@ def main(aplicar: bool, somente_memorias: bool = False) -> int:
         # a pasta vazia fica: é onde as novas vão nascer
 
     # --- 2) memórias: funde o corpo idêntico do mesmo personagem ------------ #
+    # Mesma varredura alimenta a checagem de summary colidente (abaixo, spec
+    # 062) — não há por que ler o disco duas vezes para duas perguntas
+    # diferentes sobre os MESMOS arquivos.
     grupos: dict[tuple, list] = collections.defaultdict(list)
+    por_summary: dict[tuple, list] = collections.defaultdict(list)
     total = 0
     for p in motor.WORLD_DIR.rglob("memories/*.md"):
         total += 1
@@ -77,6 +81,9 @@ def main(aplicar: bool, somente_memorias: bool = False) -> int:
             continue
         fm, corpo = motor.read_doc(p)
         grupos[(d.name, corpo.strip())].append((p, fm))
+        summary = (fm.get("summary") or "").strip()
+        if summary and motor._is_alive(fm):
+            por_summary[(d.name, summary)].append((p, corpo.strip()))
 
     fundidos = apagados = 0
     for (dono, _corpo), itens in sorted(grupos.items()):
@@ -105,6 +112,25 @@ def main(aplicar: bool, somente_memorias: bool = False) -> int:
           + ("APAGADOS." if aplicar else "a apagar (dry-run)."))
     if not aplicar:
         print("\nRode com --aplicar para valer.")
+
+    # --- 3) memórias: REPORTA (nunca funde) summary colidente com corpo ----- #
+    # spec 062, US2: o oposto do caso acima — corpo DIFERENTE, summary IGUAL,
+    # são fatos DIFERENTES mal-rotulados (achado real: as três memórias `giant`
+    # de cura da Nerissa, cada uma sobre uma pessoa distinta, compartilhando
+    # "socorreu alguém que quase não se levantava mais"). Fundir perderia
+    # informação; só um humano sabe QUEM nomear em cada summary — por isso
+    # nunca aplica, mesmo com --aplicar.
+    colisoes = 0
+    for (dono, summary), entradas in sorted(por_summary.items()):
+        corpos = {c for _p, c in entradas}
+        if len(entradas) > 1 and len(corpos) > 1:
+            colisoes += 1
+            print(f"\n[colisão] {dono}: {len(entradas)} memórias com summary "
+                  f"'{summary}' e corpos diferentes:")
+            for p, _c in entradas:
+                print(f"   {p}")
+    print(f"\nSUMMARY COLIDENTE — {colisoes} colisão(ões) "
+          "(corpo diferente, mesmo summary — não fundido, corrigir à mão).")
     return 0
 
 

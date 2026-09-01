@@ -131,11 +131,18 @@ responder — nunca invente detalhes que não estejam nela.
 
 A rolagem que decide a banda final (mato/útil/seleta) só acontece DEPOIS desta
 resposta, no Motor — você não sabe qual banda vai sair, e não precisa saber:
-por isso escreva TRÊS pares de nome+descrição, um para CADA banda — o que
-alguém sem olho para plantas traria (mato), o que uma colheita comum rende
-(util), e o que alguém que conhece bem plantas traria daqui (seleta). As três
-descrevem o MESMO alvo, lido da mesma descrição real — nunca invente uma
-planta que a descrição não sustenta.
+por isso escreva TRÊS pares de nome+descrição — o QUE SE COLHEU em cada
+banda, nunca o alvo de onde se colheu. Pense no verbo: você está descrevendo
+o que SAIU do alvo (uma fruta, uma folha, uma raiz, um talo), não o alvo em
+si.
+  mato: o que alguém sem olho para plantas traria
+  util: o que uma colheita comum rende
+  seleta: o que alguém que conhece bem plantas traria daqui
+Todas as três se baseiam na MESMA descrição real do alvo (nunca invente uma
+planta que ela não sustenta) — mas o NOME de cada banda é sempre da coisa
+colhida, nunca do alvo. ERRADO: colher da "Macieira da Praça" e nomear a
+banda "Macieira da Praça". CERTO: nomear "Maçã", "Maçã Verde", "Folhas de
+Macieira" — o produto, não a árvore.
 
 Escreva também `descricao_colhida`: o que este alvo específico passaria a
 dizer de si logo depois de ser colhido (arrancado, revirado, com menos do que

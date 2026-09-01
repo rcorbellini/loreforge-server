@@ -311,6 +311,13 @@ _WHY_BY_REGRA = {
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",
     "container_lotado": "não há vaga no contêiner",
     "nao_e_container": "isso não guarda nada dentro",
+    # spec 062, US2: a colheita não pode se chamar como a fonte de onde saiu —
+    # "Macieira" colhida de "Macieira da Praça" era o item mal-nomeado que
+    # motivou a spec. Recusa DETERMINÍSTICA no executor (nunca depende só do
+    # juízo do Árbitro se comportar). Frase DIEGÉTICA — se este caso chegar a
+    # narrar (deveria ser raro: a régua já evita), tem de soar como desfecho de
+    # cena, não como diagnóstico de sistema.
+    "colheita_nomeia_fonte": "nada ali rendeu algo diferente da própria planta",
     # NOMEIA de quem: sem isso, "as mãos já estão ocupadas" numa entrega faz o
     # jogador entender que são as DELE, quando eram as de quem ia RECEBER.
     # Uma recusa mal rotulada é indistinguível de um bug (achado real: Nerissa

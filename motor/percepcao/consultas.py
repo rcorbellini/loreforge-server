@@ -573,6 +573,12 @@ def get_context(character_id: str) -> dict:
         evoked_by={c["id"] for c in characters_present if c.get("id")}
         | ({place_fm.get("id")} if place_fm.get("id") else set()),
     )
+    # spec 062, US4: mesmo conjunto que `_conhecidos_por_memoria` já usava,
+    # nomeado para também alimentar os destinos alcançáveis sem memória.
+    _presentes_para_conhecidos = (
+        {c["id"] for c in characters_present if c.get("id")}
+        | {i["id"] for i in items_present if i.get("id")}
+        | {o["id"] for o in objects_present if o.get("id")})
 
     return {
         "location": {
@@ -611,11 +617,20 @@ def get_context(character_id: str) -> dict:
         #
         # Não fere o Princípio IX: nome não é juízo, e o id nunca chega à LLM —
         # ele para no conector, que é quem converte.
-        "conhecidos": _conhecidos_por_memoria(
-            memorias_ativas,
-            presentes={c["id"] for c in characters_present if c.get("id")}
-            | {i["id"] for i in items_present if i.get("id")}
-            | {o["id"] for o in objects_present if o.get("id")}),
+        #
+        # + OS DESTINOS ALCANÇÁVEIS SEM MEMÓRIA (spec 062, US4). O enum de
+        # `travel_to.destino` já expõe esses ids (`reachable_destinations`,
+        # mesma função) — só faltava o NOME de quem nunca foi mencionado em
+        # memória nenhuma, e por isso `_conhecidos_por_memoria` não os pegava.
+        # Nenhum conhecimento NOVO desce à Mente: o id já estava no enum que
+        # ela vê; só a etiqueta estava faltando (`registrarNomes`, no conector,
+        # caía no fallback nome=id). Memória por cima em caso de colisão — não
+        # muda o comportamento já testado dessa fonte.
+        "conhecidos": {
+            **{d: io.name_of(d) for d in deslocamento.reachable_destinations(character_id)
+               if d not in _presentes_para_conhecidos and io.name_of(d) != d},
+            **_conhecidos_por_memoria(memorias_ativas, _presentes_para_conhecidos),
+        },
         "self": {
             "id": self_fm.get("id"),
             "name": self_fm.get("name"),

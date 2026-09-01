@@ -93,6 +93,40 @@ def _apply_forage_ops(character_id: str, actor_folder: Path, resolution: dict,
                     "event": "forage_refused_riqueza"}})
             continue
 
+        # spec 062, US2: A COLHEITA NÃO PODE SE CHAMAR COMO A FONTE. Recusa
+        # DETERMINÍSTICA — não depende do juízo do Árbitro se comportar (a régua
+        # é a primeira camada, esta é a que garante). Compara as TRÊS bandas de
+        # uma vez, antes de saber qual rolou: o defeito medido (a Macieira da
+        # Praça colhida virando "Macieira da Praça") pode sair em qualquer uma.
+        #
+        # MESMO NÚCLEO (prefixo até a fronteira de palavra), não substring
+        # qualquer — medido (specs/062-.../medicoes/regua-colher.md) E pego ao
+        # vivo pela própria suíte: substring pura rejeitava "Ervas" colhido de
+        # "Canteiro de Ervas" (selftest_phase55.py), que é nome LEGÍTIMO — o
+        # canteiro se chama pelo que ele CONTÉM, o produto vem no FIM do nome da
+        # fonte, não no início. O bug real é o oposto: "Macieira" é PREFIXO de
+        # "Macieira da Praça" — o produto reusa o NÚCLEO da fonte, só acrescenta
+        # qualificador. Prefixo (nos dois sentidos) mais igualdade captura o
+        # padrão observado sem punir o padrão "recipiente-de-produto".
+        fonte_nome = name_of(onde)
+        fonte_slug = io._slugify(fonte_nome)
+
+        def _colide_com_fonte(nome: str) -> bool:
+            s = io._slugify(nome or "")
+            if not s:
+                return False
+            return (s == fonte_slug
+                    or fonte_slug.startswith(s + "-")
+                    or s.startswith(fonte_slug + "-"))
+
+        colidiu = any(_colide_com_fonte(op.get(campo))
+                      for campo in ("nome_mato", "nome_util", "nome_seleta"))
+        if colidiu:
+            rejected.append({
+                **base, "regra": "colheita_nomeia_fonte", "valores": {"onde": onde},
+                "why": io._WHY_BY_REGRA["colheita_nomeia_fonte"]})
+            continue
+
         nivel_herbalismo = memoria.proficiencies_for(character_id).get("herbalismo", 0.0)
         banda, roll_info = roll_colher_check(actor_fm, riqueza, nivel_herbalismo, rolls)
 

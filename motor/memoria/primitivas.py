@@ -1485,6 +1485,12 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
     # o que faria posse por testemunha falhar no caso comum. `medium` é
     # "sempre memorável", o mesmo patamar de golpe/socorro — criar algo na
     # frente de alguém é, por desenho, tão memorável quanto isso.
+    #
+    # `io.name_of(peca_id)`, não "algo" (achado em campo, 2026-09-01): a peça já
+    # tem `name` no frontmatter desde a ABERTURA (`craft/executores.py`), então
+    # "algo" era só um texto que nunca resolvia o que já estava disponível — e
+    # sem o nome, testemunha de posse não tem O QUÊ testemunhar, e a memória não
+    # dá pra casar contra um alvo (match do resolvedor no conector).
     for op in outcome.get("craft_ops_applied") or []:
         fase = op.get("fase")
         peca_id = op.get("peca")
@@ -1492,7 +1498,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
             continue
         verbo = "terminar de fazer" if fase == "conclusao" else "começar a fazer"
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} {verbo} algo.",
+                      "texto": f"Vi {ator} {verbo} {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_craft", "about": character_id})
     # P5 — RETROFIT DOS SEIS OFÍCIOS LEGADOS (spec 057, US4). Mesmo raciocínio de
@@ -1519,7 +1525,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
             continue
         verbo = "terminar de forjar" if fase == "conclusao" else "começar a forjar"
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} {verbo} uma peça de metal.",
+                      "texto": f"Vi {ator} {verbo} {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_forja", "about": character_id,
                       "dominio": _DOMINIO_FORJA.get(op.get("tipo"))})
@@ -1532,7 +1538,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
         if not peca_id:
             continue
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} começar a cozinhar algo.",
+                      "texto": f"Vi {ator} começar a cozinhar {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_cozinha", "about": character_id})
     for op in outcome.get("botica_ops_applied") or []:
@@ -1540,7 +1546,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
         if not peca_id:
             continue
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} começar a preparar algo.",
+                      "texto": f"Vi {ator} começar a preparar {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_botica", "about": character_id})
     # PRAZO — Mecanismo B (spec 057, contracts/witness-retrofit.md):
@@ -1555,7 +1561,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
         if not peca_id:
             continue
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} terminar de cozinhar algo.",
+                      "texto": f"Vi {ator} terminar de cozinhar {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_cozinha", "about": character_id})
     for op in outcome.get("brew_concluido") or []:
@@ -1563,7 +1569,7 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
         if not peca_id:
             continue
         fatos.append({"envolvidos": [character_id, peca_id],
-                      "texto": f"Vi {ator} terminar de preparar algo.",
+                      "texto": f"Vi {ator} terminar de preparar {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_botica", "about": character_id})
     # SÍNCRONO — ato único, sem fase. `forage` não confere posse (múltiplas

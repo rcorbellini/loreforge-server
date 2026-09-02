@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.28.0"
+__version__ = "2.28.1"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -109,6 +109,23 @@ __version__ = "2.28.0"
 #  apply_resolution desidratado a sequenciador fino + _finalize_turn, os dois band-aids
 #  de "cena congelada" removidos, crash do furto-duplo/transfer+steal impossível.
 #  Comportamento-preservante — por isso PATCH, sem HISTORY própria.)
+# (2.28.1 — spec 064, correção do modelo da EVOCAÇÃO antes de qualquer partida rodar
+#  contra ele. A 2.28.0 fez evocar SOMAR meio TTL ao prazo atual (a matemática do modo
+#  `prazo`), e a medição de SC-007 matou a ideia: `giant` evocada 6 vezes chegava a 1.460
+#  dias sempre com peso 8 — ruminar comprava tempo sem teto, e no tick de 45 s isso são
+#  nove minutos. Proposta do mantenedor, e melhor por três motivos: evocar agora DESCE
+#  uma faixa (`_lower_intensity`, o degrau que o boato da spec 017 já usava) e o prazo
+#  passa a ser o TTL DESSA faixa a partir de agora — reset, nunca soma. A trajetória
+#  converge (giant -> large/90d/p4 -> medium/14d/p2 -> small/2d/p1 -> piso) em vez de
+#  explodir; fica mais fiel (você não relembra o episódio, relembra a última lembrança
+#  dele, e cada evocação o desgasta); e reusa peça existente nos DOIS sentidos, já que a
+#  spec 030 tinha a inversa (`_raise_intensity`) para compromisso cobrado — daí a tensão
+#  que vale nomear: o que você se compromete a fazer FORTALECE, o que você só rumina
+#  DESGASTA. Pode ENCURTAR memória viva de prazo longo, de propósito: o que torna
+#  aceitável é a camada de baixo — mesmo virando `small` ela segue pesando no agregado,
+#  e a RELAÇÃO sobrevive ao episódio. Piso `small`: ruminar nunca apaga. O modo `prazo`
+#  (reencontrar) segue acumulando, que conviver é vivência nova, não rememoração.
+#  PATCH: nenhuma superfície nova; é calibragem de um mecanismo da mesma spec.)
 # (2.27.3 — spec 063, O ÍNDICE DE ARESTAS. Nenhuma superfície de mundo nova, nenhum campo
 #  de schema, nenhuma tool — por isso PATCH, e o precedente é a 2.4.3 logo abaixo.
 #  `motor/indice.py` (nível 0) torna o grafo que o mundo JÁ é (≈7 000 arestas em

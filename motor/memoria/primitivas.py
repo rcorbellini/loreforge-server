@@ -771,22 +771,48 @@ def _renew_memory(character_folder: Path, entity_id: str | None = None,
         if fm.get("state") == "esquecida":
             continue
         if modo == "evocacao":
-            # spec 064 — PARAR PARA LEMBRAR TRAZ DE VOLTA.
+            # spec 064 — PARAR PARA LEMBRAR TRAZ DE VOLTA, E DESGASTA.
             #
-            # Mesma matemática do modo `prazo` (extensão fracionária, nunca reset,
-            # nunca encurta) — muda só o SELETOR: ali é "toda memória que envolve
-            # Fulano", aqui é "estas memórias, que o personagem acabou de evocar".
+            # Completa uma simetria que o mundo tinha pela metade: REENCONTRAR alguém já
+            # renovava as memórias sobre ele (spec 030, Frente C); PENSAR nele não.
             #
-            # Completa uma simetria que o mundo tinha pela metade: REENCONTRAR alguém
-            # já renovava as memórias sobre ele (spec 030, Frente C); PENSAR nele não.
-            # É a mesma ideia, com o gatilho que faltava.
+            # A PRIMEIRA versão desta linha somava meio TTL ao prazo atual, como o modo
+            # `prazo` faz. E a medição matou a ideia: `giant` evocada 6 vezes chegava a
+            # **1.460 dias, sempre com peso 8** — ruminar COMPRAVA tempo, sem teto, e no
+            # tick de 45 s isso são minutos. O mantenedor propôs o inverso, e é melhor:
+            #
+            #   "em vez de ficar acumulando, resetar o tempo da intensidade definida —
+            #    a memória diminuiria a intensidade e passaria a valer o novo tempo
+            #    dela, não somar mais o tempo no atual."
+            #
+            # Agora evocar DESCE uma faixa (`_lower_intensity`, o mesmo degrau que o
+            # boato da spec 017 já usava) e o prazo passa a ser o TTL DESSA faixa, a
+            # partir de agora. A trajetória vira:
+            #
+            #   giant -> large/90d/peso4 -> medium/14d/p2 -> small/2d/p1 -> small/2d/p1
+            #
+            # Converge, não explode. E é fiel: você não relembra o episódio, relembra a
+            # última lembrança dele — cada evocação o desgasta um pouco.
+            #
+            # SIM, isto pode ENCURTAR uma memória viva de prazo longo. É de propósito, e
+            # o que torna aceitável é a camada de baixo: mesmo virando `small`, ela
+            # segue pesando no AGREGADO (e ¼ ao vencer, ⅛ se curada). **A relação
+            # sobrevive ao episódio** — é o modelo inteiro da spec 064 em ação.
+            #
+            # O piso é `small` (`_lower_intensity` não desce mais): ruminar nunca apaga.
+            #
+            # E note a tensão que isto cria com `_intensify_commitments` (spec 030,
+            # Frente D), que SOBE a intensidade de um compromisso cobrado por intenção
+            # ativa: **o que você se compromete a fazer fortalece; o que você só rumina
+            # desgasta.** As duas forças, e nenhuma delas é acidente.
             if fm.get("id") not in (memoria_ids or ()):
                 continue
             if fm.get("evento") in _EVENTOS_SEM_RENOVACAO:
                 continue          # registro de estado não se evoca de volta
-            extensao = _TTL_BY_INTENSITY.get(
-                fm.get("intensity"), _TTL_BY_INTENSITY["medium"]) // 2
-            fm["timestamp_end"] = max(fm.get("timestamp_end") or now, now) + extensao
+            nova_intensidade = _lower_intensity(fm.get("intensity"))
+            fm["intensity"] = nova_intensidade
+            fm["timestamp_end"] = now + _TTL_BY_INTENSITY.get(
+                nova_intensidade, _TTL_BY_INTENSITY["medium"])
         elif modo == "intensidade":
             if fm.get("id") != memoria_id:
                 continue

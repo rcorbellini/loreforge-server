@@ -100,10 +100,28 @@ check("C1 evocar ESTENDE o prazo da vencida", depois["timestamp_end"] > antes,
       f"{antes} -> {depois['timestamp_end']}")
 check("C2 e a revive (volta a ser alcançável pelo contexto)",
       motor.alcance_contexto(depois, time.time()))
-check("C3 a extensão é FRACIONÁRIA, nunca reset pleno",
-      depois["timestamp_end"] - max(antes, int(AGORA))
-      <= mp._TTL_BY_INTENSITY["medium"] // 2 + 5,
-      "metade do TTL-base da própria intensidade")
+check("C3 evocar DESCE uma faixa de intensidade (a memória desgasta ao ser relembrada)",
+      depois["intensity"] == "small",
+      f"era medium, virou {depois['intensity']}")
+check("C4 o prazo passa a ser o TTL da NOVA faixa, a partir de agora — não soma",
+      abs(depois["timestamp_end"] - (int(time.time()) + mp._TTL_BY_INTENSITY["small"])) <= 5,
+      "reset, não acumulação: é o que impede ruminar de comprar tempo sem teto")
+
+# C4-bis — A CONVERGÊNCIA. É a propriedade que a mudança existe para dar: ruminar
+# estabiliza no piso em vez de explodir. Antes: giant evocada 6x chegava a 1.460 dias
+# sempre com peso 8. Agora para em `small`/2d/peso 1 e não sai de lá.
+_mem("mem-p63-rumina", "expired", intensity="giant", evento="inform",
+     vencida_em=int(AGORA) - 10)
+traj = []
+for _ in range(6):
+    mp._renew_memory(FOLDER, memoria_ids={"mem-p63-rumina"}, modo="evocacao")
+    fmr, _ = motor.read_doc(FOLDER / "memories" / "mem-p63-rumina.md")
+    traj.append((fmr["intensity"], fmr["timestamp_end"] - int(time.time())))
+check("C4-bis ruminar CONVERGE no piso `small`, não acumula",
+      traj[-1][0] == "small" and traj[-1][1] <= mp._TTL_BY_INTENSITY["small"] + 5,
+      f"trajetória: {[i for i, _ in traj]}")
+check("C4-ter e o piso nunca apaga a memória (segue viva 2 dias por vez)",
+      traj[-1][1] > 0, "`_lower_intensity` para em `small`; ruminar não destrói")
 
 # A GUARDA QUE IMPORTA (A4 da spec): leitura interna do Motor não pode renovar.
 _mem("mem-p63-naotoca", "expired", evento="inform", involved=["alvo-p63"],
@@ -115,11 +133,11 @@ for _ in range(5):
     motor.remembered_about(CID, "alvo-p63")
     motor.recall(CID, {"sobre": "fixture"})
 te_depois = motor.read_doc(FOLDER / "memories" / "mem-p63-naotoca.md")[0]["timestamp_end"]
-check("C4 medir afeto/apego, ler o contexto e chamar `recall` NÃO renovam nada",
+check("C6 medir afeto/apego, ler o contexto e chamar `recall` NÃO renovam nada",
       te_antes == te_depois,
       f"{te_antes} -> {te_depois}. Se renovassem, a expiração deixaria de existir")
 
-# C5 — DECISÃO DE JOGO, e ela está aqui para ser vista, não escondida.
+# C7 — DECISÃO DE JOGO, e ela está aqui para ser vista, não escondida.
 #
 # `_EVENTOS_SEM_RENOVACAO` = {mutate, lock, equip, travel}: os registros de ESTADO, que
 # a spec 030 excluiu da renovação automática ("registro de estado não se renova"). A
@@ -133,7 +151,7 @@ check("C4 medir afeto/apego, ler o contexto e chamar `recall` NÃO renovam nada"
 _mem("mem-p63-estado", "expired", evento="mutate", vencida_em=int(AGORA) - 10)
 te_estado = motor.read_doc(FOLDER / "memories" / "mem-p63-estado.md")[0]["timestamp_end"]
 mp._renew_memory(FOLDER, memoria_ids={"mem-p63-estado"}, modo="evocacao")
-check("C5 evocar ENCONTRA um registro de estado, mas não o faz durar (decisão da 030)",
+check("C7 evocar ENCONTRA um registro de estado, mas não o faz durar (decisão da 030)",
       motor.read_doc(FOLDER / "memories" / "mem-p63-estado.md")[0]["timestamp_end"]
       == te_estado
       and motor.alcance_consulta(

@@ -90,7 +90,6 @@ _MISS_CURADO: set = set()
 # que deixa a recusa de duplicata olhar o disco uma vez por turno em vez de por chamada.
 _EPOCA = 0
 _EPOCA_SINCRONIZADA = -1
-_INSTANTE_SINCRONIA = 0.0
 
 
 class No:
@@ -591,43 +590,30 @@ def _ordenado(mapa: dict, especie: str, chave: str) -> list:
     return lista
 
 
-# Janela máxima entre duas sincronizações estruturais no caminho de busca por entidade.
-# Medido: uma face faz **2 918** buscas por id, e sincronizar em todas custaria 1,68 s
-# (0,58 ms cada) — contra os 994 ms da face inteira. Com o limiar, são ~5 por face: 3 ms.
-_JANELA_SINCRONIA_S = 0.2
-
-
 def _sincronizar_estrutura_se_preciso() -> None:
-    """Sincroniza a estrutura da árvore, com parcimônia — para a RECUSA DE DUPLICATA.
+    """Sincroniza a estrutura da árvore quando houve escrita — para a recusa de duplicata.
 
-    Por que existe (achado do exploratório da spec 063): `find_character_folder` levanta
-    quando o mesmo id aparece em duas pastas, e essa recusa é a defesa contra
-    `git-ressuscita-personagem-movido`. Mas a duplicata NASCE por fora das portas —
-    `checkout`/`stash`/`submodule update` recriam a pasta antiga enquanto a nova segue
-    no disco. Com o índice velho, `find_character_folder` via UMA cópia e devolvia em
-    silêncio: exatamente o modo de falha que a recusa existe para impedir.
+    A ÉPOCA avança a cada escrita pelas portas e a cada revalidação de fronteira; entre
+    duas escritas, a estrutura não muda por dentro do jogo e não há o que reconciliar.
+    Custo no caso comum (época igual): um teste de inteiro.
 
-    Sincroniza quando a ÉPOCA mudou (houve escrita pelas portas ou revalidação de
-    fronteira) OU quando passou da janela de tempo. **Isto deixa uma janela**, e ela
-    está aqui declarada em vez de escondida — mas não fica sozinha: são TRÊS camadas.
+    **Por que isto não precisa ser mais forte que isso.** A recusa de id duplicado é a
+    defesa contra `git-ressuscita-personagem-movido`, e a duplicata NUNCA nasce do jogo:
+    `new_id` carrega sufixo aleatório e `move_entity` recusa destino existente. Ela nasce
+    de OPERAÇÃO — `checkout`/`stash`/`submodule update` recriando a pasta antiga. Por
+    isso o portão é a SUBIDA (`app.main` recusa subir com duplicata, spec 063) e não uma
+    conferência em cada leitura: o mundo que um processo serve está limpo por construção,
+    e a fronteira da requisição (`garantir()`) apanha o que mudar depois.
 
-      1. `app._revalidar_indice` roda `garantir()` a cada requisição: em produção, uma
-         duplicata nascida entre sessões é vista antes de qualquer resposta.
-      2. `validador.duplicate_ids()` reprova o mundo no boot e em `/api/world/health`,
-         e ele lê o DISCO (padrão glob volta à varredura) — independente do índice.
-      3. Este limiar, para quem chama o Motor direto sem passar por (1).
-
-    A janela alcança só quem cria a duplicata e a consulta na mesma fração de segundo,
-    sem fronteira no meio. Nenhum caminho real do jogo faz isso.
+    Uma versão anterior tinha aqui um limiar de tempo de 200 ms, para cobrir a duplicata
+    nascida com o server no ar. Saiu quando o portão de boot entrou: guardar contra um
+    estado que não pode existir é complexidade sem dono.
     """
-    global _EPOCA_SINCRONIZADA, _INSTANTE_SINCRONIA
-    agora = time.monotonic()
-    if (_EPOCA_SINCRONIZADA == _EPOCA
-            and (agora - _INSTANTE_SINCRONIA) < _JANELA_SINCRONIA_S):
+    global _EPOCA_SINCRONIZADA
+    if _EPOCA_SINCRONIZADA == _EPOCA:
         return
     sincronizar()
     _EPOCA_SINCRONIZADA = _EPOCA
-    _INSTANTE_SINCRONIA = agora
 
 
 def sincronizar() -> None:

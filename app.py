@@ -1567,6 +1567,18 @@ def main() -> None:
         if len(dups) > 10:
             print(f"   … e mais {len(dups) - 10}.", flush=True)
         print("   → python3 loreforge-server/sanea_duplicatas.py\n", flush=True)
+        # E O SERVER NÃO SOBE. Antes ele avisava e seguia, e o aviso rolava para fora
+        # da tela — o mundo duplicado ficava JOGÁVEL, e cada turno jogado contra a
+        # cópia errada é dano que `sanea_duplicatas.py` depois tem de desfazer com o
+        # histórico do git na mão.
+        #
+        # A regra que sai daqui, e que simplifica o resto: **o jogo NUNCA cria
+        # duplicata** (`new_id` tem sufixo aleatório; `move_entity` recusa destino
+        # existente). Ela só nasce de operação — `checkout`/`stash`/`submodule
+        # update` ressuscitando a pasta antiga. Logo o lugar de barrar é a SUBIDA,
+        # uma vez, e não cada leitura do Motor para sempre: barrado aqui, o mundo
+        # que o processo serve está limpo por construção, e o problema não se propaga.
+        raise SystemExit(1)
 
     problems = [p for p in motor.validate_world()
                 if not any(e.startswith("id duplicado") for e in p["errors"])]

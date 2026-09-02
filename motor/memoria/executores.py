@@ -26,9 +26,6 @@ from ..io import (
 )
 
 
-_MEMORY_INTENSITIES = {"small", "medium", "large", "giant"}
-
-
 # Domínio de memória (spec 029, item 9/16/18 do backlog): fonte ÚNICA em
 # `validator.DOMAINS` — mesmo padrão que SIZES/SLOTS já seguem ("a régua é
 # compartilhada... o Motor importa daqui", validator.py:25). O enum de
@@ -118,9 +115,6 @@ _VIVID_WINDOW = {
 
 
 _MEMORY_CONTEXT_CAP = 40
-
-
-_MEMORY_WEIGHT = {"small": 1.0, "medium": 2.0, "large": 4.0, "giant": 8.0}
 
 
 _FAMILIARIDADE_PISO = 0.5

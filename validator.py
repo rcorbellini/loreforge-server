@@ -20,7 +20,7 @@ MVP_TYPES = {"location", "character", "route", "memory", "item", "object", "inte
 # spec 034: os dois eventos que geram a marca física (partida/chegada).
 RASTRO_EVENTOS = {"partida", "chegada"}
 
-INTENSITIES = {"small", "medium", "large", "giant"}
+INTENSITIES = {"trivial", "small", "medium", "large", "giant"}
 # spec 032: "esquecida" é MAIS DEFINITIVA que "expired" — nunca pesa
 # fração nenhuma (ao contrário de expired, que pesa ¼) e NUNCA revive
 # via `_renew_memory` (ao contrário de expired, que revive por

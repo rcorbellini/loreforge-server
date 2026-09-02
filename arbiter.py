@@ -417,7 +417,7 @@ def _scene_index(context: dict) -> dict:
     }
 
 
-_MEMORY_INTENSITIES = ["small", "medium", "large", "giant"]
+_MEMORY_INTENSITIES = ["trivial", "small", "medium", "large", "giant"]
 _INTENTION_STATUSES = ["ativa", "concluida", "abandonada"]  # spec 026
 
 

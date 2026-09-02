@@ -26,7 +26,7 @@ from ..io import (
 )
 
 
-_MEMORY_INTENSITIES = {"small", "medium", "large", "giant"}
+_MEMORY_INTENSITIES = {"trivial", "small", "medium", "large", "giant"}
 
 
 # Domínio de memória (spec 029, item 9/16/18 do backlog): fonte ÚNICA em
@@ -50,6 +50,15 @@ ROTA = "rota"
 
 
 _TTL_BY_INTENSITY = {
+    # Achado em campo (2026-09-01): "small" (2 dias) não tem por baixo dele
+    # granularidade nenhuma pra ação puramente mecânica, sem valência, sem
+    # domínio — abrir a própria bolsa não é algo que se carregue por dois
+    # dias, é o mesmo tipo de "estado, não vivência" que já justificou o TTL
+    # de 6h do `mutate` (ver `_TTL_BY_EVENTO`, 2026-08-13). Em vez de repetir
+    # aquele atalho por-evento, "trivial" faz do degrau abaixo de `small` uma
+    # granularidade de verdade — reutilizável por qualquer recordador (e pelo
+    # `create_memory` do Árbitro), não um caso especial isolado.
+    "trivial": 6 * 3600,
     "small": 2 * 86400,
     "medium": 14 * 86400,
     "large": 90 * 86400,
@@ -77,7 +86,16 @@ _TTL_BY_EVENTO = {"mutate": 6 * 3600}
 # E o que expira rápido NÃO PODE SER RENOVADO, senão o prazo curto não vale nada:
 # a renovação por convívio (spec 030) estende toda memória viva que envolve quem
 # age, e era ela que empurrava o `mutate` para 598 dias.
-_EVENTOS_SEM_RENOVACAO = frozenset({"mutate"})
+#
+# `lock`/`equip`/`travel` sofriam do MESMO defeito, achado em campo (2026-09-01):
+# "Abri Bolsa de Ervas" (small, TTL-base de 2 dias) durou 56 dias porque a bolsa
+# segue `involved` em ações seguintes, e cada uma renovava mais meio-TTL. Os três
+# já eram tratados como "ação utilitária, ninguém progride nela" em
+# `_DOMAIN_BY_EVENT` (comentário abaixo) — a exclusão da renovação só formaliza o
+# que aquele comentário já dizia. `wield` fica DE FORA de propósito: carrega
+# valência por arma (`_record_arma`), e uma renovação que reforça "esta espada
+# cravou fundo de novo" é sinal, não ruído.
+_EVENTOS_SEM_RENOVACAO = frozenset({"mutate", "lock", "equip", "travel"})
 
 
 
@@ -91,7 +109,7 @@ _PERCENTUAL_BASE_POR_BANDA = {"media": 0.35, "alta": 0.15}
 _PISO_PERCENTUAL_ESQUECIDO = 0.05
 
 
-_INTENSITY_ORDER_DESC = {"giant": 0, "large": 1, "medium": 2, "small": 3}
+_INTENSITY_ORDER_DESC = {"giant": 0, "large": 1, "medium": 2, "small": 3, "trivial": 4}
 
 
 POSITIVA, NEGATIVA = "positiva", "negativa"
@@ -228,7 +246,7 @@ _APEGO_VITIMA_FORTE = 4.0
 _LIMIAR_SONO_QUALIDADE = 0.5
 
 
-_INTENSITY_ORDER = {"giant": 0, "large": 1, "medium": 2, "small": 3}
+_INTENSITY_ORDER = {"giant": 0, "large": 1, "medium": 2, "small": 3, "trivial": 4}
 
 
 _DAY = 86400
@@ -245,7 +263,7 @@ _VIVID_WINDOW = {
 _MEMORY_CONTEXT_CAP = 40
 
 
-_MEMORY_WEIGHT = {"small": 1.0, "medium": 2.0, "large": 4.0, "giant": 8.0}
+_MEMORY_WEIGHT = {"trivial": 0.5, "small": 1.0, "medium": 2.0, "large": 4.0, "giant": 8.0}
 
 
 _FAMILIARIDADE_PISO = 0.5
@@ -641,8 +659,8 @@ def _is_trace_active(fm: dict, now: float | None = None) -> bool:
 def _raise_intensity(tier: str) -> str:
     """Uma faixa de intensidade ACIMA (spec 030) — inverso de `_lower_intensity`.
     Teto `giant`: um compromisso não pode pesar mais que o máximo da escala."""
-    escada = {"small": "medium", "medium": "large", "large": "giant",
-             "giant": "giant"}
+    escada = {"trivial": "small", "small": "medium", "medium": "large",
+             "large": "giant", "giant": "giant"}
     return escada.get(tier, "medium")
 
 
@@ -1790,7 +1808,8 @@ def _record_equip(character_id: str, equips_applied: list) -> list:
                 texto = f"Tirei {item} do corpo."
         else:
             texto = f"Vesti {item}."
-        _rec(created, character_id, texto, "equip", [character_id, item_id])
+        _rec(created, character_id, texto, "equip", [character_id, item_id],
+             intensity="trivial")
     return created
 
 
@@ -1801,7 +1820,8 @@ def _record_lock(character_id: str, locks_applied: list) -> list:
             continue
         alvo = name_of(op.get("target") or op.get("alvo"))
         acao = "Fechei" if op.get("op") == "close" else "Abri"
-        _rec(created, character_id, f"{acao} {alvo}.", "lock", [character_id])
+        _rec(created, character_id, f"{acao} {alvo}.", "lock", [character_id],
+             intensity="trivial")
     return created
 
 
@@ -1809,7 +1829,8 @@ def _record_travel(character_id: str, travels_applied: list) -> list:
     created: list = []
     for op in travels_applied or []:
         destino = name_of(op.get("destino_final"))
-        _rec(created, character_id, f"Parti rumo a {destino}.", "travel", [character_id])
+        _rec(created, character_id, f"Parti rumo a {destino}.", "travel", [character_id],
+             intensity="trivial")
     return created
 
 

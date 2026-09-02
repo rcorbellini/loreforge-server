@@ -271,6 +271,23 @@ _MEMORY_WEIGHT = {"trivial": 0.5, "small": 1.0, "medium": 2.0, "large": 4.0, "gi
 _FAMILIARIDADE_PISO = 0.5
 
 
+# spec 064 — NADA QUE AINDA ESTÁ ALI É 100% PERDIDO.
+#
+# `esquecida` (curada por `heal`, spec 032) pesava ZERO, e como ela também está fora do
+# contexto e da consulta, isso a tornava invisível ao mundo inteiro: a única memória
+# realmente perdida. O mantenedor recusou o princípio — "nenhuma memória que está ali
+# deveria ser 100% perdida" — e ele tem razão, porque é exatamente assim que funciona:
+# você não lembra do ato que te marcou, e ele te marcou do mesmo jeito.
+#
+# Agora pesa ⅛: metade da vencida. Sobre a tabela de base, uma `giant` esquecida vale o
+# mesmo que uma `small` viva — o trauma que não se consegue mais nomear ainda pesa como
+# um episódio comum recente.
+#
+# E o custo da cura fica MAIS duro, não mais brando: a `esquecida` continua inalcançável
+# pela consulta e continua nunca revivendo. **A marca fica; a lembrança não.**
+_PESO_ESQUECIDA = 0.125
+
+
 _FADIGA_CORTES = (0.25, 0.5, 0.75, 1.0)
 _FADIGA_PENALIDADES = (0, 1, 2, 4)
 
@@ -720,7 +737,8 @@ def _forget_memories(character_folder: Path, percentual: float) -> list[str]:
 
 
 def _renew_memory(character_folder: Path, entity_id: str | None = None,
-                  memoria_id: str | None = None, *, modo: str = "prazo") -> list[str]:
+                  memoria_id: str | None = None, *, modo: str = "prazo",
+                  memoria_ids: set | None = None) -> list[str]:
     """Generaliza a renovação que só `_remember_route` tinha (spec 030).
 
     Modo `prazo` (Frente C — US3): toda memória `acontecimento` VIVA (ou
@@ -752,7 +770,24 @@ def _renew_memory(character_folder: Path, entity_id: str | None = None,
             continue
         if fm.get("state") == "esquecida":
             continue
-        if modo == "intensidade":
+        if modo == "evocacao":
+            # spec 064 — PARAR PARA LEMBRAR TRAZ DE VOLTA.
+            #
+            # Mesma matemática do modo `prazo` (extensão fracionária, nunca reset,
+            # nunca encurta) — muda só o SELETOR: ali é "toda memória que envolve
+            # Fulano", aqui é "estas memórias, que o personagem acabou de evocar".
+            #
+            # Completa uma simetria que o mundo tinha pela metade: REENCONTRAR alguém
+            # já renovava as memórias sobre ele (spec 030, Frente C); PENSAR nele não.
+            # É a mesma ideia, com o gatilho que faltava.
+            if fm.get("id") not in (memoria_ids or ()):
+                continue
+            if fm.get("evento") in _EVENTOS_SEM_RENOVACAO:
+                continue          # registro de estado não se evoca de volta
+            extensao = _TTL_BY_INTENSITY.get(
+                fm.get("intensity"), _TTL_BY_INTENSITY["medium"]) // 2
+            fm["timestamp_end"] = max(fm.get("timestamp_end") or now, now) + extensao
+        elif modo == "intensidade":
             if fm.get("id") != memoria_id:
                 continue
             nova_intensidade = _raise_intensity(fm.get("intensity"))
@@ -1149,6 +1184,16 @@ def _record_trade(character_id: str, trades_applied: list) -> list:
 # nunca dono, e não pode sobrescrever uma reivindicação de dono já conhecida
 # por algo mais antigo (ex.: quem só testemunhou um empréstimo antes).
 def dono(entidade_id: str, personagem_id: str) -> str | None:
+    """Quem `personagem_id` acha que é dono de `entidade_id` — com CERTEZA.
+
+    Exige lembrança VIVA. **Não mudou de alcance na spec 064**, e isso é deliberado: é o
+    que permite medir se a cobertura da posse cresceu porque o `about` passou a existir
+    (US4) e não porque o corte afrouxou (US5). Quem aceita a vencida é
+    `dono_reconhecido`."""
+    return _dono_por_alcance(entidade_id, personagem_id, alcance_contexto)
+
+
+def _dono_por_alcance(entidade_id: str, personagem_id: str, alcance) -> str | None:
     """Quem `personagem_id` acha que é dono de `entidade_id` — uma RELAÇÃO,
     não um conjunto (spec 036): lê a memória mais RECENTE e ATIVA de
     `personagem_id` sobre `entidade_id`, com `evento` em `_DONO_EVENTOS`, e
@@ -1195,7 +1240,7 @@ def dono(entidade_id: str, personagem_id: str) -> str | None:
             fm, _ = read_doc(path)
             if fm.get("type") != "memory" or fm.get("evento") not in _DONO_EVENTOS:
                 continue
-            if not _is_alive(fm, now):
+            if not alcance(fm, now):
                 continue
             if entidade_id not in memory_involved(fm):
                 continue
@@ -1207,6 +1252,24 @@ def dono(entidade_id: str, personagem_id: str) -> str | None:
     if entidade_id in fisica.carried_item_ids(personagem_id):
         return personagem_id
     return None
+
+
+def dono_reconhecido(entidade_id: str, personagem_id: str) -> str | None:
+    """De quem ele RECONHECE que era — aceitando lembrança VENCIDA (spec 064).
+
+    A irmã de `dono()`, no molde exato de `knows_route` × `recognizes_route`: duas
+    funções, dois nomes, dois significados. *Sei* × *reconheço*, agora aplicado à posse.
+
+    `dono()` exige lembrança viva e é CERTEZA. Esta aceita a vencida e é
+    RECONHECIMENTO COM DÚVIDA — o "acho que era do Torvin", que é material narrativo
+    melhor que o silêncio. A `esquecida` fica fora das duas: aí não se sabe mais de quem
+    é, **e o apego pelo objeto continua medindo** (é o caso "não sei de quem é isto, mas
+    me importo com isto").
+
+    Duas funções e não um booleano na assinatura, de propósito: é onde o chamador
+    seguinte copia o default errado, e aqui o default errado significa o mundo afirmando
+    posse que o personagem já esqueceu."""
+    return _dono_por_alcance(entidade_id, personagem_id, alcance_consulta)
 
 
 def _record_transfer(character_id: str, transfers_applied: list, present_chars: dict) -> list:
@@ -1296,8 +1359,12 @@ def _record_stolen(character_id: str, applied: list) -> list:
             texto = (f"{ladrao} me roubou {item} diante dos meus olhos."
                      if op.get("levou") else
                      f"{ladrao} tentou me roubar {item} — eu o peguei em flagrante.")
+            # spec 064: `about` = a VÍTIMA (ela mesma). Ser roubado não muda de quem a
+            # coisa é — muda quem está com ela. Sem o campo, a vítima guardava a
+            # lembrança do roubo e `dono()` devolvia None para ela sobre o próprio item.
             _rec(created, dono, texto, "stolen", [dono, character_id, item_id],
-                 valence={character_id: NEGATIVA}, intensity="large")  # ex-stolen_from/stolen
+                 valence={character_id: NEGATIVA}, about=dono,
+                 intensity="large")  # ex-stolen_from/stolen
         if op.get("levou"):
             _rec(created, character_id, f"Surrupiei {item} de {_char_name(dono)}.",
                  "theft", [character_id, dono, item_id])
@@ -1468,10 +1535,17 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
                               "base": "small", "val_ator": None, "ruido": _PUBLICO,
                               "evento": "witness_emprestimo", "about": character_id})
             else:
+                # spec 064: `about` = o DESTINATÁRIO. Vi entregar, logo agora é dele.
+                # Faltava — e era o buraco maior da posse: 61 memórias de
+                # `witness_transfer` no mundo, NENHUMA com `about`, todas inúteis a
+                # `dono()`. O ramo do empréstimo logo acima já carregava o campo, com
+                # comentário dizendo que é "o que permite quem só testemunhou
+                # participar de `dono` depois" — a intenção sempre foi essa; a entrega
+                # é que não tinha ganhado o campo.
                 fatos.append({"envolvidos": [character_id, destino, item_id],
                               "texto": f"Vi {ator} entregar {name_of(item_id)} a {_char_name(destino)}.",
                               "base": "small", "val_ator": None, "ruido": _PUBLICO,
-                              "evento": "witness_transfer"})
+                              "evento": "witness_transfer", "about": destino})
     for op in outcome.get("persuade_give_ops_applied") or []:
         doador, para, item_id = op.get("alvo"), op.get("para"), op.get("item")
         if doador and para:
@@ -1700,7 +1774,19 @@ def _record_witness(character_id: str, actor_folder: Path,
             # por um alvo resolvido individualmente, por-testemunha.
             alvo_dono = fato.get("about")
             if fato.get("furto_dono"):
-                alvo_dono = dono(fato["item_furtado"], wid)
+                # spec 064: a reivindicação PRÓPRIA da testemunha continua vencendo
+                # (spec 036). O que muda é o que acontece quando ela não tem nenhuma:
+                # antes ficava `None`, e a memória nascia sem `about` — 22 das 26
+                # `witness_theft` do mundo. Agora cai na VÍTIMA, que o fato já conhece.
+                #
+                # E isso é o certo, não um remendo: VER alguém furtar de Fulano É a
+                # evidência de que era de Fulano. Descartá-la era jogar fora o próprio
+                # conteúdo do que se viu.
+                #
+                # O caso `furto_dono_obrigatorio` (pegar-pra-si) não é afetado: lá
+                # `vitima` é None por construção, então o fallback continua dando None
+                # e a regra "sem reivindicação própria, nenhuma memória" segue de pé.
+                alvo_dono = dono(fato["item_furtado"], wid) or fato.get("vitima")
                 obrigatorio = fato.get("furto_dono_obrigatorio")
                 if obrigatorio and (alvo_dono is None or alvo_dono == character_id):
                     continue
@@ -2167,6 +2253,51 @@ def _memorias_citando(character_id: str, target_id: str) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------- #
+# OS TRÊS ALCANCES (spec 064) — e a regra é que o alcance é da PERGUNTA
+# --------------------------------------------------------------------------- #
+#
+# O mantenedor descreveu isto por experiência, e a frase dele é a especificação:
+#
+#   "Eu não lembro os atos que me tornaram amigo de uma pessoa, mas eu sei que vários
+#    atos somados me fazem entender que ela é minha amiga. As memórias deixam de ser
+#    PRO CONTEXTO — não estão ativas no momento em que estou decidindo, mas
+#    influenciaram na minha relação. E se eu parar pra lembrar, eu vou lembrar."
+#
+# Antes desta spec o mundo era binário na prática: 9 dos 12 consumidores perguntavam só
+# "está viva?", e 59% do acervo (1.585 de 2.692) era invisível a todos eles. Pior:
+# `recall` — "parar pra lembrar" — tinha EXATAMENTE o mesmo alcance que `get_context`.
+#
+# A contenção `CONTEXTO ⊆ CONSULTA ⊆ AGREGADO` é o contrato, e a fase 63 a verifica com
+# DADO, não por leitura de código.
+
+def alcance_contexto(fm: dict, now: float | None = None) -> bool:
+    """O que está NA CABEÇA agora, enquanto se decide. Só memória viva.
+
+    É o `_is_alive` de sempre, com nome que diz a PERGUNTA em vez do filtro. Não alarga
+    nunca: se alargasse, a distinção que a spec 064 inteira existe para criar sumiria."""
+    return _is_alive(fm, now)
+
+
+def alcance_consulta(fm: dict, now: float | None = None) -> bool:
+    """O que se ALCANÇA ao parar para lembrar. Viva ou vencida — nunca `esquecida`.
+
+    A vencida entra porque "não está na minha cabeça" não é "não consigo puxar". A
+    `esquecida` fica fora porque é justamente o que não se consegue mais evocar — é o
+    que mantém o custo da cura (spec 032) mais definitivo que a expiração natural.
+    **A marca fica; a lembrança não.**"""
+    return fm.get("state") != "esquecida"
+
+
+def alcance_agregado(fm: dict, now: float | None = None) -> bool:
+    """O que pesa na RELAÇÃO. Tudo — inclusive o que foi curado.
+
+    "Nenhuma memória que está ali deveria ser 100% perdida": aqui nada é excluído, e a
+    graduação vira PESO (viva 1, vencida ¼, esquecida ⅛), não presença. É o que sustenta
+    saber que alguém é seu amigo sem lembrar de um único ato."""
+    return True
+
+
 def _weigh_memories(character_id: str, target_id: str, signed: bool) -> float:
     """Soma as memórias de `character_id` que envolvem `target_id`.
 
@@ -2186,10 +2317,11 @@ def _weigh_memories(character_id: str, target_id: str, signed: bool) -> float:
             continue
         if target_id not in memory_involved(fm):
             continue
-        if fm.get("state") == "esquecida":
-            continue
         p = _MEMORY_WEIGHT.get(fm.get("intensity"), 2.0)
-        if not _is_alive(fm):
+        # spec 064 — NADA QUE AINDA ESTÁ ALI É 100% PERDIDO.
+        if fm.get("state") == "esquecida":
+            p *= _PESO_ESQUECIDA
+        elif not _is_alive(fm):
             p *= 0.25
         if signed:
             sinal = memory_valence(fm).get(target_id)
@@ -2375,10 +2507,10 @@ def proficiencies_for(character_id: str) -> dict[str, float]:
         dominio = fm.get("domain")
         if dominio not in pesos:
             continue
-        if fm.get("state") == "esquecida":
-            continue
         p = _MEMORY_WEIGHT.get(fm.get("intensity"), 2.0) * _peso_das_repeticoes(fm)
-        if not _is_alive(fm):
+        if fm.get("state") == "esquecida":
+            p *= _PESO_ESQUECIDA      # spec 064: ⅛, era zero — ver _PESO_ESQUECIDA
+        elif not _is_alive(fm):
             p *= 0.25
         pesos[dominio] += p
     return {d: _proficiency_factor(p) for d, p in pesos.items()}

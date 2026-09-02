@@ -156,8 +156,12 @@ def run() -> int:
           specs["consultar_memoria"].query("torvin-ferreiro", {"sobre": "Elga"})
           == motor.recall("torvin-ferreiro", {"sobre": "Elga"}))
 
-    # US4 (sussurro player-facing): consultar é LEITURA — não cria memória nem muta
-    # (o turno de consulta é read-only; o caminho de mutação nem é tocado).
+    # US4 (sussurro player-facing): consultar não CRIA memória e não toca o caminho de
+    # mutação. (spec 064: a lane passou a escrever UMA coisa — o PRAZO do que foi
+    # evocado, via o handler `_consultar_memoria`. Não cria entidade, não muda posse,
+    # não toca `status`; é o relógio de uma lembrança, da mesma família do que
+    # `_expire_memories` já faz na leitura. A contagem abaixo segue valendo, e passa a
+    # valer por um motivo mais forte: mesmo escrevendo, a consulta não FABRICA memória.)
     folder = motor.find_character_folder("torvin-ferreiro")
     antes = len(list((folder / "memories").glob("*.md")))
     motor.recall("torvin-ferreiro", {"sobre": "Elga"})

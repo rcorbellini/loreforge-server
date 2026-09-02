@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.27.3"
+__version__ = "2.28.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -153,6 +153,31 @@ __version__ = "2.27.3"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.28.0": "spec 064 — A MEMÓRIA EM CAMADAS. \"Nenhuma memória que está ali "
+             "deveria ser 100% perdida.\" O mundo tinha três estados de memória "
+             "(viva/vencida/esquecida) e era BINÁRIO na prática: 9 dos 12 "
+             "consumidores perguntavam só \"está viva?\", e 59% do acervo (1.585 "
+             "de 2.692) era invisível a todos eles. Pior: `recall` — \"parar pra "
+             "lembrar\" — tinha EXATAMENTE o mesmo alcance que `get_context`. "
+             "Agora há TRÊS alcances, com contenção verificada por dado (fase 63): "
+             "CONTEXTO (só viva) ⊂ CONSULTA (viva+vencida, nunca esquecida) ⊂ "
+             "AGREGADO (tudo). (a) `recall` passa ao alcance de CONSULTA: +59%. "
+             "(b) `esquecida` deixa de pesar ZERO e passa a ⅛ no agregado, "
+             "continuando inalcançável pela consulta e sem nunca reviver — a marca "
+             "fica, a lembrança não, e o custo de `heal` (spec 032) fica mais duro, "
+             "não mais brando. (c) EVOCAR RENOVA (modo `evocacao` de "
+             "`_renew_memory`), completando a simetria com \"reencontrar renova\" "
+             "da spec 030 — e o gatilho mora no HANDLER da lane de consulta, nunca "
+             "em `recall`, para que uma régua futura não renove memória porque o "
+             "Árbitro olhou. (d) POSSE GRADUADA: `dono_reconhecido` nasce como irmã "
+             "de `dono` (molde `knows_route`×`recognizes_route`), e `recognition_of` "
+             "ganha `posse: {de, grau}` em nitido/vago/ausente — o \"acho que era "
+             "do Torvin\". (e) O `about` das TESTEMUNHAS: `witness_transfer` (o "
+             "destinatário), `stolen` (a vítima) e `witness_theft` sem "
+             "reivindicação própria (cai na vítima) passam a preenchê-lo — eram 89 "
+             "memórias de evento-de-posse inúteis a `dono()`. MINOR: há capacidade "
+             "de mundo nova (a posse desce graduada à Mente, a consulta alcança "
+             "mais fundo, a evocação escreve).",
     "2.23.0": "spec 058 — CANTAR. Tool nova `sing`: canta uma lembrança VIVA "
              "própria para quem estiver presente — SEM régua de admissão, SEM "
              "gate, SEM recusa de mérito (\"cantar não é cozinhar\": o "

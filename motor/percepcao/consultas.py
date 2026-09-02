@@ -69,11 +69,14 @@ from ..memoria import (
     _MEMORY_CONTEXT_CAP,
     _expire_memories,
     _is_alive,
+    _renew_memory,
+    alcance_consulta,
     _memory_salience,
     _recency_label,
     _short_summary,
     sentiment_label,
     dono,
+    dono_reconhecido,
     familiarity_label,
     familiarity_with,
     get_active_memories,
@@ -920,7 +923,26 @@ def recognition_of(character_id: str, entity_id: str) -> dict:
     else:
         grau = "ausente"
     afeto = sentiment_label(saldo)
+    # A POSSE GRADUADA (spec 064), no MESMO eixo que este retorno já usa para o
+    # reconhecimento da entidade. Não é padrão novo: a spec 018 já graduava
+    # nitido/vago/ausente aqui, e a 064 só estende à pergunta "de quem é isto".
+    #
+    #   nitido  -> lembrança VIVA de posse: sei de quem é
+    #   vago    -> só VENCIDA: reconheço, com dúvida ("acho que era do Torvin")
+    #   ausente -> esquecida ou nenhuma: não sei — e `familiaridade` continua vindo,
+    #              porque não saber de quem é não apaga o apego pelo objeto (FR-011)
+    #
+    # NUNCA desce número: nem certeza, nem probabilidade. A dúvida É o rótulo, e A
+    # Mente a narra. Mesmo contrato do `sentiment_label` — "o número morre no server".
+    posse_de = dono(entity_id, character_id)
+    if posse_de:
+        posse = {"de": posse_de, "grau": "nitido"}
+    else:
+        reconhecido = dono_reconhecido(entity_id, character_id)
+        posse = ({"de": reconhecido, "grau": "vago"} if reconhecido
+                 else {"de": None, "grau": "ausente"})
     return {
+        "posse": posse,
         "id": entity_id,   # para o client deduplicar (ambiente + tool) e referenciar
         "name": detail.get("name"),
         "kind": detail.get("kind"),
@@ -1101,7 +1123,7 @@ def own_memories(character_id: str, require_sobre: bool = True) -> list[dict]:
 _THEME_EVENTS = ("witness_theft", "theft", "steal")
 
 
-def recall(character_id: str, args: dict | None = None) -> dict:
+def _recall_com_ids(character_id: str, args: dict | None = None) -> tuple[dict, list]:
     """O que o personagem lembra a respeito de `sobre` (prosa livre). Filtra as
     PRÓPRIAS memórias vivas por SUJEITO (id/nome citado em `sobre`) e por TEMA
     (domínio/evento — ex.: furto→crime). Devolve `{sobre, lembra}` em prosa;
@@ -1112,10 +1134,10 @@ def recall(character_id: str, args: dict | None = None) -> dict:
     try:
         folder = find_character_folder(character_id)
     except MotorError:
-        return ausencia
+        return ausencia, []
     mem_dir = folder / "memories"
     if not mem_dir.is_dir():
-        return ausencia
+        return ausencia, []
     _expire_memories(folder)
     now = time.time()
     quer_tema = any(k in low for k in ("furt", "roub", "ladr", "crime"))
@@ -1124,7 +1146,21 @@ def recall(character_id: str, args: dict | None = None) -> dict:
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue
-        if not _is_alive(fm, now):
+        # spec 064 — O ALCANCE DA CONSULTA, e é a maior mudança desta feature.
+        #
+        # Era `_is_alive`: EXATAMENTE o alcance de `get_context`. "Parar para lembrar"
+        # não alcançava nada além do que já estava na cabeça — medido, 1.106 de 2.692
+        # memórias, e as outras 1.585 (59%) eram inconsultáveis. O mantenedor nomeou o
+        # buraco antes de eu medi-lo: "se eu parar pra lembrar, eu vou lembrar".
+        #
+        # Agora alcança a VENCIDA — "não está na minha cabeça" não é "não consigo
+        # puxar". A `esquecida` segue de fora: é justamente o que não se consegue mais
+        # evocar, e é o que mantém o custo da cura (spec 032) definitivo.
+        #
+        # As OUTRAS duas leituras deste arquivo (`remembered_about` na 1016,
+        # `own_memories` na 1077) continuam em `_is_alive`, e isso é desenho: elas são
+        # CONTEXTO — o que o Árbitro lê para julgar no momento do ato.
+        if not alcance_consulta(fm, now):
             continue
         sujeito = False
         for inv in memory_involved(fm):
@@ -1155,6 +1191,8 @@ def recall(character_id: str, args: dict | None = None) -> dict:
         ts_start = fm.get("timestamp_start") or now
         age = max(0.0, now - ts_start)
         hits.append({
+            "id": fm.get("id"),          # spec 064: o handler da lane precisa saber o
+                                         # que foi evocado, para renovar só isso
             "salience": _memory_salience(fm.get("intensity"), age),
             "recency": _recency_label(age),
             "intensity": fm.get("intensity"),
@@ -1162,15 +1200,58 @@ def recall(character_id: str, args: dict | None = None) -> dict:
             "text": (fm.get("summary") or "").strip() or _short_summary(body) or body.strip(),
         })
     if not hits:
-        return ausencia
+        return ausencia, []
     hits.sort(key=lambda m: (
         0 if m["salience"] == "vivida" else 1,
         _INTENSITY_ORDER.get(m["intensity"], 99),
         -(m["timestamp_start"] or 0),
     ))
-    linhas = "\n".join(f"- ({m['recency']}) {m['text']}"
-                       for m in hits[:_MEMORY_CONTEXT_CAP])
-    return {"sobre": sobre, "lembra": "Sobre isso, você lembra:\n" + linhas}
+    mostrados = hits[:_MEMORY_CONTEXT_CAP]
+    linhas = "\n".join(f"- ({m['recency']}) {m['text']}" for m in mostrados)
+    return ({"sobre": sobre, "lembra": "Sobre isso, você lembra:\n" + linhas},
+            [m["id"] for m in mostrados if m.get("id")])
+
+
+def recall(character_id: str, args: dict | None = None) -> dict:
+    """O que o personagem lembra a respeito de `sobre`. **LEITURA PURA.**
+
+    Fachada pública sobre `_recall_com_ids`. A separação existe por uma razão só, e ela
+    é o coração da spec 064 (research R1): quem RENOVA é o handler da lane de consulta,
+    não esta função. `recall` é — e vai continuar sendo — lida por quem PERGUNTA, e a
+    fachada do Motor já anuncia um segundo leitor ("reúso pelo Árbitro"). Se a renovação
+    morasse aqui, o mundo renovaria memória porque o ÁRBITRO olhou, não porque o
+    personagem lembrou.
+
+    E devolve o dicionário LIMPO, sem chave privada de ids: uma versão anterior
+    devolvia `_evocadas` para o handler consumir, e isso quebrou a fase 42 — que compara
+    o despacho com esta função. Chave que precisa ser removida por convenção é vazamento
+    esperando acontecer."""
+    return _recall_com_ids(character_id, args)[0]
+
+
+def _consultar_memoria(character_id: str, args: dict | None = None) -> dict:
+    """A lane de consulta: lê por `recall` e RENOVA o que foi evocado (spec 064).
+
+    É o único ponto do projeto onde uma CONSULTA escreve, e a escrita é escopada: o
+    prazo das memórias que o personagem acabou de evocar, com a extensão fracionária que
+    `_renew_memory` já aplicava quando alguém REENCONTRA outro (spec 030). Não move
+    entidade, não muda posse, não toca `status` — é o relógio de uma lembrança, da mesma
+    família do que `_expire_memories` já faz na leitura (Princípio VII).
+
+    Por que aqui e não dentro de `recall`: `recall` é lido por quem PERGUNTA e poderá,
+    um dia, ser lido por uma RÉGUA (a fachada já anuncia esse reúso). Renovar lá faria o
+    mundo renovar memória porque o Árbitro olhou, não porque o personagem lembrou.
+    **A renovação é de quem pergunta, não do que é lido.**
+    """
+    resposta, evocadas = _recall_com_ids(character_id, args)
+    evocadas = set(evocadas or ())
+    if evocadas:
+        try:
+            folder = find_character_folder(character_id)
+            _renew_memory(folder, modo="evocacao", memoria_ids=evocadas)
+        except MotorError:
+            pass          # sem pasta não há o que renovar; a leitura já foi entregue
+    return resposta
 
 
 registro.consult_spec(registro.ConsultSpec(
@@ -1182,5 +1263,5 @@ registro.consult_spec(registro.ConsultSpec(
         "pergunta em prosa."
     ),
     params={"sobre": {"type": "string"}},
-    query=recall,
+    query=_consultar_memoria,
 ))

@@ -223,6 +223,9 @@ from .memoria import (  # noqa: F401
     _leave_trace,
     _h_accuse,
     _is_alive,
+    alcance_agregado,
+    alcance_consulta,
+    alcance_contexto,
     _iter_memories,
     _lower_intensity,
     _memory_salience,
@@ -267,6 +270,7 @@ from .memoria import (  # noqa: F401
     has_trauma_from,
     ttl_for,
     dono,
+    dono_reconhecido,
 )
 
 

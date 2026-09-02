@@ -771,7 +771,24 @@ class Handler(BaseHTTPRequestHandler):
         self._cors()
         self.end_headers()
 
+    def _revalidar_indice(self) -> None:
+        """A fronteira da requisição do índice (spec 063).
+
+        UMA vez por requisição, nunca por leitura. Custa 21 ms para os 3 151 arquivos
+        do mundo, e é o que apanha a escrita EXTERNA — edição à mão, `git checkout`,
+        `submodule update` — que não passa pelas cinco portas de `motor/io.py`.
+
+        As escritas de dentro do processo não dependem disto: essas atualizam o índice
+        na hora, dentro do WRITE_LOCK. É essa diferença que faz o índice não ser um memo
+        (item 63 §3.4) — a op 2 de um turno enxerga a escrita da op 1.
+        """
+        try:
+            motor.indice.garantir(motor.WORLD_DIR)
+        except Exception as e:      # o índice nunca pode derrubar uma requisição:
+            devlog.log("INDICE", f"revalidação falhou: {e}")   # sem ele, lê-se o disco
+
     def do_GET(self) -> None:
+        self._revalidar_indice()
         parsed = urlparse(self.path)
         path = parsed.path
         if path.startswith("/api/"):
@@ -779,6 +796,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._serve_static(path)
 
     def do_POST(self) -> None:
+        self._revalidar_indice()
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/tools/"):
             return self._handle_tool(parsed.path[len("/api/tools/"):])

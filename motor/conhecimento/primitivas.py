@@ -20,6 +20,8 @@ from ..fisica import (
     DOWN_CONDITIONS,
 )
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     MotorError,
     _fail,
     _rejection,
@@ -245,7 +247,7 @@ def _find_hearsay_source(fonte_id: str, sobre: str, trecho: str) -> dict | None:
     mem_dir = folder / "memories"
     if not mem_dir.is_dir():
         return None
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue

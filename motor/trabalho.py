@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 from . import io, registro
-from .io import read_doc, write_doc
+from .io import read_doc, write_doc, arquivos_em, arquivos_no_mundo
 
 BLOCO = "trabalho"
 
@@ -353,7 +353,7 @@ def pendentes_de_esforco() -> list[tuple[Path, dict]]:
     `vencidas_por_prazo`, critério diferente (tempo ACUMULADO, não uma data)."""
     out = []
     for nome in _ARQUIVOS:
-        for arquivo in io.WORLD_DIR.rglob(nome):
+        for arquivo in io.arquivos_no_mundo(nome):
             fm, _ = read_doc(arquivo)
             bloco = fm.get(BLOCO)
             if isinstance(bloco, dict) and esforco_pronto(bloco):
@@ -479,7 +479,7 @@ def vencidas_por_prazo() -> list[tuple[Path, dict]]:
     de leitura do mundo (spec 052, FR-021/FR-049)."""
     out = []
     for nome in _ARQUIVOS:          # spec 053: object também tem prazo (a fonte de fogo)
-        for arquivo in io.WORLD_DIR.rglob(nome):
+        for arquivo in io.arquivos_no_mundo(nome):
             fm, _ = read_doc(arquivo)
             bloco = fm.get(BLOCO)
             if not isinstance(bloco, dict) or not por_prazo(bloco):

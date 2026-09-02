@@ -52,6 +52,8 @@ from ..fisica import (
     value_of,
 )
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     MotorError,
     WORLD_DIR,
     _char_fm,
@@ -699,7 +701,7 @@ def get_character(character_id: str) -> dict:
 def list_characters() -> list[dict]:
     """Lista todos os personagens do mundo (para o seletor do client)."""
     chars = []
-    for path in sorted(WORLD_DIR.rglob("character.md")):
+    for path in arquivos_no_mundo("character.md"):
         fm, _ = read_doc(path)
         if not _is_valid(fm):  # personagem inválido não entra no seletor (FR-010)
             continue
@@ -1004,7 +1006,10 @@ def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
     _expire_memories(folder)  # preguiçoso, no escopo de quem está sendo lido
     now = time.time()
     out = []
-    for path in sorted(mem_dir.glob("*.md")):
+    candidatos = io.arquivos_envolvendo(mem_dir, sobre_id)
+    if candidatos is None:
+        candidatos = arquivos_em(mem_dir)
+    for path in candidatos:
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue
@@ -1065,7 +1070,7 @@ def own_memories(character_id: str, require_sobre: bool = True) -> list[dict]:
     _expire_memories(folder)
     now = time.time()
     out = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue
@@ -1115,7 +1120,7 @@ def recall(character_id: str, args: dict | None = None) -> dict:
     now = time.time()
     quer_tema = any(k in low for k in ("furt", "roub", "ladr", "crime"))
     hits = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue

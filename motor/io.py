@@ -16,6 +16,8 @@ from pathlib import Path
 import frontmatter
 import validator
 
+from . import indice
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -43,6 +45,125 @@ ENTITY_FILENAMES = {
 }
 
 
+def indice_pronto() -> bool:
+    """Garante que o índice exista, uma vez. Depois disso é um teste de ponteiro.
+
+    A CONSTRUÇÃO é aqui e não no boot de propósito: os selftests apontam
+    `LOREFORGE_WORLD` para um mundo temporário e o Motor tem de seguir o que a variável
+    disser no momento do primeiro uso, não no do import."""
+    if not indice.ativo():
+        return False
+    if not indice.pronto():
+        indice.garantir(WORLD_DIR)
+    return indice.pronto()
+
+
+def arquivos_em(pasta: Path, padrao: str = "*.md") -> list:
+    """Os `.md` diretamente em `pasta`, ordenados — pelo índice quando ele está de pé.
+
+    O substituto de `sorted(pasta.glob("*.md"))`. Troca a FONTE da iteração e nada
+    mais: quem chama continua lendo cada arquivo e aplicando o PRÓPRIO corte, que é a
+    regra do contrato (o índice entrega aresta crua; o corte é de quem pergunta)."""
+    achado = indice.arquivos_em(pasta) if indice_pronto() else None
+    if achado is None:
+        return sorted(pasta.glob(padrao)) if pasta.is_dir() else []
+    return achado
+
+
+def arquivo_por_id(nome_arquivo: str, entity_id: str) -> Path | None:
+    """O `.md` chamado `nome_arquivo` cujo `id` é `entity_id`, ou None.
+
+    Separada de `arquivos_no_mundo` de propósito, e a separação é de CUSTO, não de
+    gosto: buscar POR ID é chave (e se cura por miss, barato), enquanto ENUMERAR exige
+    sincronizar a estrutura do mundo para não perder arquivo recém-nascido. Metade das
+    chamadas de enumeração numa face eram busca por id disfarçada — 137 de 176 — e
+    sincronizar em cada uma custava mais que a varredura que o índice veio substituir.
+
+    Devolve o PRIMEIRO em ordem, como o laço original fazia. Id duplicado não levanta
+    aqui: quem tem essa recusa é `find_character_folder`, e ela é sobre PERSONAGEM.
+    """
+    if indice_pronto():
+        achados = indice.caminhos_de(nome_arquivo, entity_id)
+        if achados is not None:
+            return achados[0] if achados else None
+    for path in sorted(WORLD_DIR.rglob(nome_arquivo)):
+        fm, _ = read_doc(path)
+        if fm.get("id") == entity_id:
+            return path
+    return None
+
+
+def arquivos_no_mundo(nome_arquivo: str) -> list:
+    """Todos os `.md` com este nome, no mundo — o substituto de `WORLD_DIR.rglob(nome)`."""
+    if not indice_pronto():
+        return sorted(WORLD_DIR.rglob(nome_arquivo))
+    if "*" in nome_arquivo or "?" in nome_arquivo or "[" in nome_arquivo:
+        # PADRÃO, não nome. `validador.duplicate_ids` passa `"*.md"`, e o índice é
+        # chaveado por nome exato — devolvia lista VAZIA, e o mundo com id duplicado
+        # passava na validação em silêncio. Justamente a recusa que existe para conter
+        # `git-ressuscita-personagem-movido`. Padrão volta ao disco, e é raro: só o
+        # validador usa, e só no boot.
+        indice.sincronizar()
+        return sorted(WORLD_DIR.rglob(nome_arquivo))
+    # ENUMERAR exige ver o que NASCEU. Diferente da busca por id (que se cura por
+    # miss), aqui um arquivo novo que o índice não conhece é uma ausência silenciosa —
+    # foi como o "cão inline" da fase 22 sumiu do seletor. A sincronização estrutural
+    # por mtime de diretório custa 0,6 ms e resolve.
+    indice.sincronizar()
+    achado = indice.caminhos_por_nome(nome_arquivo)
+    if achado is None:
+        return sorted(WORLD_DIR.rglob(nome_arquivo))
+    return achado
+
+
+def _arquivos_por_aresta(pasta: Path, alvo_id: str, tipo: str) -> list | None:
+    """Base de `arquivos_envolvendo`/`arquivos_sobre`: os `.md` de `pasta` ligados a
+    `alvo_id` pela aresta `tipo`. None quando não há índice."""
+    if not indice_pronto():
+        return None
+    dono_esperado = indice.pasta_de_entidade_id(pasta)
+    if dono_esperado is None:
+        return None
+    # SINCRONIZA A PASTA ANTES de atravessar. Sem isto a travessia enxergava nós de
+    # arquivos já apagados por fora das portas (o `p.unlink()` das fixtures de
+    # selftest), e quem chamava estourava com `FileNotFoundError` — um modo de falha
+    # que a varredura em disco nunca teve, porque `glob` não devolve o que não existe.
+    indice.sincronizar_pasta(pasta)
+    saida = []
+    for mid in indice.reverso(alvo_id, tipo):
+        no = indice.no(mid)
+        if no is None or indice.pai(mid) != dono_esperado:
+            continue
+        if no.arquivo.parent != pasta:
+            continue
+        saida.append(no.arquivo)
+    return sorted(saida)
+
+
+def arquivos_sobre(pasta: Path, alvo_id: str) -> list | None:
+    """Os `.md` de `pasta` cujo `about` aponta para `alvo_id` — a aresta `sobre`.
+    É como a memória de ROTA se liga à rota."""
+    return _arquivos_por_aresta(pasta, alvo_id, "sobre")
+
+
+def arquivos_envolvendo(pasta: Path, alvo_id: str) -> list | None:
+    """Os `.md` de `pasta` que CITAM `alvo_id` em `involved` — pela aresta REVERSA.
+
+    Devolve None quando não há índice, e aí quem chama varre a pasta como sempre.
+
+    É esta função que entrega o ganho real da spec 063, e o número que a justifica:
+    montar a face da Mira fazia **775 220** leituras de documento sobre ~1 000 arquivos.
+    A causa não era o custo de cada leitura — era perguntar "esta memória cita o Fulano?"
+    varrendo as 804 memórias dela, uma vez por pessoa presente e por item da cena. A
+    aresta reversa responde a mesma pergunta olhando só as memórias que citam o Fulano.
+
+    O CORTE continua sendo de quem pergunta: esta função não filtra por vivo, por
+    `kind`, nem por `evento`. Ela só troca a FONTE da iteração — e é por isso que os
+    consumidores migrados devolvem exatamente o que devolviam antes.
+    """
+    return _arquivos_por_aresta(pasta, alvo_id, "envolve")
+
+
 def _entity_file(folder: Path) -> Path | None:
     """Retorna o arquivo de definição de uma pasta de entidade, se houver."""
     for fname in ENTITY_FILENAMES:
@@ -53,6 +174,20 @@ def _entity_file(folder: Path) -> Path | None:
 
 
 def read_doc(path: Path) -> tuple[dict, str]:
+    """Lê `(frontmatter, body)` de um `.md` — pelo índice quando ele está de pé.
+
+    Por que o índice entra AQUI, num lugar só, e não em cada chamador (spec 063): um
+    único `get_context` do personagem mais vivido fazia **206 818** chamadas desta função
+    sobre **1 011 arquivos distintos** — amplificação de 205×. Servir o conteúdo daqui
+    conserta todos os chamadores de uma vez, sem tocar em nenhum deles, e é por isso que
+    a migração pode provar resposta byte-idêntica.
+
+    O `fm` volta em cópia profunda (`indice.doc`): chamadores mutam o mapa antes de
+    regravar, e sem a cópia corromperiam o índice. Ainda assim é 7,7× mais barato que
+    parsear."""
+    doc = indice.doc(path)
+    if doc is not None:
+        return doc
     text = path.read_text(encoding="utf-8")
     return frontmatter.split(text)
 
@@ -106,7 +241,10 @@ def find_character_folder(character_id: str) -> Path:
     Quem resolve é `sanea_duplicatas.py`, com histórico do git na mão.
     """
     achados = []
-    for path in WORLD_DIR.rglob("character.md"):
+    candidatos = indice.caminhos_de("character.md", character_id) if indice_pronto() else None
+    if candidatos is None:
+        candidatos = WORLD_DIR.rglob("character.md")
+    for path in candidatos:
         fm, _ = read_doc(path)
         if fm.get("id") == character_id:
             errors = validator.validate(fm)
@@ -130,8 +268,12 @@ def find_character_folder(character_id: str) -> Path:
 
 def find_entity(entity_id: str) -> tuple[Path, dict, str] | None:
     """Procura qualquer entidade por id em todo o mundo."""
+    pronto = indice_pronto()
     for fname in ENTITY_FILENAMES:
-        for path in WORLD_DIR.rglob(fname):
+        candidatos = indice.caminhos_de(fname, entity_id) if pronto else None
+        if candidatos is None:
+            candidatos = WORLD_DIR.rglob(fname)
+        for path in candidatos:
             fm, body = read_doc(path)
             if fm.get("id") == entity_id:
                 return path, fm, body
@@ -176,6 +318,11 @@ def write_doc(path: Path, frontmatter_data: dict, body: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
+    # PORTA 1 do índice (spec 063). Cobre também `rewrite_description` e
+    # `create_entity`, que gravam POR AQUI — o funil dentro do funil. É esta linha
+    # que faz a op 2 de um turno enxergar a escrita da op 1, que era exatamente a
+    # armadilha do memo de requisição (item 63 §3.4).
+    indice.invalidar(path)
 
 
 def rewrite_description(entity_folder: Path, filename: str, texto: str) -> None:
@@ -200,6 +347,7 @@ def move_entity(src: Path, dest: Path) -> None:
     if dest.exists():
         raise FileExistsError(f"destino de move_entity já existe: {dest}")
     os.replace(src, dest)
+    indice.mover(src, dest)   # PORTA 2 — a subárvore inteira muda de caminho
 
 
 _MUTABLE_ROOT_BY_KIND = {"character": "status", "object": "state", "item": "state"}
@@ -472,6 +620,7 @@ def remove_entity(folder: Path) -> None:
     como um bolso costurado na peça)."""
     if folder.exists():
         shutil.rmtree(folder)
+        indice.remover(folder)   # PORTA 3
 
 
 def create_entity(parent_folder: Path, entity_id: str, filename: str,

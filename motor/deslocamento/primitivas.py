@@ -31,6 +31,8 @@ from ..fisica import (
     total_weight_of,
 )
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     MotorError,
     WORLD_DIR,
     WRITE_LOCK,
@@ -305,7 +307,7 @@ def route_plan(character_id: str, destino: str) -> list[str] | None:
 
     # arestas do grafo DELE: só rotas de que há memória viva
     saidas: dict[str, list[tuple[str, str, int]]] = {}
-    for path in sorted(WORLD_DIR.rglob("route.md")):
+    for path in arquivos_no_mundo("route.md"):
         rfm, _ = read_doc(path)
         rid = rfm.get("id")
         if not rid or not knows_route(character_id, rid):
@@ -371,7 +373,7 @@ def reachable_destinations(character_id: str) -> list[str]:
         return []
     aqui = (read_doc(loc_file)[0]).get("id")
     out = []
-    for path in sorted(WORLD_DIR.rglob("location.md")):
+    for path in arquivos_no_mundo("location.md"):
         fm, _ = read_doc(path)
         lid = fm.get("id")
         if lid and lid != aqui and route_plan(character_id, lid):
@@ -416,7 +418,7 @@ def known_routes(character_id: str) -> dict:
             lembradas[rid] = lembradas.get(rid, False) or _is_alive(mem)
 
     rotas = []
-    for path in sorted(WORLD_DIR.rglob("route.md")):
+    for path in arquivos_no_mundo("route.md"):
         rfm, _ = read_doc(path)
         if rfm.get("id") in lembradas:
             rotas.append(rfm)
@@ -651,7 +653,7 @@ def _resolve_arrivals() -> None:
     """
     now = time.time()
     # em rota: a pasta está dentro da rota
-    for route_path in list(WORLD_DIR.rglob("route.md")):
+    for route_path in list(arquivos_no_mundo("route.md")):
         route_folder = route_path.parent
         for child in list(route_folder.iterdir()):
             char_file = child / "character.md"
@@ -728,7 +730,7 @@ def _resolve_arrivals() -> None:
 
     # de passagem por um lugar: a pasta já está na location, e o `transit` não
     # tem `route`. Cumprido o tempo de travessia, parte na próxima perna.
-    for loc_path in list(WORLD_DIR.rglob("location.md")):
+    for loc_path in list(arquivos_no_mundo("location.md")):
         loc_folder = loc_path.parent
         for child in list(loc_folder.iterdir()):
             char_file = child / "character.md"

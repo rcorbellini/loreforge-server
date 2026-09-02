@@ -22,6 +22,8 @@ from .fisica import (
     item_slot,
 )
 from .io import (
+    arquivos_em,
+    arquivos_no_mundo,
     WORLD_DIR,
     _is_valid,
     read_doc,
@@ -37,7 +39,7 @@ def duplicate_ids() -> list[dict]:
     depois que um item evaporou, não.
     """
     por_id: dict[str, list[str]] = {}
-    for path in sorted(WORLD_DIR.rglob("*.md")):
+    for path in arquivos_no_mundo("*.md"):
         try:
             fm, _ = read_doc(path)
         except OSError:
@@ -59,7 +61,7 @@ def validate_world() -> list[dict]:
     Não altera nada: é só um relatório para o autor (startup log e /api/world/health).
     """
     problems = []
-    for path in sorted(WORLD_DIR.rglob("*.md")):
+    for path in arquivos_no_mundo("*.md"):
         try:
             fm, _ = read_doc(path)
         except OSError as exc:
@@ -98,7 +100,7 @@ def migration_warnings() -> list[dict]:
     deve declarar o acoplamento ou movê-lo para um contêiner. Nada é expulso.
     """
     warns = []
-    for path in sorted(WORLD_DIR.rglob("character.md")):
+    for path in arquivos_no_mundo("character.md"):
         for child, fm in _direct_items(path.parent):
             if _is_valid(fm) and item_slot(fm) is None:
                 warns.append({
@@ -116,7 +118,7 @@ def deadlock_warnings() -> list[dict]:
     item que está DENTRO dele — sem arrombamento no MVP, é um deadlock escrito."""
     warns = []
     for fname, etype in (("object.md", "object"), ("item.md", "item")):
-        for path in sorted(WORLD_DIR.rglob(fname)):
+        for path in arquivos_no_mundo(fname):
             fm, _ = read_doc(path)
             if not is_closed(fm):
                 continue

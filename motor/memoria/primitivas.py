@@ -16,8 +16,10 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import fisica, io, registro, rolagem
+from .. import fisica, indice, io, registro, rolagem
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     find_character_folder,
     name_of,
     new_id,
@@ -506,7 +508,7 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
     mem_dir = character_folder / "memories"
     now = int(time.time())
     if mem_dir.is_dir():
-        for path in sorted(mem_dir.glob("*.md")):
+        for path in arquivos_em(mem_dir):
             fm, _ = read_doc(path)
             if fm.get("evento") != evento or memory_about(fm) != about:
                 continue
@@ -554,7 +556,7 @@ def _remember_route(character_folder: Path, route_id: str,
     mem_dir = character_folder / "memories"
     now = int(time.time())
     if mem_dir.is_dir():
-        for path in sorted(mem_dir.glob("*.md")):
+        for path in arquivos_em(mem_dir):
             fm, body = read_doc(path)
             if memory_kind(fm) != ROTA or memory_about(fm) != route_id:
                 continue
@@ -698,7 +700,7 @@ def _forget_memories(character_folder: Path, percentual: float) -> list[str]:
     if not mem_dir.is_dir():
         return []
     ativas = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) != ACONTECIMENTO:
             continue
@@ -744,7 +746,7 @@ def _renew_memory(character_folder: Path, entity_id: str | None = None,
         return []
     now = int(time.time())
     tocadas: list[str] = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) != ACONTECIMENTO:
             continue
@@ -1186,7 +1188,10 @@ def dono(entidade_id: str, personagem_id: str) -> str | None:
     if mem_dir.is_dir():
         _expire_memories(folder)
         now = time.time()
-        for path in sorted(mem_dir.glob("*.md")):
+        candidatos = io.arquivos_envolvendo(mem_dir, entidade_id)
+        if candidatos is None:
+            candidatos = arquivos_em(mem_dir)
+        for path in candidatos:
             fm, _ = read_doc(path)
             if fm.get("type") != "memory" or fm.get("evento") not in _DONO_EVENTOS:
                 continue
@@ -1783,7 +1788,7 @@ def _intensify_commitments(actor_id: str, actor_folder: Path) -> list[str]:
     int_dir = actor_folder / "intentions"
     if not int_dir.is_dir():
         return tocadas
-    for path in sorted(int_dir.glob("*.md")):
+    for path in arquivos_em(int_dir):
         fm, _ = read_doc(path)
         if fm.get("status") != "ativa":
             continue
@@ -2026,7 +2031,7 @@ def get_active_memories(entity_folder: Path,
     evoked_by = evoked_by or set()
     now = time.time()
     memories = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if memory_kind(fm) == ROTA:
             continue
@@ -2077,7 +2082,17 @@ def _expire_memories(entity_folder: Path) -> None:
     if not mem_dir.is_dir():
         return
     now = time.time()
-    for path in mem_dir.glob("*.md"):
+    for path in arquivos_em(mem_dir):
+        # TRIAGEM BARATA antes da leitura completa. Três campos escalares decidem se
+        # há o que fazer, e na esmagadora maioria das vezes não há: esta função é
+        # chamada ~238 vezes por face (por `dono` e `remembered_about`), e lia as 804
+        # memórias da Mira em cada uma — 191 458 leituras completas para, em geral,
+        # não escrever nada. O corte continua aqui, não no índice.
+        triagem = indice.campos(path, "type", "state", "timestamp_end")
+        if triagem is not None:
+            tipo, estado, fim = triagem
+            if tipo != "memory" or estado != "active" or now < (fim or 0):
+                continue
         fm, body = read_doc(path)
         if fm.get("type") != "memory":
             continue
@@ -2103,7 +2118,7 @@ def _iter_memories_in(folder: Path) -> list[dict]:
     if not mem_dir.is_dir():
         return []
     out = []
-    for path in sorted(mem_dir.glob("*.md")):
+    for path in arquivos_em(mem_dir):
         fm, _ = read_doc(path)
         if fm.get("type") == "memory":
             out.append(fm)
@@ -2130,6 +2145,28 @@ def _is_alive(fm: dict, now: float | None = None) -> bool:
     return now < (fm.get("timestamp_end") or float("inf"))
 
 
+def _memorias_citando(character_id: str, target_id: str) -> list[dict]:
+    """As memórias de `character_id` que citam `target_id` — pela aresta REVERSA.
+
+    Sem índice, devolve TODAS as dele: o filtro `target_id not in memory_involved(fm)`
+    de quem chama continua no lugar e faz o mesmo recorte, só que varrendo. É o que
+    mantém os dois modos (com e sem índice) com o mesmo resultado.
+    """
+    try:
+        folder = find_character_folder(character_id)
+    except io.MotorError:
+        return []
+    arquivos = io.arquivos_envolvendo(folder / "memories", target_id)
+    if arquivos is None:
+        return _iter_memories_in(folder)
+    out = []
+    for path in arquivos:
+        fm, _ = read_doc(path)
+        if fm.get("type") == "memory":
+            out.append(fm)
+    return out
+
+
 def _weigh_memories(character_id: str, target_id: str, signed: bool) -> float:
     """Soma as memórias de `character_id` que envolvem `target_id`.
 
@@ -2144,7 +2181,7 @@ def _weigh_memories(character_id: str, target_id: str, signed: bool) -> float:
     `curar` genuinamente mais definitivo que uma expiração natural.
     """
     total = 0.0
-    for fm in _iter_memories(character_id):
+    for fm in _memorias_citando(character_id, target_id):
         if memory_kind(fm) != ACONTECIMENTO:
             continue
         if target_id not in memory_involved(fm):

@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.27.2"
+__version__ = "2.27.3"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -109,6 +109,19 @@ __version__ = "2.27.2"
 #  apply_resolution desidratado a sequenciador fino + _finalize_turn, os dois band-aids
 #  de "cena congelada" removidos, crash do furto-duplo/transfer+steal impossível.
 #  Comportamento-preservante — por isso PATCH, sem HISTORY própria.)
+# (2.27.3 — spec 063, O ÍNDICE DE ARESTAS. Nenhuma superfície de mundo nova, nenhum campo
+#  de schema, nenhuma tool — por isso PATCH, e o precedente é a 2.4.3 logo abaixo.
+#  `motor/indice.py` (nível 0) torna o grafo que o mundo JÁ é (≈7 000 arestas em
+#  `involved`/`about`/`from`/`to` + a contenção das pastas) atravessável nos DOIS sentidos,
+#  em memória, nunca persistido. Sete consumidores migraram (`find_character_folder`,
+#  `find_entity`, `dono`, `remembered_about`, `familiarity_with`/`sentiment_toward`,
+#  `knows_route`/`recognizes_route`, `offered_by`, `scene_candidates`). Montar a face saiu de
+#  80,9 s para 994 ms no pior caso (81×), e o mundo passou a caber em UM núcleo: 0,207 s de
+#  CPU por segundo de relógio para os 38 personagens em cadência de 45 s, contra ~34.
+#  Comportamento-preservante, e provado como tal: resposta de `/api/context` + `capacidades`
+#  BYTE-IDÊNTICA nos 5 personagens medidos, e a suíte verde nos DOIS modos (61/61 com índice
+#  e 61/61 com `LOREFORGE_SEM_INDICE=1`). Fase 62 nova: lê o fonte e reprova varredura
+#  mundial nova, importação indevida no índice e gravação de relação derivada.)
 # (2.4.3 — spec 043, fases A e B. Nenhuma superfície de mundo nova (a face exposta e o
 #  endpoint de proposta ainda não existem), por isso PATCH. (a) `arbiter.build_ctx` extraído
 #  de `resolve_with_tools`: a montagem da cena vira função PURA, reusável sem laço de LLM —

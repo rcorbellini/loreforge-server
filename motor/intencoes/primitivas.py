@@ -9,6 +9,8 @@ from pathlib import Path
 
 from .. import fisica, registro
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     _fail,
     new_id,
     read_doc,
@@ -96,7 +98,7 @@ def get_active_intentions(folder: Path) -> list[dict]:
     if not dir_.exists():
         return []
     out = []
-    for path in sorted(dir_.glob("*.md")):
+    for path in arquivos_em(dir_):
         fm, body = read_doc(path)
         if fm.get("status") != "ativa":
             continue

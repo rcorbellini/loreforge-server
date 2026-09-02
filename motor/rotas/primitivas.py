@@ -20,6 +20,8 @@ from ..fisica import (
     _CROSSING_BY_SIZE,
 )
 from ..io import (
+    arquivos_em,
+    arquivos_no_mundo,
     WORLD_DIR,
     read_doc,
 )
@@ -41,11 +43,43 @@ def all_route_ids() -> list[str]:
     deixa de criar caminho fantasma.
     """
     out = []
-    for path in sorted(WORLD_DIR.rglob("route.md")):
+    for path in arquivos_no_mundo("route.md"):
         fm, _ = read_doc(path)
         if fm.get("id"):
             out.append(fm["id"])
     return sorted(set(out))
+
+
+def _memorias_de_rota(character_id: str, route_id: str):
+    """As memórias de `character_id` que falam DESTA rota — pela aresta `sobre`.
+
+    Memória de rota carrega `about: <id da rota>`, e o índice já a indexa como aresta.
+    Sem índice, devolve todas as dele: o `memory_about(fm) == route_id` de quem chama
+    continua no lugar e faz o mesmo recorte, varrendo.
+
+    O ganho aqui foi o maior de toda a spec depois de `read_doc`: `knows_route` era
+    chamada uma vez por rota por personagem, e cada chamada varria as 804 memórias da
+    Mira — 385 920 leituras de documento numa única montagem de face.
+    """
+    try:
+        folder = io.find_character_folder(character_id)
+    except io.MotorError:
+        # NÃO usar `except Exception` aqui. A primeira versão usava, e engoliu um
+        # NameError (`find_character_folder` não estava importado neste módulo): a
+        # função devolvia [] em silêncio, `knows_route` virava False para todo mundo,
+        # e a capacidade `travel_to` sumia da face inteira. Só a comparação
+        # byte-a-byte contra a linha de base pegou — nenhum teste teria pego, porque
+        # o resultado era plausível.
+        return []
+    arquivos = io.arquivos_sobre(folder / "memories", route_id)
+    if arquivos is None:
+        return _iter_memories(character_id)
+    out = []
+    for path in arquivos:
+        fm, _ = read_doc(path)
+        if fm.get("type") == "memory":
+            out.append(fm)
+    return out
 
 
 def knows_route(character_id: str, route_id: str) -> bool:
@@ -56,7 +90,7 @@ def knows_route(character_id: str, route_id: str) -> bool:
     """
     return any(
         memory_kind(fm) == ROTA and memory_about(fm) == route_id and _is_alive(fm)
-        for fm in _iter_memories(character_id)
+        for fm in _memorias_de_rota(character_id, route_id)
     )
 
 
@@ -64,24 +98,21 @@ def recognizes_route(character_id: str, route_id: str) -> bool:
     """Já esteve por aqui? Basta a lembrança, mesmo vencida — reconhecer ≠ saber."""
     return any(
         memory_kind(fm) == ROTA and memory_about(fm) == route_id
-        for fm in _iter_memories(character_id)
+        for fm in _memorias_de_rota(character_id, route_id)
     )
 
 
 def find_route(route_id: str) -> tuple[Path, dict, str] | None:
-    for path in WORLD_DIR.rglob("route.md"):
-        fm, body = read_doc(path)
-        if fm.get("id") == route_id:
-            return path.parent, fm, body
-    return None
+    path = io.arquivo_por_id("route.md", route_id)
+    if path is None:
+        return None
+    fm, body = read_doc(path)
+    return path.parent, fm, body
 
 
 def _location_folder_by_id(loc_id: str) -> Path | None:
-    for path in WORLD_DIR.rglob("location.md"):
-        fm, _ = read_doc(path)
-        if fm.get("id") == loc_id:
-            return path.parent
-    return None
+    path = io.arquivo_por_id("location.md", loc_id)
+    return path.parent if path is not None else None
 
 
 def _location_name(loc_id: str) -> str:
@@ -130,7 +161,7 @@ def _available_routes(loc_id: str | None) -> list[dict]:
     if not loc_id:
         return []
     out = []
-    for path in sorted(WORLD_DIR.rglob("route.md")):
+    for path in arquivos_no_mundo("route.md"):
         fm, _ = read_doc(path)
         dest = _route_destination(fm, loc_id)
         if dest:

@@ -506,6 +506,11 @@ from .rolagem import (  # noqa: F401
 # --- extraído para motor/io.py (spec 021) ---
 from .io import (  # noqa: F401
     ENTITY_FILENAMES,
+    arquivos_em,
+    arquivos_envolvendo,
+    arquivos_no_mundo,
+    arquivos_sobre,
+    indice_pronto,
     MotorError,
     REPO_ROOT,
     ValidationError,

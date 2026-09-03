@@ -157,6 +157,45 @@ try:
 finally:
     _mp_mod._roll_trace_d20 = _orig_dado
 
+# T011 (fechamento): rolagem ENTRE as duas DCs — quem revela, rota não. Os
+# rastros de `ativos2` foram criados "agora" (frescor ~1,0): DC_identidade=6,
+# DC_rota=11. Total=8 supera a primeira, não a segunda.
+_mp_mod._roll_trace_d20 = lambda: 8
+try:
+    rastros_meio = mp._resolver_rastros(INV, inv_fm, ativos2, None)
+    do_conhecido_meio = [r for r in rastros_meio if r["quem"] == "conhecido-p64"]
+    check("C4: rolagem ENTRE as DCs — conhecido revela QUEM sem ROTA",
+         do_conhecido_meio and do_conhecido_meio[0]["rota"] is None,
+         str(rastros_meio))
+    check("C4b: e o estranho (identidade nunca permitida) some por inteiro",
+         all(r["quem"] != "desconhecido-p64" for r in rastros_meio), str(rastros_meio))
+finally:
+    _mp_mod._roll_trace_d20 = _orig_dado
+
+# T014 (fechamento): dois rastros do MESMO alvo, direções diferentes, os DOIS
+# ainda ativos (foi e voltou dentro da janela do TTL). O código não deduplica —
+# `_resolver_rastros` avalia cada `rastro` (registro FÍSICO) por si, não por
+# pessoa — e é isso que bate com o Edge Case do spec.md ("os dois existem como
+# registros separados... revela ambos os eventos"), não com a frase de US4 AC3
+# ("o mais recente decide"), que a implementação não seguiu à risca. Documentado
+# aqui como comportamento REAL, não como suposição.
+_mk_char("andarilho-p64", "O Andarilho")
+mp.record_event(INV, "Vi o Andarilho por aqui.", "inform", ["andarilho-p64"])
+_rastro(LOCAL, "andarilho-p64", "trilha-do-patio", rid="rastro-ida-p64")
+_rastro(LOCAL, "andarilho-p64", "portao-lateral", rid="rastro-volta-p64")
+_, ativos_andarilho = mp._densidade_rastro(LOCAL)
+_mp_mod._roll_trace_d20 = lambda: 20
+try:
+    rastros_and = mp._resolver_rastros(INV, inv_fm, ativos_andarilho, None)
+    do_and = [r for r in rastros_and if r["quem"] == "andarilho-p64"]
+    check("C5: dois rastros ativos do MESMO alvo — os dois aparecem, sem crash",
+         len(do_and) == 2, str(rastros_and))
+    check("C5b: e as duas rotas distintas estão presentes (ida e volta)",
+         {r["rota"] for r in do_and} == {"trilha-do-patio", "portao-lateral"},
+         str(do_and))
+finally:
+    _mp_mod._roll_trace_d20 = _orig_dado
+
 print("\n--- Bloco D: a rota é SEMPRE route_id real ------------------------------")
 
 check("D1: DC por frescor — recém-criado é mais fácil que quase expirando",
@@ -213,6 +252,39 @@ check("G1: alvos_investigaveis inclui quem tem memória VENCIDA (não só viva)"
      "conhecido-p64" in alvos, str(alvos))
 check("G2: alvos_investigaveis SÓ personagens (nunca lugar/item de involved)",
      LOCAL.name not in alvos)
+
+print("\n--- Bloco H: busca por alvo NOMEADO — o positivo e os dois negativos ---")
+
+# T016 (negativo): alvo CONHECIDO (está no enum), mas o rastro dele NÃO está
+# neste lugar — negativa silenciosa, nunca inventa presença.
+_mk_char("distante-p64", "O Distante")
+mp.record_event(INV, "Ouvi falar do Distante.", "inform", ["distante-p64"])
+_mp_mod._roll_trace_d20 = lambda: 20
+try:
+    r_ausente = motor.investigar(INV, {"alvo": "distante-p64"})
+    check("H1: alvo nomeado CONHECIDO mas sem rastro aqui -> não aparece, sem inventar",
+         all(r["quem"] != "distante-p64" for r in r_ausente["rastros"]),
+         str(r_ausente["rastros"]))
+
+    # T017: alvo fora do enum (nunca teve memória do investigador) degrada
+    # para varredura ampla — mesmo resultado de alvo=None, sem erro.
+    r_ampla = motor.investigar(INV, {})
+    r_desconhecido = motor.investigar(INV, {"alvo": "jamais-mencionado-p64"})
+    check("H2: alvo fora de alvos_investigaveis não estoura — degrada, sem erro",
+         isinstance(r_desconhecido, dict))
+    check("H3: e degrada para a MESMA varredura ampla que alvo=None produziria",
+         {(r["quem"], r["rota"]) for r in r_desconhecido["rastros"]}
+         == {(r["quem"], r["rota"]) for r in r_ampla["rastros"]},
+         f"{r_desconhecido['rastros']} vs {r_ampla['rastros']}")
+finally:
+    _mp_mod._roll_trace_d20 = _orig_dado
+
+print("\n--- Bloco I: a consulta está registrada na lane (spec 040) -------------")
+
+check("I1: 'investigar' está em motor.consult_specs() (chega à Mente)",
+     "investigar" in motor.consult_specs())
+check("I2: a ConsultSpec aponta para a função investigar() real",
+     motor.consult_specs()["investigar"].query.__name__ == "investigar")
 
 print()
 shutil.rmtree(_tmp, ignore_errors=True)

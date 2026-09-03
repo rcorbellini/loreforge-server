@@ -911,10 +911,11 @@ def investigar(character_id: str, args: dict | None = None) -> dict:
     INDEPENDENTES: rota pode sair sem nome (decisao de 2026-09-02, ver
     data-model.md Sec.3), nunca o contrario.
 
-    `args["alvo"]`, quando presente, MUST vir do enum `investigar_alvo`
-    (arbiter.scene_candidates, motor.alvos_investigaveis) — nunca texto livre
-    resolvido aqui (research R2): investigar PRECISA comparar contra o `quem`
-    real do rastro, ao contrario de `ask_about`, que nunca resolve a um id.
+    `args["alvo"]` chega como STRING LIVRE (a lane de consulta não tem enum
+    dinamico por cena — ver o comentario logo abaixo) e e VALIDADA aqui contra
+    `alvos_investigaveis(character_id)` — nunca texto resolvido contra o `quem`
+    real do rastro (research R2), o ground-truth secreto. Fora do conjunto
+    conhecido, degrada para varredura ampla (US2), sem erro.
 
     Alem do rastro, evoca a memoria do investigador sobre o LUGAR e os ITENS
     presentes, no alcance de CONSULTA (viva+vencida, spec 064) — e essa

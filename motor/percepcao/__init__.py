@@ -78,6 +78,7 @@ from .consultas import (  # noqa: F401
     push_capacity,
     reachable_entities,
     read_doc,
+    investigar,
     recognition_of,
     recall,
     own_memories,

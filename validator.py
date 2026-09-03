@@ -49,7 +49,10 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # domain continuam válidas.
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
           "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica", "oficio",
-          "construtor", "musica", "nenhuma"}
+          "construtor", "musica", "investigar", "nenhuma"}
+# "investigar" (spec 065): a leitura de rastro (item 14-gama) alimenta este dominio pelo
+# mesmo mecanismo dinamico que os outros 16 ja usam - proficiencies_for(), sem campo
+# estatico. Um valor a mais no conjunto fechado, no molde de botica/herbalismo/construtor.
 # spec 026: intenção não tem TTL nem se acumula (ao contrário de memória) — é um
 # plano que a própria LLM edita no lugar. Só três estados, sem decaimento por
 # relógio; encerrar é decisão explícita (concluída/abandonada), nunca lazy-eval.

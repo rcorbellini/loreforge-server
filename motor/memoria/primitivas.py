@@ -675,6 +675,155 @@ def _is_trace_active(fm: dict, now: float | None = None) -> bool:
     return (now - criado_em) < ttl
 
 
+# --------------------------------------------------------------------------- #
+# Investigar (spec 065, item 14-gama) — o LEITOR do rastro. Primitivas puras de
+# nivel 0, irmas de _leave_trace/_is_trace_active: administrar a escada de DC e
+# a condicao de identidade e o job deste modulo; percepcao/consultas.py (nivel 1)
+# so ORQUESTRA, nunca duplica a mecanica.
+# --------------------------------------------------------------------------- #
+
+_DC_IDENTIDADE_BASE = 12
+_DC_IDENTIDADE_K = 6
+_DC_ROTA_GAP = 5   # DC_ROTA = DC_IDENTIDADE + este gap, SEMPRE — garante que revelar
+                    # rota por rolagem nunca acontece sem ANTES superar a DC de
+                    # identidade (data-model.md Sec.3). O que ainda pode faltar
+                    # com DC superada e a CONDICAO de identidade (Sec.4) - conhecido
+                    # ou nomeado - e essa e a unica forma de rota sair sem nome.
+
+
+def _dcs_investigacao(fm: dict, now: float | None = None) -> tuple[int, int]:
+    """As duas DCs da escada de investigar, por FRESCOR do rastro (spec 065).
+
+    NAO deriva de `intensity` — ela e constante (`_leave_trace` grava sempre
+    "small"; medido nos 254 rastros do mundo em 2026-09-02, todos iguais). O que
+    varia de rastro para rastro e o `ttl_seconds` (a rolagem de DEX de quem se
+    moveu desloca a duracao, nao a nitidez) — entao o fator certo e o FRESCOR:
+    fracao do TTL ainda por decorrer. Pegada de minutos atras e mais legivel que
+    uma prestes a expirar; a mesma forma de `_perceive_dc` (spec 024,
+    DC = base +/- k*fator).
+
+    Devolve (dc_identidade, dc_rota), com dc_rota SEMPRE dc_identidade + 5 —
+    o gap fixo que impede rota sair "de graca" por uma rolagem que nem passou
+    da identidade.
+    """
+    now = time.time() if now is None else now
+    criado_em = fm.get("criado_em") or 0
+    ttl = fm.get("ttl_seconds") or 1
+    decorrido = max(0.0, now - criado_em)
+    frescor = max(0.0, min(1.0, 1 - decorrido / ttl))
+    dc_identidade = round(_DC_IDENTIDADE_BASE - _DC_IDENTIDADE_K * frescor)
+    return dc_identidade, dc_identidade + _DC_ROTA_GAP
+
+
+def _identidade_permitida(ator_id: str, quem_do_rastro: str,
+                          alvo_nomeado: str | None) -> bool:
+    """A identidade so e revelada com HISTORIA ou BUSCA — rolagem sozinha nao
+    basta (spec 065, US2 Acceptance Scenario 3).
+
+    Reconhece (US2): ha alguma memoria do ATOR envolvendo `quem_do_rastro`, no
+    alcance de CONSULTA (viva+vencida, spec 064) — a mesma pergunta que
+    `remembered_about` ja responde. Procura (US3): o alvo NOMEADO e exatamente
+    esta pessoa — dispensa historia previa, e o ponto de uma busca dirigida.
+    """
+    if alvo_nomeado is not None:
+        return alvo_nomeado == quem_do_rastro
+    try:
+        folder = find_character_folder(ator_id)
+    except io.MotorError:
+        return False
+    now = time.time()
+    for path in (io.arquivos_envolvendo(folder / "memories", quem_do_rastro)
+                or arquivos_em(folder / "memories")):
+        fm, _ = read_doc(path)
+        if fm.get("type") != "memory":
+            continue
+        if quem_do_rastro not in memory_involved(fm):
+            continue
+        if alcance_consulta(fm, now):
+            return True
+    return False
+
+
+def alvos_investigaveis(ator_id: str) -> set[str]:
+    """Todo PERSONAGEM de quem `ator_id` guarda ALGUMA memória — no alcance de
+    CONSULTA (viva+vencida, spec 064) — para o enum de busca dirigida (US3).
+
+    O `quem` de um rastro e SEMPRE um personagem (spec 034) — filtrado por tipo
+    aqui, e nao no chamador, porque `involved` mistura personagem/lugar/item
+    livremente (spec 016) e o enum tem de ser SO gente, ou o Arbitro ofereceria
+    "procurar pela Taverna do Gancho" como alvo.
+
+    NAO reusa `own_memories` (spec 058/059): aquela e VIVA-so, com contrato de
+    compatibilidade byte-a-byte com `sing`/`write` — estreitar ou alargar o
+    alcance dela quebraria as duas. Esta e a irma de alcance mais largo, e o
+    alcance tem de bater com `_identidade_permitida` (que aceita vencida): senao
+    alguem so lembrado por memoria vencida seria RECONHECIVEL passivamente
+    (US2) mas NAO NOMEAVEL como alvo (US3) — inconsistencia sem motivo.
+    """
+    try:
+        folder = find_character_folder(ator_id)
+    except io.MotorError:
+        return set()
+    now = time.time()
+    alvos: set[str] = set()
+    for path in arquivos_em(folder / "memories"):
+        fm, _ = read_doc(path)
+        if fm.get("type") != "memory" or not alcance_consulta(fm, now):
+            continue
+        alvos |= set(memory_involved(fm))
+    alvos.discard(ator_id)
+    return {a for a in alvos if (indice.no(a) and indice.no(a).tipo == "character")}
+
+
+def _densidade_rastro(local_folder: Path) -> tuple[str, list[dict]]:
+    """A densidade de rastro ativo (spec 065, US1) — SEMPRE gratuita, sem
+    rolagem nenhuma: "saber se tem pegada nao exige maestria".
+
+    Devolve (rotulo, [fm dos rastros ATIVOS]) — o rotulo e o piso que a US1
+    exige; a lista e reusada por quem for extrair identidade/rota (US2-4), pra
+    nao varrer os rastros duas vezes.
+    """
+    rastros_dir = local_folder / "rastros"
+    ativos: list[dict] = []
+    if rastros_dir.is_dir():
+        now = time.time()
+        for path in arquivos_em(rastros_dir):
+            fm, _ = read_doc(path)
+            if fm.get("type") == "rastro" and _is_trace_active(fm, now):
+                ativos.append(fm)
+    n = len(ativos)
+    rotulo = "nenhum" if n == 0 else ("algum" if n <= 2 else "muitos")
+    return rotulo, ativos
+
+
+def _resolver_rastros(ator_id: str, ator_fm: dict, ativos: list[dict],
+                      alvo_id: str | None = None) -> list[dict]:
+    """Os DOIS EIXOS independentes (spec 065, decisao de 2026-09-02): identidade
+    e rota se resolvem por condicoes PROPRIAS, e um pode sair sem o outro —
+    "rota sem nome e resultado valido", nao so identidade sem rota.
+
+    Um roll SO (canal proprio do rastro, nunca `rolagem._roll_d20` — mesmo
+    motivo de `_roll_trace_d20`: esta leitura nao pode afetar o dado
+    compartilhado que testes de acao arbitrada monkeypatcham), comparado contra
+    a escada de CADA rastro (o frescor de cada um e diferente).
+    """
+    wis = (ator_fm.get("attributes") or {}).get("WIS", 10)
+    proficiencia = proficiencies_for(ator_id).get("investigar", 0.0)
+    total = _roll_trace_d20() + rolagem.attr_modifier(wis) + proficiencia
+    saida = []
+    for fm in ativos:
+        dc_identidade, dc_rota = _dcs_investigacao(fm)
+        revela_quem = (total >= dc_identidade
+                      and _identidade_permitida(ator_id, fm["quem"], alvo_id))
+        revela_rota = total >= dc_rota
+        if not revela_quem and not revela_rota:
+            continue
+        saida.append({"quem": fm["quem"] if revela_quem else None,
+                      "rota": fm["direcao"] if revela_rota else None,
+                      "grau": "nitido" if revela_quem else "vago"})
+    return saida
+
+
 def _raise_intensity(tier: str) -> str:
     """Uma faixa de intensidade ACIMA (spec 030) — inverso de `_lower_intensity`.
     Teto `giant`: um compromisso não pode pesar mais que o máximo da escala."""

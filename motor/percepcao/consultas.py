@@ -67,10 +67,14 @@ from ..memoria import (
     _FAMILIARIDADE_PISO,
     _INTENSITY_ORDER,
     _MEMORY_CONTEXT_CAP,
+    _densidade_rastro,
     _expire_memories,
     _is_alive,
     _renew_memory,
+    _resolver_rastros,
+    alvos_investigaveis,
     alcance_consulta,
+    alcance_contexto,
     _memory_salience,
     _recency_label,
     _short_summary,
@@ -896,6 +900,77 @@ def prose_of(character_id: str, entity_id: str) -> str | None:
     return None
 
 
+def investigar(character_id: str, args: dict | None = None) -> dict:
+    """Le o RASTRO do lugar atual + a memoria do proprio investigador sobre ele
+    e os itens presentes (spec 065, item 14-gama do backlog).
+
+    CONSULTA pura (spec 040) — nao muta, nao gasta turno do Arbitro, zero
+    chamada de modelo no server. A DENSIDADE de rastro (US1) e SEMPRE gratuita:
+    "saber se tem pegada nao exige maestria". So a EXTRACAO de detalhe
+    (identidade, rota) escala com uma unica rolagem — e os dois sao EIXOS
+    INDEPENDENTES: rota pode sair sem nome (decisao de 2026-09-02, ver
+    data-model.md Sec.3), nunca o contrario.
+
+    `args["alvo"]`, quando presente, MUST vir do enum `investigar_alvo`
+    (arbiter.scene_candidates, motor.alvos_investigaveis) — nunca texto livre
+    resolvido aqui (research R2): investigar PRECISA comparar contra o `quem`
+    real do rastro, ao contrario de `ask_about`, que nunca resolve a um id.
+
+    Alem do rastro, evoca a memoria do investigador sobre o LUGAR e os ITENS
+    presentes, no alcance de CONSULTA (viva+vencida, spec 064) — e essa
+    evocacao RENOVA as memorias, pelo MESMO mecanismo de desgaste que qualquer
+    evocacao deliberada ja usa (`_renew_memory(modo="evocacao")`).
+    """
+    alvo_bruto = (args or {}).get("alvo") or None
+    try:
+        ator_folder = find_character_folder(character_id)
+    except MotorError:
+        return {"densidade": "nenhum", "rastros": [],
+               "memorias_do_lugar": [], "memorias_dos_itens": {}}
+    ator_fm, _ = read_doc(ator_folder / "character.md")
+    # `alvo` chega como STRING LIVRE — a lane de consulta (spec 040) nao tem
+    # enum dinamico por cena (ConsultSpec.params e schema fixo; `face.py::_consultas`
+    # manda `alvos: {}` sempre, por desenho). Em vez de estender essa arquitetura
+    # so para isto, o servidor VALIDA aqui: `alvo` so vale se casar EXATO com um id
+    # que o investigador ja tem memoria sobre (`alvos_investigaveis`) — nunca texto
+    # resolvido contra o `quem` do rastro (o ground-truth secreto). Fora do
+    # conjunto conhecido, degrada para varredura ampla (US2), sem erro.
+    alvo_id = alvo_bruto if alvo_bruto in alvos_investigaveis(character_id) else None
+    local_folder = _location_folder_of(character_id)
+    if local_folder is None:
+        return {"densidade": "nenhum", "rastros": [],
+               "memorias_do_lugar": [], "memorias_dos_itens": {}}
+
+    densidade, ativos = _densidade_rastro(local_folder)
+    rastros = _resolver_rastros(character_id, ator_fm, ativos, alvo_id)
+
+    # A memoria do LUGAR e dos ITENS presentes (US5) — reuso puro de
+    # remembered_about no alcance de CONSULTA, com a mesma renovacao da 064.
+    ctx = get_context(character_id)
+    local_id = (ctx.get("location") or {}).get("id")
+    evocadas_ids: set[str] = set()
+    memorias_do_lugar = []
+    if local_id:
+        memorias_do_lugar = _remembered_about_por_alcance(character_id, local_id,
+                                                          alcance_consulta)
+        evocadas_ids |= {m["id"] for m in memorias_do_lugar if m.get("id")}
+    memorias_dos_itens: dict[str, list] = {}
+    for item in (ctx.get("items_present") or []):
+        item_id = item.get("id")
+        if not item_id:
+            continue
+        mems = _remembered_about_por_alcance(character_id, item_id, alcance_consulta)
+        if mems:
+            memorias_dos_itens[item_id] = mems
+            evocadas_ids |= {m["id"] for m in mems if m.get("id")}
+    if evocadas_ids:
+        _renew_memory(ator_folder, memoria_ids=evocadas_ids, modo="evocacao")
+
+    return {"densidade": densidade, "rastros": rastros,
+           "memorias_do_lugar": memorias_do_lugar,
+           "memorias_dos_itens": memorias_dos_itens}
+
+
 def recognition_of(character_id: str, entity_id: str) -> dict:
     """O RECONHECIMENTO de uma entidade percebida (spec 018) — leitura pura, sem LLM.
 
@@ -993,7 +1068,15 @@ def scene_recognitions(character_id: str) -> list[dict]:
 
 
 def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
-    """O que `quem` guarda A RESPEITO DE `sobre` — consulta de SERVER (spec 015).
+    """O que `quem` guarda A RESPEITO DE `sobre`, no alcance de CONTEXTO — fachada
+    publica sobre `_remembered_about_por_alcance` (spec 065): mantida INTACTA,
+    porque e o que o Arbitro le para julgar uma relacao NO MOMENTO DO ATO — nunca
+    devia alargar (spec 064, data-model Sec.2). `investigar` (spec 065, US5) e o
+    primeiro chamador que precisa do alcance de CONSULTA (viva+vencida) para
+    evocar memoria vencida do lugar/item; ele usa `_remembered_about_por_alcance`
+    diretamente, sem tocar aqui.
+
+    O que segue e a assinatura ORIGINAL, intocada (spec 015):
 
     Este é o encanamento que faltava, e é a terceira vez que o projeto esbarra
     na mesma parede: `_character_summary` entrega de cada presente apenas id,
@@ -1018,6 +1101,14 @@ def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
     Genérica de propósito (FR-007d): persuadir, negociar e atacar podem passar a
     ler a relação por aqui, sem campo novo e sem duplicar a predicação de vida.
     """
+    return _remembered_about_por_alcance(quem_id, sobre_id, alcance_contexto)
+
+
+def _remembered_about_por_alcance(quem_id: str, sobre_id: str, alcance) -> list[dict]:
+    """O corpo de `remembered_about`, parametrizado pelo ALCANCE (spec 065) — mesmo
+    refactor que `dono`/`_dono_por_alcance` ja fez na spec 064: a funcao publica
+    fica intacta (alcance_contexto), e quem precisa de mais (investigar, US5)
+    chama esta com `alcance_consulta`, sem duplicar o corpo."""
     try:
         folder = find_character_folder(quem_id)
     except MotorError:
@@ -1035,7 +1126,7 @@ def remembered_about(quem_id: str, sobre_id: str) -> list[dict]:
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue
-        if not _is_alive(fm, now):
+        if not alcance(fm, now):
             continue
         if sobre_id not in memory_involved(fm):
             continue
@@ -1252,6 +1343,22 @@ def _consultar_memoria(character_id: str, args: dict | None = None) -> dict:
         except MotorError:
             pass          # sem pasta não há o que renovar; a leitura já foi entregue
     return resposta
+
+
+registro.consult_spec(registro.ConsultSpec(
+    name="investigar",
+    description=(
+        "Examina o CHÃO e os ARREDORES do lugar onde você está, à procura de "
+        "sinais de passagem recente — pegadas, marcas de quem esteve aqui — e "
+        "puxa o que você mesmo já sabe sobre este lugar e o que está nele. Chame "
+        "para saber se alguém passou por aqui recentemente, ou para procurar "
+        "sinais de alguém específico (passe 'alvo' com o id de quem você já "
+        "conhece ou já ouviu falar). Ver se há sinais não exige nenhuma perícia; "
+        "identificar QUEM e PARA ONDE pode falhar."
+    ),
+    params={"alvo": {"type": "string"}},
+    query=investigar,
+))
 
 
 registro.consult_spec(registro.ConsultSpec(

@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.28.1"
+__version__ = "2.29.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,26 @@ __version__ = "2.28.1"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.29.0": "spec 065 — INVESTIGAR, o rastreador (item 14-gama do backlog, "
+             "escrito em julho e nunca construido). O rastro (marca fisica de "
+             "deslocamento, spec 034) ja era gravado por TODO deslocamento havia "
+             "semanas, secreto ate hoje — 254 registros no mundo, e o codigo ja "
+             "sabia que faltava quem os lesse. Consulta nova (spec 040 lane, zero "
+             "LLM no server): densidade de rastro e SEMPRE gratuita (\"saber se "
+             "tem pegada nao exige maestria\"); identidade e rota escalam com uma "
+             "unica rolagem (WIS + proficiencies_for['investigar'], dominio novo) "
+             "contra DUAS DCs por FRESCOR do rastro (nao por intensity, que e "
+             "constante — achado corrigido na Fase 0). Os DOIS EIXOS sao "
+             "INDEPENDENTES: rota pode sair SEM identidade revelada (\"alguem "
+             "passou, indo por [rota real]\" — decisao tomada em conversa, "
+             "2026-09-02), nunca o oposto. Identidade so revela com HISTORIA "
+             "previa ou ALVO nomeado — rolagem sozinha nunca basta. Falha nunca "
+             "produz \"nada\": degrada para a densidade, que e o piso gratuito; "
+             "so a AUSENCIA fisica de rastro produz \"nenhum sinal\". Investigar "
+             "tambem evoca a propria memoria do investigador sobre o lugar e os "
+             "itens presentes (alcance de CONSULTA, spec 064) e RENOVA o que "
+             "evocar, pelo mesmo mecanismo de desgaste ja existente. MINOR: "
+             "capacidade de mundo nova exposta a A Mente.",
     "2.28.0": "spec 064 — A MEMÓRIA EM CAMADAS. \"Nenhuma memória que está ali "
              "deveria ser 100% perdida.\" O mundo tinha três estados de memória "
              "(viva/vencida/esquecida) e era BINÁRIO na prática: 9 dos 12 "

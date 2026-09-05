@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.29.0"
+__version__ = "2.30.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,29 @@ __version__ = "2.29.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "2.30.0": "spec 066 — VINCULO DECLARADO, o primeiro fato relacional do mundo. "
+             "Ate aqui TODAS as oito relacoes existentes (dono, dono_reconhecido, "
+             "has_trauma_from, remembered_about, knows_route, recognizes_route, "
+             "familiarity_with, sentiment_toward) tinham (observador, alvo) na "
+             "chave: todas CRENCA derivada de memoria. So havia fato na contencao "
+             "fisica e no from/to de rota. O motivo de existir: afeto e escalar, "
+             "acumula e tem TETO — nenhuma quantidade de memoria positiva "
+             "atravessa de \"melhor amigo\" para \"irmao\", e o irmao que se "
+             "odeia (vinculo positivo + afeto negativo) e a celula que um eixo so "
+             "destroi. Campo `bonds: [{target, label}]` opcional no character "
+             "(ausente em 38 de 38 no dia 1); o fato desce NA ENTIDADE a que se "
+             "refere, uniforme entre characters/items/objects/location; o conector "
+             "compoe o trecho social (contrato 2, medido); a REGUA_DISPOSICAO ganha "
+             "o PASSO 1c — redacao escolhida por medicao, 2 propostas x 3 cenarios, "
+             "e so a vencedora sustenta a ortogonalidade no conflito (irma+magoa "
+             "5.0 contra 0.0 sem vinculo). Vinculo NAO soma em afeto nem entra em "
+             "DC (guardado por teste). Dois consertos de primitivo no caminho: "
+             "`_ids_de` nao enxergava lista de mapas (falharia em SILENCIO, com a "
+             "suite verde) e `prerequisites` nunca montou aresta desde a 063 pelo "
+             "mesmo motivo. Inclui teste de contrato de get_context (7 invariantes "
+             "de API) e o retrofit de nomenclatura: conhecidos->known, "
+             "pertence_a->belongs_to, fisico->body_status, maos_livres->free_hands, "
+             "pega_slot->grasp_slot, carga_livre_kg->free_load_kg.",
     "2.29.0": "spec 065 — INVESTIGAR, o rastreador (item 14-gama do backlog, "
              "escrito em julho e nunca construido). O rastro (marca fisica de "
              "deslocamento, spec 034) ja era gravado por TODO deslocamento havia "

@@ -129,6 +129,25 @@ for proibido in ("dono", "minha espada", "forjei", "credor"):
     erros = validator.validate(_fm_char(bonds=[{"target": "outro", "label": proibido}]))
     check(f"C9: label '{proibido}' é RECUSADO (segunda verdade, Invariante 10/17)",
           any("posse" in e for e in erros), f"erros: {erros}")
+# ACHADOS DO EXPLORATÓRIO (2026-09-05), os dois consertados na mesma sessão:
+#
+#  1. CARACTERE DE CONTROLE — o rótulo é PROSA QUE DESCE PARA O PROMPT d'A Mente. Um
+#     `\n` parte a frase que ela lê e é vetor de INJEÇÃO DE INSTRUÇÃO: quem escreve o
+#     mundo passaria a poder escrever no prompt dela. Passava antes.
+for controle in ("irmã\nfalsa", "irmã\ttab", "irmã\r\nX"):
+    check(f"C11: label com caractere de controle é RECUSADO ({controle!r})",
+          validator.validate(
+              _fm_char(bonds=[{"target": "outro", "label": controle}])) != [])
+#
+#  2. FALSO POSITIVO da regra de recusa — a primeira versão casava SUBSTRING e recusava
+#     "dona de casa", que é rótulo legítimo. Um rótulo bom recusado é pior que um ruim
+#     aceito: o autor não entende por que o mundo não aceita a palavra dele.
+for legitimo in ("dona de casa", "senhora do moinho", "meio-irmão", "cunhada",
+                 "mestre", "aprendiz"):
+    check(f"C12: label legítimo NÃO é recusado por acidente ({legitimo!r})",
+          validator.validate(
+              _fm_char(bonds=[{"target": "outro", "label": legitimo}])) == [])
+
 for permitido in ("irmã", "padrinho", "meia-irmã", "terra natal", "irmão de criação"):
     check(f"C10: label '{permitido}' é aceito (sem bound de tamanho — research R1)",
           validator.validate(

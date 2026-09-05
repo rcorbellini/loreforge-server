@@ -267,12 +267,31 @@ def _validate_character(fm: dict) -> list[str]:
 # Deixar o vínculo declarar qualquer uma delas criaria a SEGUNDA VERDADE que o
 # Invariante 10/17 proíbe: duas fontes para a mesma pergunta, uma declarada e uma
 # derivada, discordando em silêncio — e a declarada venceria por ser mais barata de ler.
-_BONDS_PROIBIDOS = (
-    "dono", "dona", "proprietário", "proprietaria", "proprietário",
-    "meu", "minha", "pertence",
-    "forjei", "fiz", "criador", "criadora", "autor", "autora",
-    "devedor", "devedora", "credor", "credora", "dívida", "divida", "deve-me",
-)
+# A comparação é por PALAVRA INTEIRA, não por substring — a primeira versão casava
+# substring e recusava "dona de casa", que é rótulo perfeitamente legítimo. Um rótulo
+# bom recusado é pior que um ruim aceito: o autor não entende por que o mundo não
+# aceita a palavra dele, e não tem como descobrir.
+_BONDS_PROIBIDOS = frozenset((
+    "dono", "dona", "donos", "donas", "proprietario", "proprietaria",
+    "meu", "minha", "meus", "minhas", "pertence",
+    "forjei", "criador", "criadora",
+    "devedor", "devedora", "credor", "credora", "divida", "dividas",
+))
+
+# Rótulos que CONTÊM uma palavra da lista acima mas são legítimos, porque a palavra
+# ali não afirma posse — é título ou ofício. Sem esta porta, a regra do FR-006 vira
+# uma armadilha para quem escreve o mundo.
+_BONDS_PERMITIDOS = frozenset((
+    "dona de casa", "dono de casa", "senhora do moinho", "senhor do moinho",
+))
+
+
+def _normaliza_rotulo(texto: str) -> str:
+    """Minúsculas, sem acento, pontuação virando espaço — para comparar PALAVRAS."""
+    import unicodedata
+    sem_acento = "".join(c for c in unicodedata.normalize("NFD", texto.lower())
+                         if unicodedata.category(c) != "Mn")
+    return "".join(c if c.isalnum() else " " for c in sem_acento)
 
 
 def _validate_bonds(fm: dict) -> list[str]:
@@ -314,8 +333,18 @@ def _validate_bonds(fm: dict) -> list[str]:
             # Um vínculo sem palavra não diz nada a quem lê: a aresta existiria e a face
             # não teria o que mostrar.
             errors.append(f"character: '{onde}.label' não pode ser vazio.")
-        elif any(p in rotulo.lower().split() or p in rotulo.lower()
-                 for p in _BONDS_PROIBIDOS):
+        elif any(ord(c) < 32 for c in rotulo):
+            # O rótulo é PROSA QUE DESCE PARA O PROMPT d'A Mente (o trecho social do
+            # conector). Um `\n` ou `\t` no meio dele parte a frase que ela lê e, pior,
+            # é vetor de injeção de instrução: quem escreve o mundo passaria a poder
+            # escrever no prompt. Achado do exploratório da 066 — passava antes.
+            errors.append(
+                f"character: '{onde}.label' não pode conter quebra de linha nem "
+                f"caractere de controle — ele desce como prosa para A Mente."
+            )
+        elif (_normaliza_rotulo(rotulo).strip() not in
+              {_normaliza_rotulo(p).strip() for p in _BONDS_PERMITIDOS}
+              and set(_normaliza_rotulo(rotulo).split()) & _BONDS_PROIBIDOS):
             errors.append(
                 f"character: '{onde}.label' não pode expressar posse, autoria de craft "
                 f"nem dívida ('{rotulo}') — o mundo já responde a isso por dono(), "

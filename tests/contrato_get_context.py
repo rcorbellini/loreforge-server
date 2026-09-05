@@ -137,8 +137,15 @@ check("1a: toda chave é snake_case (fora os 6 atributos, acrônimos por conven�
 # As intrusões conhecidas. A lista é EXPLÍCITA de propósito: um teste que tentasse
 # adivinhar "isto é português" por heurística daria falso positivo em `id`, `action`,
 # `narrative` e em qualquer nome próprio do mundo.
-_INTRUSOES_PT = {"conhecidos", "pertence_a", "fisico", "maos_livres", "maos_totais",
-                 "pega_slot", "maos_ocupadas_por", "carga_livre_kg"}
+#
+# CUIDADO AO RENOMEAR: esta lista contém os nomes ANTIGOS de propósito. Um
+# `sed` de retrofit que rode sobre este arquivo a reescreve para os nomes NOVOS e o
+# teste passa a se auto-satisfazer — aconteceu na primeira execução do retrofit da US5.
+# As strings abaixo são dados históricos, não identificadores: nunca devem ser
+# renomeadas junto com o código.
+_INTRUSOES_PT = {"conhecid" + "os", "pertence" + "_a", "fisic" + "o",
+                 "maos" + "_livres", "maos" + "_totais", "pega" + "_slot",
+                 "maos" + "_ocupadas_por", "carga" + "_livre_kg"}
 _presentes = sorted({k for k, _ in chaves(CTX)} & _INTRUSOES_PT)
 esperado_falhar("1b: nenhuma chave em português (o retrofit da US5)",
                 not _presentes, f"ainda em PT: {_presentes}")
@@ -159,7 +166,7 @@ _nulos = sorted({c.rsplit(".", 1)[-1] for c, v in folhas(CTX) if v is None})
 # alguém acrescentou mais um `null` num payload que já devia estar caminhando para o
 # outro estilo — e o teste avisa.
 _NULOS_LEGADO = {"slot", "veste_em", "sono", "description", "interactions", "contem",
-                 "em_trabalho", "action", "mood", "value", "narrative", "pertence_a",
+                 "em_trabalho", "action", "mood", "value", "narrative", "belongs_to",
                  "wearable", "container", "trabalho", "destination_name",
                  "destination_id", "prerequisites", "carrying", "conditions"}
 _nulos_novos = sorted(set(_nulos) - _NULOS_LEGADO)
@@ -192,8 +199,8 @@ print("\n--- 4. NENHUM NÚMERO DE MEDIDA INTERNA (Princípio V) ----------------
 
 # A FÍSICA DECLARADA é legítima e desce de propósito: peso, capacidade, tempo. Sem esta
 # lista o teste seria inútil (nunca falharia) ou impossível (falharia sempre).
-_FISICA_OK = {"weight_kg", "size", "max_size", "max_items", "itens", "maos_livres",
-              "maos_totais", "carga_livre_kg", "hp", "hp_max", "fatigue", "fatigue_max",
+_FISICA_OK = {"weight_kg", "size", "max_size", "max_items", "itens", "free_hands",
+              "total_hands", "free_load_kg", "hp", "hp_max", "fatigue", "fatigue_max",
               "travel_time_base", "value", "seq", "timestamp_start", "timestamp_end",
               "criado_em", "ttl_seconds", "turno", "hunger_ts", "hunger_note",
               "thirst_ts", "thirst_note", "descansando_desde", "free_load_kg",

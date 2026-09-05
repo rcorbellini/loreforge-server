@@ -76,7 +76,7 @@ try:
 
     ctx_vazio = {"characters_present": [{"id": "a", "name": "A"}],
                  "objects_present": [], "items_present": [],
-                 "self": {"id": "a", "inventory": [], "fisico": {}},
+                 "self": {"id": "a", "inventory": [], "body_status": {}},
                  "location": {"id": "x", "name": "X"},
                  "routes": [], "in_transit": True}
     tools_vazio = {t["name"] for t in arbiter.build_tools(ctx_vazio)}

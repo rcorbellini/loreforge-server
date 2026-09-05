@@ -128,9 +128,9 @@ try:
     warns = motor.migration_warnings()
     check("14: item legado junto ao personagem vira AVISO de migração (não erro)",
           any(w["id"] == "bolsa-de-couro" for w in warns))
-    fis0 = motor.get_context("torvin-ferreiro")["self"]["fisico"]
+    fis0 = motor.get_context("torvin-ferreiro")["self"]["body_status"]
     check("14: segurado de cortesia não conta slots nem carga",
-          fis0["peso_carregado_kg"] == 0.0 and fis0["maos_livres"] == 2)
+          fis0["peso_carregado_kg"] == 0.0 and fis0["free_hands"] == 2)
 
     # ===================== US1 — equip (cenários 3, 4) ======================= #
     out = motor.apply_resolution("torvin-ferreiro", res(
@@ -449,7 +449,7 @@ try:
            "create_memory", "narrate"} <= tools and "transfer_item" not in tools)
     ctx_vazio = {"characters_present": [{"id": "a", "name": "A"}],
                  "objects_present": [], "items_present": [],
-                 "self": {"id": "a", "inventory": [], "fisico": {}},
+                 "self": {"id": "a", "inventory": [], "body_status": {}},
                  "location": {"id": "x", "name": "X"}, "routes": [],
                  "in_transit": True}
     tools_vazio = {t["name"] for t in arbiter.build_tools(ctx_vazio)}

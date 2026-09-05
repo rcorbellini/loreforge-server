@@ -162,12 +162,12 @@ def _character_summary(folder: Path, self_id: str) -> dict:
                     else _visible_item_refs(folder)),
         # física visível do corpo: pega e folga de carga (a guarda do Árbitro
         # valida dar/receber sem expor atributos crus de terceiros)
-        "fisico": {
-            "maos_livres": max(0, cap_pega - len(hands)),
-            "maos_totais": cap_pega,
-            "pega_slot": pega,
-            "maos_ocupadas_por": hands,
-            "carga_livre_kg": round(carry_capacity(fm) - carried_weight(folder), 3),
+        "body_status": {
+            "free_hands": max(0, cap_pega - len(hands)),
+            "total_hands": cap_pega,
+            "grasp_slot": pega,
+            "hands_holding": hands,
+            "free_load_kg": round(carry_capacity(fm) - carried_weight(folder), 3),
         },
     }
     # spec 066 — O FATO NA ENTIDADE A QUE ELE SE REFERE.
@@ -469,11 +469,11 @@ def _conhecidos_por_memoria(memorias: list, presentes: set) -> dict:
 
 def _location_lineage(place_folder: Path) -> dict | None:
     """A location mais PRÓXIMA que contém `place_folder`, com um ponteiro
-    recursivo `pertence_a` pra quem contém ELA — mesma forma da árvore de
+    recursivo `belongs_to` pra quem contém ELA — mesma forma da árvore de
     pastas de verdade (spec 035: região contém cidade, cidade contém lugar,
     lugar contém quarto). É uma ESTRUTURA aninhada, não uma lista: quem lê não
     precisa de nenhuma convenção de ordem pra saber quem está dentro de quem,
-    é literal — `pertence_a.pertence_a.pertence_a...` até `None` (o lugar não
+    é literal — `belongs_to.belongs_to.belongs_to...` até `None` (o lugar não
     está aninhado em nada, ou chegou ao topo da árvore). A chave se repete de
     propósito em cada nível: é a MESMA relação (X pertence a Y) aplicada de
     novo a Y, não uma relação diferente — dois nomes pra isso só confundiria
@@ -495,7 +495,7 @@ def _location_lineage(place_folder: Path) -> dict | None:
                     "id": fm["id"],
                     "name": fm.get("name"),
                     "narrative": body,
-                    "pertence_a": _location_lineage(cur),
+                    "belongs_to": _location_lineage(cur),
                 }
         cur = cur.parent
     return None
@@ -635,7 +635,7 @@ def get_context(character_id: str) -> dict:
         "id": place_fm.get("id"),
         "name": place_fm.get("name"),
         "narrative": place_body,
-        "pertence_a": _location_lineage(place_folder),
+        "belongs_to": _location_lineage(place_folder),
     }
     for entrada in (*items_present, *objects_present, local):
         alvo = entrada.get("id")
@@ -686,7 +686,7 @@ def get_context(character_id: str) -> dict:
         # ela vê; só a etiqueta estava faltando (`registrarNomes`, no conector,
         # caía no fallback nome=id). Memória por cima em caso de colisão — não
         # muda o comportamento já testado dessa fonte.
-        "conhecidos": {
+        "known": {
             **{d: io.name_of(d) for d in deslocamento.reachable_destinations(character_id)
                if d not in _presentes_para_conhecidos and io.name_of(d) != d},
             **_conhecidos_por_memoria(memorias_ativas, _presentes_para_conhecidos),
@@ -729,16 +729,16 @@ def get_context(character_id: str) -> dict:
             "ocupado": trabalho.is_busy(char_folder),
             "inventory": _nested_item_refs(char_folder),
             # física do corpo (spec 004): a Mente narra esforço, a guarda valida
-            "fisico": {
+            "body_status": {
                 "capacidade_carga_kg": carry_capacity(self_fm),
                 "capacidade_empurrar_kg": push_capacity(self_fm),
                 "peso_carregado_kg": round(carried_weight(char_folder), 3),
                 # spec 019: "mãos" = o slot de pega do corpo (mão / boca / ...)
-                "maos_livres": max(0, slot_capacity(self_fm, _self_pega)
+                "free_hands": max(0, slot_capacity(self_fm, _self_pega)
                                - len(slots_in_use(char_folder).get(_self_pega) or []))
                                if _self_pega else 0,
-                "maos_totais": slot_capacity(self_fm, _self_pega) if _self_pega else 0,
-                "pega_slot": _self_pega,
+                "total_hands": slot_capacity(self_fm, _self_pega) if _self_pega else 0,
+                "grasp_slot": _self_pega,
                 # spec 019: o próprio corpo do ator (mapa slot->capacidade). É a
                 # anatomia dele — expô-la ao próprio dono não é metagaming, e o
                 # guard de equipar precisa da capacidade de um slot QUALQUER.

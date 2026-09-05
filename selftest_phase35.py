@@ -5,7 +5,7 @@ Cobre as quatro User Stories da spec:
     piso de saliência de golpe/furto/etc — código PRÓPRIO de
     `deslocamento.py`, nunca uma entrada em `_witness_facts`/`_finalize_turn`
   - US2: `ask_about` aceita um LUGAR além de pessoa, com enum real (cena atual
-    + lugares conhecidos/reconhecidos)
+    + lugares known/reconhecidos)
   - US3: `ask_about`/`ask_directions` resolvem pergunta + registro numa
     chamada só; `hear_about` e o ramo `fonte` de `learn_routes` saem do
     manifest

@@ -342,7 +342,7 @@ def route_plan(character_id: str, destino: str) -> list[str] | None:
 def current_location_id(character_id: str) -> str | None:
     """O lugar onde o personagem está AGORA (spec 034, US2) — mesmo `aqui` que
     `reachable_destinations` já calcula por dentro, exposto para quem monta o
-    enum de "sobre um lugar" de `ask_about` (soma cena atual + conhecidos)."""
+    enum de "sobre um lugar" de `ask_about` (soma cena atual + known)."""
     try:
         folder = find_character_folder(character_id)
     except MotorError:

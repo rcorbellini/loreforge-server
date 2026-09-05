@@ -745,12 +745,12 @@ def _sincronizar_pasta(pasta: str) -> None:
                         atuais.add(os.path.join(pasta, nome))
             except OSError:
                 pass
-        conhecidos = {str(c) for c in _ESTADO.por_pasta.get(pasta, ())}
+        known = {str(c) for c in _ESTADO.por_pasta.get(pasta, ())}
         mudou = False
-        for morto in conhecidos - atuais:
+        for morto in known - atuais:
             _desindexar(_ESTADO, morto)
             mudou = True
-        for novo in atuais - conhecidos:
+        for novo in atuais - known:
             if _indexar_arquivo(_ESTADO, Path(novo), _RAIZ) is not None:
                 mudou = True
         if mudou:

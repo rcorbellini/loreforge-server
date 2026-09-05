@@ -34,9 +34,9 @@ from llm import LLMError
 
 
 def _pertence_a(node: dict | None) -> dict | None:
-    """spec 035: traduz a estrutura recursiva `location.pertence_a` (do Motor,
+    """spec 035: traduz a estrutura recursiva `location.belongs_to` (do Motor,
     já na forma final — mais próximo primeiro, cada nível apontando de novo
-    pra `pertence_a` de quem o contém, MESMA chave em todo nível) pro
+    pra `belongs_to` de quem o contém, MESMA chave em todo nível) pro
     vocabulário do prompt do Árbitro. Só renomeia campos; a forma aninhada em
     si não muda."""
     if not node:
@@ -44,7 +44,7 @@ def _pertence_a(node: dict | None) -> dict | None:
     return {
         "nome": node.get("name"),
         "descricao": node.get("narrative"),
-        "pertence_a": _pertence_a(node.get("pertence_a")),
+        "belongs_to": _pertence_a(node.get("belongs_to")),
     }
 
 
@@ -72,7 +72,7 @@ def _context_for_prompt(context: dict) -> dict:
             "mood": c.get("mood"),
             "conditions": c.get("conditions"),
             "carried_item_ids": c.get("carrying") or [],
-            "fisico": c.get("fisico"),
+            "body_status": c.get("body_status"),
         }
         if afeto_lugares:
             entry["afeto_por_lugar"] = afeto_lugares
@@ -126,13 +126,13 @@ def _context_for_prompt(context: dict) -> dict:
             "name": context.get("location", {}).get("name"),
             "descricao": context.get("location", {}).get("narrative"),
             # spec 035: a location que contém o lugar atual, estrutura aninhada
-            # (mais próxima primeiro, mesma chave "pertence_a" se repetindo pra
+            # (mais próxima primeiro, mesma chave "belongs_to" se repetindo pra
             # quem a contém) — mesma forma do que vai pra A Mente (client/mente.js).
             # Aqui é só GROUND TRUTH de contexto pra julgar a cena (ex.: o que é
             # plausível num porto vs. numa vila do interior) — o Árbitro não
             # narra atmosfera com isso; "narrate" continua exigindo resumo
             # curto e factual, a evocação fica inteira com A Mente.
-            "pertence_a": _pertence_a(context.get("location", {}).get("pertence_a")),
+            "belongs_to": _pertence_a(context.get("location", {}).get("belongs_to")),
             "em_transito": context.get("in_transit", False),
         },
         "personagem_que_age": {
@@ -147,7 +147,7 @@ def _context_for_prompt(context: dict) -> dict:
             "status": self_.get("status"),
             "personalidade": self_.get("body"),
             "inventario": self_.get("inventory") or [],
-            "fisico": self_.get("fisico"),
+            "body_status": self_.get("body_status"),
         },
         "outros_presentes": present,
         "rotas_disponiveis": rotas,
@@ -357,7 +357,7 @@ def _scene_index(context: dict) -> dict:
     """
     self_ = context.get("self") or {}
     actor_id = self_.get("id")
-    fis = self_.get("fisico") or {}
+    fis = self_.get("body_status") or {}
     chars, objects, items, char_fisico = {}, {}, {}, {}
     char_conditions = {}
     for c in context.get("characters_present", []):
@@ -367,14 +367,14 @@ def _scene_index(context: dict) -> dict:
         chars[cid] = c.get("name") or ""
         # derrota é pública na cena (spec 008): quem caiu, caiu à vista de todos
         char_conditions[cid] = list(c.get("conditions") or [])
-        cf = c.get("fisico") or {}
+        cf = c.get("body_status") or {}
         char_fisico[cid] = {
             # spec 019: a capacidade de mão vem do corpo (já derivada no summary);
             # o fallback é conservador (0), nunca o humano global.
-            "maos_livres": cf.get("maos_livres", 0),
-            "maos_totais": cf.get("maos_totais", 0),
-            "maos_ocupadas_por": list(cf.get("maos_ocupadas_por") or []),
-            "carga_livre_kg": cf.get("carga_livre_kg", float("inf")),
+            "free_hands": cf.get("free_hands", 0),
+            "total_hands": cf.get("total_hands", 0),
+            "hands_holding": list(cf.get("hands_holding") or []),
+            "free_load_kg": cf.get("free_load_kg", float("inf")),
         }
         if cid != actor_id:
             for it in c.get("carrying") or []:
@@ -382,14 +382,14 @@ def _scene_index(context: dict) -> dict:
                     items[it["id"]] = _item_entry(it, porter=cid)
     if actor_id in char_fisico:
         char_fisico[actor_id] = {
-            "maos_livres": fis.get("maos_livres", 0),
-            "maos_totais": fis.get("maos_totais", 0),
+            "free_hands": fis.get("free_hands", 0),
+            "total_hands": fis.get("total_hands", 0),
             # spec 019: o corpo do ator (mapa slot->capacidade) — o guard de
             # equipar precisa da capacidade de um slot QUALQUER, não só da mão.
             "corpo": fis.get("corpo") or {},
-            "maos_ocupadas_por": list((fis.get("slots_ocupados") or {})
+            "hands_holding": list((fis.get("slots_ocupados") or {})
                                       .get(motor.HAND_SLOT) or []),
-            "carga_livre_kg": (fis.get("capacidade_carga_kg", float("inf"))
+            "free_load_kg": (fis.get("capacidade_carga_kg", float("inf"))
                                - fis.get("peso_carregado_kg", 0.0)),
             "capacidade_empurrar_kg": fis.get("capacidade_empurrar_kg", float("inf")),
             "slots_ocupados": {s: list(ids) for s, ids
@@ -905,7 +905,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     actor = idx["actor_id"]
     fis = idx["char_fisico"]
     # spec 019: a "mão" do ator é o slot de PEGA do corpo dele (mão/boca), não fixo.
-    hand = fis.get(actor, {}).get("pega_slot") or motor.HAND_SLOT
+    hand = fis.get(actor, {}).get("grasp_slot") or motor.HAND_SLOT
 
     # spec 021 (Fase B) — o ESPELHO DA FÍSICA foi embora: a guarda não reexecuta
     # mais check_empurrar/mao/encaixe/vaga/carga/slot contra dicts espelhados

@@ -353,7 +353,7 @@ def check_carga_livre(char_id: str, item_id: str, peso_item: float,
     if peso_item > livre_kg + 1e-9:
         return _fail("peso_excede_carga", item=item_id,
                      peso_item=round(peso_item, 3),
-                     carga_livre_kg=round(livre_kg, 3), personagem=char_id)
+                     free_load_kg=round(livre_kg, 3), personagem=char_id)
     return None
 
 

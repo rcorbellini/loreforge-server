@@ -83,6 +83,24 @@ def _context_for_prompt(context: dict) -> dict:
             saldo_voce = motor.sentiment_toward(c.get("id"), self_.get("id"))
             if abs(saldo_voce) >= 2:
                 entry["afeto_por_voce"] = motor.sentiment_label(saldo_voce)
+            # spec 066 — O ÁRBITRO VÊ OS DOIS LADOS DO VÍNCULO, e é o único que vê.
+            #
+            # O contexto (`get_context`) é vista SUBJETIVA: entrega o mundo como ESTE
+            # personagem pode saber, e por isso leva só o vínculo que ele próprio
+            # declarou. O Árbitro é onisciente — julga a VONTADE DO ALVO, e para isso
+            # precisa saber o que o ALVO reconhece. Mesmo padrão do `afeto_por_voce`
+            # logo acima, que ele também obtém chamando primitiva por conta própria.
+            #
+            # A ASSIMETRIA É INFORMAÇÃO, não defeito: um lado pode existir sem o outro,
+            # e é isso que sustenta o enjeitado (o pai declara "filha", ela não declara
+            # nada e não sabe) e o impostor (todos declaram, e não há sangue em lugar
+            # nenhum para desmentir, porque sangue nunca foi modelado).
+            v_seu = motor.bond_toward(self_.get("id"), c.get("id"))
+            v_dele = motor.bond_toward(c.get("id"), self_.get("id"))
+            if v_seu:
+                entry["vinculo_seu_por_ele"] = v_seu
+            if v_dele:
+                entry["vinculo_dele_por_voce"] = v_dele
         present.append(entry)
     rotas = [
         {"id": r.get("id"), "name": r.get("name"), "para": r.get("destination_name")}

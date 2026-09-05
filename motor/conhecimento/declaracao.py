@@ -51,6 +51,13 @@ NÃO o recalcule de cabeça — some a ele o que a personalidade e a cena dele i
 Um saldo negativo puxa a nota para baixo; um positivo, para cima. Ele COLORE; o
 gatilho do passo 1 (agressão viva → 0) manda mais que ele.
 
+PASSO 1c — o mundo também te entrega o VÍNCULO declarado entre os dois, em "vinculo"
+(ex.: "irmã", "padrinho", "primo"). Ele é FATO, não sentimento: um irmão continua irmão
+mesmo quando há mágoa entre os dois, e as duas coisas contam JUNTAS, sem uma anular a
+outra. Um vínculo de família ou de ofício pesa a favor de atender — não porque o
+informante goste, mas porque é o que se deve a um parente. Quando "vinculo" não vier,
+não há vínculo nenhum: não o invente a partir da cena.
+
 PASSO 2 — se o passo 1 não deu 0, dimensione pela régua abaixo, lendo o saldo, o
 INFORMANTE (quem ele é pela própria descrição e o que está fazendo agora); nunca o
 interesse de quem pergunta, nunca o fato de o jogador ter pedido:
@@ -285,6 +292,12 @@ def _ask_directions(name: str, args: dict, ctx) -> tuple[dict, bool]:
         ctx.ask(REGUA_DISPOSICAO + juizo.NOTA_0_10,
                 json.dumps({"lembra_de_voce": lembra,
                             "saldo_afeto": saldo,
+                            # spec 066 — o VÍNCULO que o INFORMANTE declarou sobre quem
+                            # pergunta. É a direção certa: a régua julga a vontade DELE,
+                            # e o que pesa é o que ELE reconhece, não o que o outro
+                            # afirma. Ausente quando não há — a régua manda não inventar.
+                            **({"vinculo": _vinc} if (
+                                _vinc := motor.bond_toward(quem, ctx.actor)) else {}),
                             "informante": ctx.describe(quem),
                             "prosa": ctx.prosa}, ensure_ascii=False, indent=2)),
         default=7)   # o desconhecido comum, que aponta o caminho na rua

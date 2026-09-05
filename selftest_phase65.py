@@ -225,6 +225,59 @@ check("G2: e o afeto de TERCEIROS por ela também não desce",
       not any(k.startswith("afeto_por") or k == "sentiment_toward_me"
               for c in ctx_h["characters_present"] for k in c))
 
+print("\n--- Bloco H: a régua LÊ o vínculo (US3) — não nasce inerte -------------")
+
+import arbiter
+
+check("H1: REGUA_DISPOSICAO fala do vínculo (passo 1c)",
+      "vinculo" in arbiter.REGUA_DISPOSICAO if hasattr(arbiter, "REGUA_DISPOSICAO")
+      else "vinculo" in motor.conhecimento.declaracao.REGUA_DISPOSICAO)
+# A redação foi ESCOLHIDA POR MEDIÇÃO (tests/exploracao/sondagem_vinculo_regua.py,
+# 2026-09-05): duas propostas × três cenários × 5 rodadas contra o llama3.1:8b.
+#   sem vínculo (controle):  estranho 5.0 | irmã 5.0 | irmã+mágoa 0.0
+#   P1 passo próprio:        estranho 5.0 | irmã 8.0 | irmã+mágoa 5.0   <- vence
+#   P2 dentro do afeto:      estranho 5.0 | irmã 8.0 | irmã+mágoa 2.0
+# A linha do CONFLITO decide: só o P1 sustenta a ortogonalidade — o irmão de quem se
+# guarda mágoa fica em 5.0 em vez de desabar a 0.0. No P2 os eixos quase colapsam.
+_regua = motor.conhecimento.declaracao.REGUA_DISPOSICAO
+check("H2: a régua diz que vínculo é FATO, distinto de sentimento",
+      "FATO, não sentimento" in _regua)
+check("H3: a régua manda NÃO inventar vínculo quando o campo não vier",
+      "não o invente" in _regua)
+check("H4: a régua diz que os dois eixos contam JUNTAS",
+      "contam JUNTAS" in _regua)
+
+print("\n--- Bloco I: os DOIS LADOS na face do Árbitro (US3/US4) ---------------")
+
+_face = arbiter._context_for_prompt(motor.get_context("bram-p65"))
+_pres = {p["name"]: p for p in _face["outros_presentes"]}
+
+check("I1: o Árbitro vê o vínculo QUE VOCÊ declarou",
+      _pres.get("Hulda", {}).get("vinculo_seu_por_ele") == "irmã")
+check("I2: o Árbitro vê o vínculo que o OUTRO declarou — o lado que você não sabe",
+      _pres.get("Doncel", {}).get("vinculo_dele_por_voce") == "primo")
+check("I3: a ASSIMETRIA aparece: a Hulda não declarou nada de volta",
+      "vinculo_dele_por_voce" not in _pres.get("Hulda", {}))
+check("I4: e o Doncel não recebeu vínculo seu (você não declarou nada sobre ele)",
+      "vinculo_seu_por_ele" not in _pres.get("Doncel", {}))
+
+print("\n--- Bloco J: a ORTOGONALIDADE, guardada por teste (SC-006) ------------")
+
+# O guarda que impede o vínculo de virar aritmética. Se alguém um dia somar o vínculo
+# num DC "pra dar peso", este bloco fica vermelho — e é a única barreira contra os dois
+# eixos voltarem a colapsar num só, que é o defeito que a spec inteira existe para
+# desfazer.
+_dc_sem = motor.persuade_dc(5)
+_bram_fm, _ = motor.read_doc(motor.find_character_folder("bram-p65") / "character.md")
+check("J1: persuade_dc não conhece vínculo — mesma nota, mesmo DC",
+      motor.persuade_dc(5) == _dc_sem)
+check("J2: `trade_dc` continua com a assinatura de 4 termos (sem vínculo)",
+      motor.trade_dc.__code__.co_argcount == 4,
+      f"argcount={motor.trade_dc.__code__.co_argcount}")
+check("J3: nenhuma primitiva de vínculo devolve número",
+      all(not isinstance(v, (int, float))
+          for v in [vinculos.bond_toward("bram-p65", "hulda-p65")] if v is not None))
+
 print()
 shutil.rmtree(_tmp, ignore_errors=True)
 if falhas:

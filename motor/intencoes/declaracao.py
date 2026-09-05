@@ -32,21 +32,14 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
 SET_INTENTION = tool_spec(ToolSpec(
     names=("set_intention",),
     description=(
-        "Registra ou atualiza um COMPROMISSO de médio/longo prazo do PRÓPRIO "
-        "personagem — uma promessa, um plano, um objetivo que sobrevive a esta "
-        "cena. Chame quando a ação que você está resolvendo ESTABELECE, "
-        "ATUALIZA ou ENCERRA algo assim (prometeu ajudar alguém, descobriu que "
-        "o plano não faz mais sentido) — INCLUSIVE quando o personagem resolve "
-        "algo SOZINHO, sem prometer a ninguém: não precisa de outra pessoa "
-        "envolvida. O sinal é a fala se ler como uma DECISÃO que passa a valer "
-        "dali pra frente ('resolvo que...', 'decido que, a partir de agora...'), "
-        "não apenas 'ele foi fazer algo' (um mandado comum que se esgota neste "
-        "turno). NÃO é para toda ação — a maioria dos turnos não precisa desta "
-        "tool, e um mandado do tipo 'vá buscar isto'/'converse com aquele' NÃO "
-        "vira intenção sozinho. Para atualizar o progresso ou encerrar (status: "
-        "concluida/abandonada) uma intenção já existente, informe intention_id "
-        "(ids ativos do personagem vêm no contexto) e reescreva content por "
-        "inteiro — nunca um trecho. Sem intention_id, cria uma intenção nova."
+        "Use para registrar ou atualizar um COMPROMISSO de médio/longo prazo do "
+        "PRÓPRIO personagem — algo concreto que sobrevive a esta cena, nomeando "
+        "com quem ou com o quê. Chame quando ele DECIDE algo que passa a valer "
+        "dali pra frente, sozinho ou com outra pessoa — não para um mandado "
+        "comum que se esgota neste turno. Sem intention_id, cria um compromisso "
+        "novo. Com intention_id (um dos ativos, vem no contexto), atualiza ou "
+        "encerra (status: concluida/abandonada) — reescreva content por "
+        "inteiro, nunca um trecho."
     ),
     params={"intention_id": {"type": "string"}, "content": {"type": "string"},
             "status": {"type": "string"}},

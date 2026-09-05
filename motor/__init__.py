@@ -41,6 +41,17 @@ from . import juizo  # noqa: F401
 from . import trabalho  # noqa: F401
 
 
+# --- spec 066: o VÍNCULO (nível 0) — a CAMADA 2, fato declarado. Mora fora de
+# `memoria/` de propósito: afeto acumula e decai, vínculo não, e juntá-los reabriria a
+# conflação que a spec desfez. Ver o cabeçalho de `vinculos.py`.
+from . import vinculos  # noqa: F401
+from .vinculos import (  # noqa: F401
+    bond_toward,
+    bonds_of,
+    bonds_toward_me,
+)
+
+
 # --- extraído para motor/turno.py (spec 021) ---
 from .turno import (  # noqa: F401
     apply_resolution,

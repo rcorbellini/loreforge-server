@@ -60,21 +60,35 @@ ENTITY_FILENAMES = ("location.md", "character.md", "route.md", "item.md", "objec
 
 
 # As arestas de FATO lidas do frontmatter: campo -> nome da aresta. O valor pode ser
-# um id ou uma lista de ids; ambos viram arestas.
+# um id, uma lista de ids, ou uma LISTA DE MAPAS — neste último caso o valor aqui é a
+# tupla `(nome_da_aresta, chave_do_id)`, e `_ids_de` extrai o id por essa chave.
 #
 # `ouvido_de` está aqui e é FATO — de propósito, e é a guarda estrutural do Invariante 11
 # ("secreto até do Árbitro"). Mecânica social atravessa CRENÇA, e crença sai de `envolve`.
 # Ninguém pede `reverso(x, "ouviu_de")` sem estar escrevendo uma capacidade de revelação,
 # que é uma decisão consciente e revisável — não um acidente de travessia genérica.
+#
+# `bonds` (spec 066) é a CAMADA 2 — fato DECLARADO, a primeira relação de fato entre
+# entidades que o mundo tem. Todas as outras relações do jogo (`dono`, `sentiment_toward`,
+# `familiarity_with`, `knows_route`...) têm `(observador, alvo)` na chave e são CRENÇA
+# derivada de memória. Esta não: ela é declarada, não acumula e não decai. O reverso é o
+# que o Árbitro usa para ver os DOIS lados — nunca o contexto, que é vista subjetiva.
+#
+# `prerequisites` (spec 066): estava aqui desde a 063 mas **nunca montou aresta nenhuma**,
+# em silêncio — o valor no mundo é lista de mapas (`[{id: ..., type: ...}]`) e o `_ids_de`
+# de então só entendia string e lista de strings, devolvendo `[]`. Ninguém consumia
+# `pre_requisito`, então o defeito era latente; corrigido junto porque a 066 mexe nesta
+# exata linha, e contornar defeito de primitivo é o que o projeto proíbe.
 _ARESTAS_FM = {
     "involved": "envolve",
     "about": "sobre",
     "ouvido_de": "ouviu_de",
     "from": "rota_de",
     "to": "rota_para",
-    "prerequisites": "pre_requisito",
+    "prerequisites": ("pre_requisito", "id"),
     "memoria_id": "memoria_de",
     "intention_id": "intencao_de",
+    "bonds": ("vinculo", "target"),
 }
 
 
@@ -181,11 +195,33 @@ def _copia(valor):
     return valor
 
 
-def _ids_de(valor) -> list:
+def _ids_de(valor, chave: str | None = None) -> list:
+    """Os ids que um valor de frontmatter declara.
+
+    Três formas, e a terceira é a que a spec 066 acrescentou:
+      - `"elga"`                        -> um id
+      - `["elga", "coppo"]`             -> vários
+      - `[{"target": "elga", ...}, ...]` -> lista de MAPAS, com `chave="target"`
+
+    A terceira forma devolvia `[]` em silêncio antes da 066 — a aresta simplesmente não
+    era montada, sem erro e sem teste vermelho. `prerequisites` vivia assim desde a 063.
+    Guardado por `selftest_phase65.py`, porque a regressão não faria barulho nenhum.
+
+    Sem `chave`, mapas são ignorados: um campo de lista-de-mapas que ninguém registrou
+    com chave não vira aresta por acidente.
+    """
     if isinstance(valor, str):
         return [valor] if valor else []
     if isinstance(valor, (list, tuple)):
-        return [v for v in valor if isinstance(v, str) and v]
+        saida = []
+        for v in valor:
+            if isinstance(v, str) and v:
+                saida.append(v)
+            elif chave and isinstance(v, dict):
+                alvo = v.get(chave)
+                if isinstance(alvo, str) and alvo:
+                    saida.append(alvo)
+        return saida
     return []
 
 
@@ -267,8 +303,10 @@ def _ligar(est: _Estado, raiz: Path) -> None:
         est.pai[no.id] = pid
         if pid is not None:
             est.filhos.setdefault(pid, []).append(no.id)
-        for campo, tipo in _ARESTAS_FM.items():
-            for alvo in _ids_de(no.fm.get(campo)):
+        for campo, decl in _ARESTAS_FM.items():
+            # `decl` é o nome da aresta, ou (nome, chave) quando o campo é lista de mapas
+            tipo, chave = decl if isinstance(decl, tuple) else (decl, None)
+            for alvo in _ids_de(no.fm.get(campo), chave):
                 if alvo == no.id:
                     continue
                 est.arestas.setdefault((no.id, tipo), []).append(alvo)

@@ -253,6 +253,74 @@ def _validate_character(fm: dict) -> list[str]:
                         f"character: 'body.{slot}' deve ser inteiro >= 0 (capacidade) "
                         f"ou um mapa {{capacidade, pega}}."
                     )
+    errors.extend(_validate_bonds(fm))
+    return errors
+
+
+# Vocabulário que o vínculo NÃO pode expressar (spec 066, FR-006). Não é polícia de
+# estilo: as três relações abaixo JÁ TÊM RESPOSTA no mundo, por outra via —
+#
+#   posse            -> `dono()`, que é CRENÇA por observador, derivada de memória
+#   autoria de craft -> memória com `evento: craft`
+#   dívida           -> promessa (spec 027): memória nos dois lados + intenção em quem deve
+#
+# Deixar o vínculo declarar qualquer uma delas criaria a SEGUNDA VERDADE que o
+# Invariante 10/17 proíbe: duas fontes para a mesma pergunta, uma declarada e uma
+# derivada, discordando em silêncio — e a declarada venceria por ser mais barata de ler.
+_BONDS_PROIBIDOS = (
+    "dono", "dona", "proprietário", "proprietaria", "proprietário",
+    "meu", "minha", "pertence",
+    "forjei", "fiz", "criador", "criadora", "autor", "autora",
+    "devedor", "devedora", "credor", "credora", "dívida", "divida", "deve-me",
+)
+
+
+def _validate_bonds(fm: dict) -> list[str]:
+    """O bloco `bonds` (spec 066) — a CAMADA 2, fato declarado.
+
+    OPCIONAL por desenho, e ausente em 100% do mundo no dia em que nasceu: quem cria um
+    personagem sem saber que ele existe segue criando como sempre (Princípio XI, o
+    critério do criador).
+
+    O `target` inexistente é REPORTADO, não bloqueante — `write_doc` valida a cada
+    escrita de personagem, e um alvo que ainda não existe (ou que foi removido) não pode
+    impedir o mundo de girar. Mesmo espírito de `name_of`/`dono`, que já tratam aresta
+    pendente como ausência, não como erro.
+    """
+    bonds = fm.get("bonds")
+    if bonds is None:
+        return []
+    if not isinstance(bonds, list):
+        return ["character: 'bonds' deve ser uma lista."]
+    errors: list[str] = []
+    proprio = fm.get("id")
+    vistos = set()
+    for i, b in enumerate(bonds):
+        onde = f"bonds[{i}]"
+        if not isinstance(b, dict):
+            errors.append(f"character: '{onde}' deve ser um mapa {{target, label}}.")
+            continue
+        alvo = b.get("target")
+        rotulo = b.get("label")
+        if not isinstance(alvo, str) or not alvo.strip():
+            errors.append(f"character: '{onde}.target' deve ser o id de uma entidade.")
+        elif alvo == proprio:
+            errors.append(f"character: '{onde}.target' não pode ser o próprio personagem.")
+        elif alvo in vistos:
+            errors.append(f"character: '{onde}.target' repetido: '{alvo}'.")
+        else:
+            vistos.add(alvo)
+        if not isinstance(rotulo, str) or not rotulo.strip():
+            # Um vínculo sem palavra não diz nada a quem lê: a aresta existiria e a face
+            # não teria o que mostrar.
+            errors.append(f"character: '{onde}.label' não pode ser vazio.")
+        elif any(p in rotulo.lower().split() or p in rotulo.lower()
+                 for p in _BONDS_PROIBIDOS):
+            errors.append(
+                f"character: '{onde}.label' não pode expressar posse, autoria de craft "
+                f"nem dívida ('{rotulo}') — o mundo já responde a isso por dono(), "
+                f"memória de craft e promessa (spec 066, FR-006)."
+            )
     return errors
 
 

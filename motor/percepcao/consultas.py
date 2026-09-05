@@ -17,7 +17,7 @@ import frontmatter
 import validator
 
 from .. import (deslocamento, fisica, intencoes, io, memoria, registro,
-                rotas, trabalho)
+                rotas, trabalho, vinculos)
 from ..deslocamento import (
     lazy_evaluate,
 )
@@ -93,6 +93,14 @@ from ..rotas import (
 )
 
 
+# spec 066: o corte abaixo do qual o afeto NÃO desce. É o MESMO 2 que `sentiment_label`
+# usa como fronteira de "guarda um leve incômodo"/"nutre alguma simpatia", e o mesmo que
+# o Árbitro já aplicava em `afeto_por_lugar`/`afeto_por_voce` — um lugar só decide o
+# limiar. Abaixo dele a única faixa disponível seria "sem história que pese num sentido
+# ou noutro", que não compõe frase e só inflaria o contexto.
+_AFETO_PISO = 2
+
+
 def item_physics(fm: dict, folder: Path | None = None) -> dict:
     """Bloco físico de um item para o contexto (Mente e guarda do Árbitro)."""
     container = fm.get("container")
@@ -136,7 +144,7 @@ def _character_summary(folder: Path, self_id: str) -> dict:
     pega = grasp_slot_of(fm)
     hands = (slots_in_use(folder).get(pega) or []) if pega else []
     cap_pega = slot_capacity(fm, pega) if pega else 0
-    return {
+    bloco = {
         "id": fm.get("id"),
         "name": fm.get("name"),
         "state": "self" if fm.get("id") == self_id else "idle",
@@ -162,6 +170,31 @@ def _character_summary(folder: Path, self_id: str) -> dict:
             "carga_livre_kg": round(carry_capacity(fm) - carried_weight(folder), 3),
         },
     }
+    # spec 066 — O FATO NA ENTIDADE A QUE ELE SE REFERE.
+    #
+    # `bond` é a CAMADA 2 (fato declarado); `sentiment` é a CAMADA 3 (crença derivada).
+    # Os dois eixos são ORTOGONAIS: o irmão que se odeia tem `bond` e `sentiment`
+    # negativo ao mesmo tempo, e é a célula que motivou a spec. Nenhum dos dois soma no
+    # outro, e nenhum entra em DC (FR-017, FR-018).
+    #
+    # Só desce o que ESTE personagem pode saber (o princípio do contrato 1). O que o
+    # outro declarou sobre ele NÃO entra — é o que sustenta o enjeitado, e quem precisa
+    # dos dois lados é o Árbitro, que chama `bonds_toward_me` por conta própria.
+    #
+    # AUSENTE, nunca `None`: campo que não se aplica não aparece. É o contrato de API
+    # que `tests/contrato_get_context.py` guarda.
+    if self_id and fm.get("id") and fm.get("id") != self_id:
+        rotulo = vinculos.bond_toward(self_id, fm.get("id"))
+        if rotulo:
+            bloco["bond"] = rotulo
+        # O NÚMERO MORRE AQUI (Princípio V): sai o rótulo, nunca o saldo. E só quando
+        # PESA — a banda neutra é omitida, pelo mesmo corte que `afeto_por_lugar` já usa
+        # no Árbitro. Isso enxuga o contexto e evita a única faixa de `sentiment_label`
+        # que não compõe frase ("sem história que pese num sentido ou noutro").
+        saldo = sentiment_toward(self_id, fm.get("id"))
+        if abs(saldo) >= _AFETO_PISO:
+            bloco["sentiment"] = sentiment_label(saldo)
+    return bloco
 
 
 # --------------------------------------------------------------------------- #
@@ -589,13 +622,31 @@ def get_context(character_id: str) -> dict:
         | {i["id"] for i in items_present if i.get("id")}
         | {o["id"] for o in objects_present if o.get("id")})
 
+    # spec 066 — O VÍNCULO EM TODA ENTIDADE, num lugar só.
+    #
+    # Carimbado aqui, e não dentro de cada laço, de propósito: é o que faz `bond`
+    # significar EXATAMENTE a mesma coisa em `characters_present`, `items_present`,
+    # `objects_present` e `location`, sem três implementações para divergirem depois
+    # (FR-008; guardado por `tests/contrato_get_context.py`).
+    #
+    # `characters_present` já foi carimbado em `_character_summary`, junto do
+    # `sentiment` — lá o vínculo anda com a crença, e aqui só com o fato.
+    local = {
+        "id": place_fm.get("id"),
+        "name": place_fm.get("name"),
+        "narrative": place_body,
+        "pertence_a": _location_lineage(place_folder),
+    }
+    for entrada in (*items_present, *objects_present, local):
+        alvo = entrada.get("id")
+        if not alvo:
+            continue
+        rotulo = vinculos.bond_toward(character_id, alvo)
+        if rotulo:                     # AUSENTE, nunca None (contrato de API)
+            entrada["bond"] = rotulo
+
     return {
-        "location": {
-            "id": place_fm.get("id"),
-            "name": place_fm.get("name"),
-            "narrative": place_body,
-            "pertence_a": _location_lineage(place_folder),
-        },
+        "location": local,
         "in_transit": in_transit,
         "routes": routes,
         "characters_present": characters_present,

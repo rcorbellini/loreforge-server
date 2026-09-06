@@ -430,7 +430,7 @@ try:
     check("contêiner ESCANCARADO (fechado: false): conteúdo fica à mostra",
           FRASCO in vistos_ab and ANEL in vistos_ab, str(sorted(vistos_ab)))
     check("o que está à mostra diz onde está",
-          any(i.get("a_mostra_em") == CAIXA
+          any(i.get("on_display_in") == CAIXA
               for i in motor._visible_item_refs(motor.find_character_folder(ELGA))))
     cfm["state"] = {k: v for k, v in cfm["state"].items() if k != "fechado"}
     motor.write_doc(cf, cfm, cbody)

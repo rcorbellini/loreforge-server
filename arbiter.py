@@ -347,7 +347,7 @@ def _item_entry(it: dict, porter: str | None, in_object: str | None = None) -> d
             "value": f.get("value"),
             "slot": f.get("slot"),
         })(it.get("physics") or it),
-        "estado": it.get("estado"),
+        "estado": it.get("carried_as"),
         "porter": porter,
         "in_object": in_object,
         # spec 052: peça em processo (lâmina na bigorna, panela no fogo) — carrega o

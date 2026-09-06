@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.1.0"
+__version__ = "3.1.1"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,13 @@ __version__ = "3.1.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.1.1": "spec 067, PATCH — duas quebras da forma uniforme que so apareceram ao "
+            "olhar o payload real: (1) a linhagem `belongs_to` ainda chamava a prosa de "
+            "`narrative`, e o conector JA lia `.prose` — estava recebendo undefined em "
+            "silencio; (2) os itens em `carrying`/`inventory` traziam a fisica SOLTA "
+            "enquanto `scene.items` a trazia agrupada: o MESMO tipo de coisa com duas "
+            "formas, que e exatamente o que o FR-004 proibe. Tambem `estado` -> "
+            "`carried_as` (held/worn/stowed) e `a_mostra_em` -> `on_display_in`.",
     "3.1.0": "spec 067, revisao — A PROSA GRADUADA EM TRES CAMADAS, nao duas. "
             "Conhecer alguem era BINARIO: uma UNICA memoria viva abria a ficha "
             "inteira. A Mira tem uma lembranca da Sarga e lia 'uma carga sumiu na "

@@ -515,15 +515,17 @@ def _visible_item_refs(char_folder: Path) -> list[dict]:
     for child, fm in _direct_items(char_folder):
         if not _is_valid(fm):
             continue
+        # spec 067: FORMA UNIFORME — a mesma de `scene.items`. Antes a física vinha
+        # solta aqui e agrupada lá, para o MESMO tipo de coisa.
         refs.append({"id": fm.get("id"), "name": fm.get("name"),
-                     **item_physics(fm, child)})
+                     "physics": item_physics(fm, child)})
         if _is_wide_open(fm):
             for neto, nfm in _walk_open_items(child):
                 if not _is_valid(nfm):
                     continue
                 refs.append({"id": nfm.get("id"), "name": nfm.get("name"),
-                             "a_mostra_em": fm.get("id"),
-                             **item_physics(nfm, neto)})
+                             "on_display_in": fm.get("id"),
+                             "physics": item_physics(nfm, neto)})
     return refs
 
 
@@ -547,13 +549,13 @@ def _nested_item_refs(container_folder: Path) -> list[dict]:
         if not _is_valid(fm):
             continue
         ref = {"id": fm.get("id"), "name": fm.get("name"),
-               **item_physics(fm, child)}
+               "physics": item_physics(fm, child)}
         if is_char:
             if child.parent == container_folder:
                 slot = item_slot(fm)
-                ref["estado"] = "segurado" if slot in (pega, None) else "vestido"
+                ref["carried_as"] = "held" if slot in (pega, None) else "worn"
             else:
-                ref["estado"] = "guardado"
+                ref["carried_as"] = "stowed"
         refs.append(ref)
     return refs
 
@@ -599,7 +601,7 @@ def _location_lineage(place_folder: Path) -> dict | None:
     não é dado novo em frontmatter algum. Carrega também o `narrative` (body)
     de cada nível — não só pra UI (que só precisa de `name`), mas pra A Mente
     poder tecer a cidade/região na narração sem repetir prosa em cada location
-    filha (mesmo canal de `location.narrative`, um nível acima).
+    filha (mesmo canal de `scene.place.prose`, um nível acima).
     """
     cur = place_folder.parent
     while cur != WORLD_DIR and cur.parent != cur:
@@ -610,7 +612,7 @@ def _location_lineage(place_folder: Path) -> dict | None:
                 return {
                     "id": fm["id"],
                     "name": fm.get("name"),
-                    "narrative": body,
+                    "prose": body,
                     "belongs_to": _location_lineage(cur),
                 }
         cur = cur.parent

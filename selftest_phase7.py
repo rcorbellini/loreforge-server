@@ -128,9 +128,9 @@ try:
     warns = motor.migration_warnings()
     check("14: item legado junto ao personagem vira AVISO de migração (não erro)",
           any(w["id"] == "bolsa-de-couro" for w in warns))
-    fis0 = motor.get_context("torvin-ferreiro")["self"]["body_status"]
+    fis0 = motor.get_context("torvin-ferreiro")["self"]["physics"]
     check("14: segurado de cortesia não conta slots nem carga",
-          fis0["peso_carregado_kg"] == 0.0 and fis0["free_hands"] == 2)
+          fis0["carried_weight_kg"] == 0.0 and fis0["free_hands"] == 2)
 
     # ===================== US1 — equip (cenários 3, 4) ======================= #
     out = motor.apply_resolution("torvin-ferreiro", res(
@@ -201,7 +201,7 @@ try:
         item_transfers=[{"item": "seixo-preto", "to": "taverna-do-gancho"}]))
 
     ctx_elga = motor.get_context("elga-taverneira")
-    torvin_vis = next(c for c in ctx_elga["characters_present"]
+    torvin_vis = next(c for c in ctx_elga["scene"]["characters"]
                       if c["id"] == "torvin-ferreiro")
     vis_ids = {i["id"] for i in torvin_vis["carrying"]}
     check("13: terceiros veem o vestido (calça), não o guardado (moeda)",
@@ -447,11 +447,13 @@ try:
     check("manifest: tools por verbo presentes na cena",
           {"take", "give", "stow", "drop", "unequip", "mutate",
            "create_memory", "narrate"} <= tools and "transfer_item" not in tools)
-    ctx_vazio = {"characters_present": [{"id": "a", "name": "A"}],
-                 "objects_present": [], "items_present": [],
-                 "self": {"id": "a", "inventory": [], "body_status": {}},
-                 "location": {"id": "x", "name": "X"}, "routes": [],
-                 "in_transit": True}
+    ctx_vazio = {
+        "self": {"id": "a", "inventory": [], "physics": {},
+                 "transit": {"route_id": "r", "route_name": "R"}},
+        "scene": {"characters": [{"id": "a", "name": "A"}],
+                  "objects": [], "items": [],
+                  "place": {"id": "x", "name": "X"}, "exits": []},
+    }
     tools_vazio = {t["name"] for t in arbiter.build_tools(ctx_vazio)}
     check("manifest: cena sem itens omite os verbos de item",
           not ({"take", "give", "stow", "drop", "shove", "equip",

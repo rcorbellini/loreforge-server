@@ -12,15 +12,15 @@ _i = _M.index("const ESCOLHER_SYSTEM = `") + 25
 SYS = _M[_i:_M.index("`;", _i)]
 
 def payload(ctx):
-    s,l=ctx["self"],ctx["location"]
-    return {"personalidade":s.get("body"),"necessidade":s.get("necessidade"),
+    s,l=ctx["self"],ctx["scene"]["place"]
+    return {"personalidade":s.get("body"),"needs":s.get("needs"),
       "contexto":{"local":l.get("name"),"descricao":l.get("narrative"),
-        "presentes":[{"id":c.get("id"),"nome":c.get("name"),"fazendo":c.get("action")} for c in ctx["characters_present"] if c.get("state")!="self"],
-        "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["objects_present"]],
-        "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["items_present"]],
+        "presentes":[{"id":c.get("id"),"nome":c.get("name"),"fazendo":c.get("action")} for c in ctx["scene"]["characters"] if c.get("state")!="self"],
+        "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["scene"]["objects"]],
+        "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["scene"]["items"]],
         "inventario":[{"id":i.get("id"),"nome":i.get("name")} for i in s["inventory"]]},
-      "memorias":[m.get("summary") or m.get("content") for m in (ctx.get("memories") or [])][:20],
-      "rotas_disponiveis":[{"id":r.get("id"),"nome":r.get("name"),"para":r.get("destination_name")} for r in ctx["routes"]]}
+      "memorias":[m.get("summary") or m.get("content") for m in (ctx["self"].get("memories") or [])][:20],
+      "rotas_disponiveis":[{"id":r.get("id"),"nome":r.get("name"),"para":r.get("destination_name")} for r in ctx["scene"]["exits"]]}
 
 def tools_de(ctx):
     return [{"type":"function","function":{"name":c["nome"],"description":c.get("descricao") or "",

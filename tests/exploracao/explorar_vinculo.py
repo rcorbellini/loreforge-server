@@ -209,7 +209,7 @@ _mk("pr-ator", "Protagonista", bonds="bonds:\n  - target: pr-alvo\n    label: ir
 _mk("pr-alvo", "A Irmã")
 indice.sincronizar()
 ctx = motor.get_context("pr-ator")
-_alvo = {c["id"]: c for c in ctx["characters_present"]}["pr-alvo"]
+_alvo = {c["id"]: c for c in ctx["scene"]["characters"]}["pr-alvo"]
 print(f"    na cena: bond={_alvo.get('bond')!r}")
 
 # ela se move para outro lugar — o vínculo some da cena?
@@ -218,7 +218,7 @@ if outro.exists():
     motor.move_entity(motor.find_character_folder("pr-alvo"), outro / "pr-alvo")
     indice.sincronizar()
     ctx2 = motor.get_context("pr-ator")
-    ainda = any(c["id"] == "pr-alvo" for c in ctx2["characters_present"])
+    ainda = any(c["id"] == "pr-alvo" for c in ctx2["scene"]["characters"])
     print(f"    depois de ela sair da cena, aparece? {ainda}")
     print(f"    mas a primitiva ainda sabe: {vinculos.bond_toward('pr-ator','pr-alvo')!r}")
     achado("confirmação positiva",

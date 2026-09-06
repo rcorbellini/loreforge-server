@@ -70,7 +70,7 @@ try:
     check("US4#1: novo character aparece no seletor", "aprendiz-goro" in ids)
     ctx_goro = motor.get_context("aprendiz-goro")
     check("US4#1: novo character na location certa",
-          ctx_goro["location"]["id"] == "forja-de-ferro")
+          ctx_goro["scene"]["place"]["id"] == "forja-de-ferro")
     check("US4#1: mundo continua íntegro", motor.validate_world() == [])
 
     # --- US4 #2: route inválida (sem 'from') rejeitada com motivo ----------- #
@@ -92,7 +92,7 @@ try:
           bool(quebrada) and any("from" in e for e in quebrada[0]["errors"]),
           str(quebrada))
     # não corrompe: rota quebrada não aparece como saída da taverna
-    taverna_routes = {r["id"] for r in motor.get_context("torvin-ferreiro")["routes"]}
+    taverna_routes = {r["id"] for r in motor.get_context("torvin-ferreiro")["scene"]["exits"]}
     check("US4#2: rota inválida fora das saídas", "rota-quebrada" not in taverna_routes)
     check("US4#2: rota válida segue disponível", "portao-lateral" in taverna_routes)
 
@@ -109,7 +109,7 @@ try:
            "---\n\nFaltam os atributos.\n")
     ids2 = {c["id"] for c in motor.list_characters()}
     check("FR-010: character inválido fora do seletor", "quebrado" not in ids2)
-    present = {c["id"] for c in motor.get_context("torvin-ferreiro")["characters_present"]}
+    present = {c["id"] for c in motor.get_context("torvin-ferreiro")["scene"]["characters"]}
     check("FR-010: character inválido não aparece na cena", "quebrado" not in present)
     try:
         motor.find_character_folder("quebrado")
@@ -129,7 +129,7 @@ try:
 
     ctx_t = motor.get_context("torvin-ferreiro")
     check("US4#3: personagem relocado para a nova location",
-          ctx_t["location"]["id"] == "forja-de-ferro")
+          ctx_t["scene"]["place"]["id"] == "forja-de-ferro")
     inv = motor.get_inventory("torvin-ferreiro")
     bag = inv["children"][0] if inv["children"] else {}
     check("US4#3: itens vieram junto (bolsa+frasco)",

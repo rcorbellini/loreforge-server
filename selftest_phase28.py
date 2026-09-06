@@ -98,7 +98,7 @@ check("contexto: get_active_intentions lista a intenção ativa",
 ctx = motor.get_context(TOR)
 check("contexto: get_context()['intentions'] traz {id, status, content}",
       any(i["id"] == iid and i["status"] == "ativa"
-          and "tomates" in i["content"] for i in ctx.get("intentions") or []))
+          and "tomates" in i["content"] for i in ctx["self"].get("intentions") or []))
 
 # 3) atualizar — intention_id existente reescreve NO LUGAR
 out2 = motor.apply_resolution(TOR, {"intentions": [

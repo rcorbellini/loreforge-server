@@ -161,8 +161,9 @@ check("a tool passa a ser oferecida",
 # nenhum, mesmo já estando no enum que a Mente vê. É o caso real medido:
 # forja-de-ferro/porto-negro/taverna-do-gancho apareciam com id cru.
 check("SPEC 062: destino alcançável SEM memória nenhuma tem nome em `known`",
-      motor.get_context(TORVIN).get("known", {}).get(MIRANTE) == "Mirante do Corvo",
-      str(motor.get_context(TORVIN).get("known", {}).get(MIRANTE)))
+      next((k["name"] for k in motor.get_context(TORVIN)["self"]["known"]
+            if k["id"] == MIRANTE), None) == "Mirante do Corvo",
+      str(motor.get_context(TORVIN)["self"]["known"]))
 
 # o saber VENCE: é a distinção que a spec 013 construiu, valendo na prática
 for mem in motor._iter_memories(TORVIN):

@@ -422,6 +422,7 @@ from .fisica import (  # noqa: F401
     body_weight_of,
     carried_weight,
     carry_capacity,
+    folga_de_carga,
     check_carga,
     check_carga_livre,
     check_empurrar,

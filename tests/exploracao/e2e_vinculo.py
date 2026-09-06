@@ -64,7 +64,7 @@ _mk("e2e-adotante", "O Adotante",
 indice.sincronizar()
 
 ctx = motor.get_context("e2e-ator")
-por_id = {c["id"]: c for c in ctx["characters_present"]}
+por_id = {c["id"]: c for c in ctx["scene"]["characters"]}
 obs("vínculo com a irmã", por_id["e2e-irma"].get("bond"))
 obs("vínculo com o estranho (deve ser ausente)", "bond" in por_id["e2e-estranho"])
 obs("o Adotante declarou 'filho' sobre o Ator; o Ator vê?",
@@ -84,7 +84,7 @@ for i in range(3):
                        valence={"e2e-irma": "negativa"})
 indice.sincronizar()
 ctx2 = motor.get_context("e2e-ator")
-irma = {c["id"]: c for c in ctx2["characters_present"]}["e2e-irma"]
+irma = {c["id"]: c for c in ctx2["scene"]["characters"]}["e2e-irma"]
 obs("bond", irma.get("bond"))
 obs("sentiment", irma.get("sentiment"))
 obs("saldo cru (só para conferir que NÃO desce)",

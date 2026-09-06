@@ -111,12 +111,12 @@ try:
     motor.write_doc(elga_folder / "memories" / "mem-vencida.md", fm_exp, "já passou")
 
     ctx = motor.get_context("elga-taverneira")  # dispara lazy: expira a vencida
-    intensities = [m["intensity"] for m in ctx["memories"]]
+    intensities = [m["intensity"] for m in ctx["self"]["memories"]]
     order = {"giant": 0, "large": 1, "medium": 2, "small": 3}
     check("memórias ordenadas por intensidade",
           intensities == sorted(intensities, key=lambda x: order.get(x, 9)), str(intensities))
     check("giant vem antes de small", intensities and intensities[0] == "giant")
-    contents = [m["content"] for m in ctx["memories"]]
+    contents = [m["content"] for m in ctx["self"]["memories"]]
     check("memória vencida excluída do contexto", "já passou" not in contents)
 
     # --- saliência: recente e/ou forte = vívida; antiga = latente ---------- #
@@ -132,7 +132,7 @@ try:
 
     # o CONTEXTO passa por evocação (spec 013): latente que a cena não evoca não
     # desce. A saliência em si se lê da pasta, sem o filtro.
-    ctx_ids = {m["id"] for m in motor.get_context("elga-taverneira")["memories"]}
+    ctx_ids = {m["id"] for m in motor.get_context("elga-taverneira")["self"]["memories"]}
     check("evocação: vívida desce sempre", "mem-recente" in ctx_ids)
     check("evocação: latente que ninguém evoca NÃO desce", "mem-antiga" not in ctx_ids)
 

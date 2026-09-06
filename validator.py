@@ -188,6 +188,16 @@ def _validate_character(fm: dict) -> list[str]:
         # — o retrato servido do próprio disco, spec 056: URL de terceiro expira).
         if not isinstance(image_url, str) or not image_url.startswith(("http://", "https://", "/")):
             errors.append("character: 'image_url' deve ser uma URL http(s) ou um caminho começando com '/'.")
+    # spec 067: `conditions` é LISTA. Estava como string em 3 de 38 personagens do
+    # mundo — dois com o literal `'[]'` e um com uma frase de ação que alguma mutação
+    # gravou no campo errado. O validador não checava o tipo, e um conector que fizesse
+    # `conditions.forEach` recebia caracteres soltos.
+    _cond = (fm.get("status") or {}).get("conditions") if isinstance(fm.get("status"), dict) else None
+    if _cond is not None and not isinstance(_cond, list):
+        errors.append(
+            f"character: 'status.conditions' deve ser uma lista "
+            f"(veio {type(_cond).__name__}: {_cond!r:.60})."
+        )
     status = fm.get("status")
     if status is not None and not isinstance(status, dict):
         errors.append("character: 'status' deve ser um mapa.")

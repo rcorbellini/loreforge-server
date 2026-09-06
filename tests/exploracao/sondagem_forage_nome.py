@@ -48,11 +48,11 @@ tools_raw = (post("/api/mcp",{"jsonrpc":"2.0","id":1,"method":"tools/list",
 ctx = get(f"/api/context?character_id={CID}")
 user = (f"O que ele faz?\n\nINSTRUÇÃO: {INSTR}\n\n" + json.dumps({
     "personalidade": (ctx.get("self") or {}).get("description"),
-    "contexto": {"local": (ctx.get("location") or {}).get("name"),
-        "descricao": (ctx.get("location") or {}).get("description"),
+    "contexto": {"local": (ctx["scene"].get("place") or {}).get("name"),
+        "descricao": (ctx["scene"].get("place") or {}).get("description"),
         "presentes": [c.get("name") for c in ctx.get("characters_present",[])],
-        "objetos_presentes": ctx.get("objects_present"),
-        "itens_presentes": ctx.get("items_present"),
+        "objetos_presentes": ctx["scene"].get("objects"),
+        "itens_presentes": ctx["scene"].get("items"),
         "inventario": (ctx.get("self") or {}).get("inventory")}}, ensure_ascii=False, indent=2))
 
 placar = {}

@@ -153,11 +153,11 @@ def _sing(name: str, args: dict, ctx) -> tuple[dict, bool]:
     ctx.sung_asked.add(memoria_id)
 
     info = memorias[memoria_id]
-    lugar = ctx.describe(ctx.place_id) or {"nome": ctx.context.get("location", {})
+    lugar = ctx.describe(ctx.place_id) or {"nome": ctx.context["scene"]["place"]
                                            .get("name")}
     plateia = [{"nome": p.get("name"), "fazendo": p.get("action"),
                "humor": p.get("mood")}
-              for p in (ctx.context.get("characters_present") or [])
+              for p in (ctx.context["scene"]["characters"])
               if p.get("id") != ctx.actor]
     payload = {"lembranca": info["conteudo"], "sobre": motor.name_of(info["sobre"]),
               "lugar": lugar, "plateia": plateia, "prosa": ctx.prosa}

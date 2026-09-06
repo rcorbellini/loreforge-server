@@ -81,7 +81,7 @@ def _brew(name: str, args: dict, ctx) -> tuple[dict, bool]:
         # o mapa por `ctx.objects[o]` levantaria KeyError no id do lugar.
         return ctx.err(f"'{recipiente}' não é um recipiente presente", "recipiente",
                        ctx.validos({o: ctx.objects.get(o)
-                                    or {"name": (ctx.context.get("location") or {}).get("name") or o}
+                                    or {"name": (ctx.context["scene"]["place"]).get("name") or o}
                                     for o in recipientes})), False
     chave = (tuple(sorted(ingredientes)), recipiente)
     if chave in ctx.brewed_asked:

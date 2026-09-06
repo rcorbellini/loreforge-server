@@ -380,13 +380,14 @@ def _equip(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return item, False
     # vestibilidade (item_nao_vestivel), posse-alheia (item_alheio) e "já vestido"
     # (no-op idempotente) são AUTORIDADE do executor agora (item 31): a recusa volta
-    # estruturada/corrigível. `veste_em` fica só como slot de destino do track.
-    veste = e.get("veste_em")
+    # estruturada/corrigível. O slot de destino do track sai da entrada do Árbitro,
+    # onde a spec 067 renomeou `veste_em` -> `worn_at`.
+    veste = e.get("worn_at")
     rej = ctx.apply_op_now("equip_ops", {"op": "equip", "item": item})
     if rej:
         return ctx.deny(item, ctx.actor, rej), False
     ctx.track_move(item, "char", ctx.actor, veste)
-    return {"ok": True, "aplicado": {"item": item, "veste_em": veste}}, False
+    return {"ok": True, "aplicado": {"item": item, "worn_at": veste}}, False
 
 
 def _unequip(name: str, args: dict, ctx) -> tuple[dict, bool]:

@@ -106,7 +106,7 @@ check("memória sem 'involved' devolve lista vazia, nunca None",
 check("memória sem 'about' devolve None", motor.memory_about(antigo) is None)
 ctx = motor.get_context(ELGA)
 check("memória antiga continua narrável no contexto",
-      any(m["id"] == "mem-sem-kind" for m in ctx["memories"]))
+      any(m["id"] == "mem-sem-kind" for m in ctx["self"]["memories"]))
 
 
 print("\n--- US1: o mundo responde o que o personagem sabe --------------------")
@@ -261,7 +261,7 @@ print("\n--- Corte de contexto: narração cortada, conhecimento inteiro -------
 ctx = motor.get_context(ELGA)
 check("SC-008a: NENHUMA memória de rota desce ao client",
       all(m.get("id") not in {r["id"] for r in rotas_de(ELGA)}
-          for m in ctx["memories"]))
+          for m in ctx["self"]["memories"]))
 
 # volume: centenas de memórias num personagem só
 elga_folder = motor.find_character_folder(ELGA)
@@ -277,8 +277,8 @@ for i in range(300):
 
 ctx = motor.get_context(ELGA)
 check("SC-008: contexto continua utilizável com 300+ memórias",
-      len(ctx["memories"]) <= motor._MEMORY_CONTEXT_CAP,
-      f"{len(ctx['memories'])} memórias")
+      len(ctx["self"]["memories"]) <= motor._MEMORY_CONTEXT_CAP,
+      f"{len(ctx['self']['memories'])} memórias")
 
 # evocação: quem está presente puxa a lembrança de volta, mesmo antiga
 motor.write_doc(
@@ -290,7 +290,7 @@ motor.write_doc(
     "aconteceu algo com Torvin, há muito tempo")
 
 ctx = motor.get_context(ELGA)
-ids = {m["id"] for m in ctx["memories"]}
+ids = {m["id"] for m in ctx["self"]["memories"]}
 check("memória antiga que envolve alguém PRESENTE sobrevive ao corte",
       "mem-evocada" in ids)
 check("enquanto as banais que ninguém evoca ficam de fora",
@@ -300,7 +300,7 @@ check("enquanto as banais que ninguém evoca ficam de fora",
 vencer(ELGA, "mem-evocada")
 ctx = motor.get_context(ELGA)
 check("memória VENCIDA não desce ao client",
-      "mem-evocada" not in {m["id"] for m in ctx["memories"]})
+      "mem-evocada" not in {m["id"] for m in ctx["self"]["memories"]})
 check("mas o arquivo continua no mundo — nada é apagado",
       (elga_folder / "memories" / "mem-evocada.md").exists())
 

@@ -178,20 +178,20 @@ check("D7: alvo inexistente não quebra — aresta pendente é ausência, não e
 print("\n--- Bloco E: o contexto — o fato NA ENTIDADE --------------------------")
 
 ctx = motor.get_context("bram-p65")
-por_id = {c["id"]: c for c in ctx["characters_present"]}
+por_id = {c["id"]: c for c in ctx["scene"]["characters"]}
 
 check("E1: o vínculo desce na entrada da própria entidade",
-      por_id.get("hulda-p65", {}).get("bond") == "irmã")
+      por_id.get("hulda-p65", {}).get("relation") == "irmã")
 check("E2: quem não tem vínculo NÃO ganha a chave (ausente, nunca None)",
       "bond" not in por_id.get("doncel-p65", {}),
       f"veio {por_id.get('doncel-p65', {}).get('bond')!r}")
 check("E3: nenhuma chave do contexto vale None (contrato de API)",
-      all(v is not None for c in ctx["characters_present"] for v in c.values()
+      all(v is not None for c in ctx["scene"]["characters"] for v in c.values()
           if not isinstance(v, (list, dict))) or True)
 check("E4: o próprio personagem não ganha vínculo consigo",
       "bond" not in por_id.get("bram-p65", {}))
 check("E5: o bloco `location` aceita vínculo (uniforme entre coleções)",
-      "bond" not in ctx["location"] or isinstance(ctx["location"]["bond"], str))
+      "bond" not in ctx["scene"]["place"] or isinstance(ctx["scene"]["place"]["relation"], str))
 
 # O NÚMERO MORRE NO SERVER (Princípio V) — varredura recursiva do payload
 def _numeros(no, caminho=""):
@@ -206,7 +206,7 @@ def _numeros(no, caminho=""):
         achados.append(caminho)
     return achados
 
-_num = _numeros({"characters_present": ctx["characters_present"]})
+_num = _numeros({"characters_present": ctx["scene"]["characters"]})
 _medidas = [c for c in _num if c.rsplit(".", 1)[-1] in ("bond", "sentiment")]
 check("E6: nem `bond` nem `sentiment` jamais saem como NÚMERO (Princípio V)",
       _medidas == [], f"numéricos: {_medidas}")
@@ -220,10 +220,10 @@ motor.record_event("bram-p65", "A Hulda me humilhou na frente de todos.",
                    valence={"hulda-p65": "negativa"})
 indice.sincronizar()
 ctx2 = motor.get_context("bram-p65")
-hulda = {c["id"]: c for c in ctx2["characters_present"]}.get("hulda-p65", {})
+hulda = {c["id"]: c for c in ctx2["scene"]["characters"]}.get("hulda-p65", {})
 
 check("F1: o VÍNCULO sobrevive ao afeto negativo (não é somado nem anulado)",
-      hulda.get("bond") == "irmã", f"veio {hulda.get('bond')!r}")
+      hulda.get("relation") == "irmã", f"veio {hulda.get('bond')!r}")
 check("F2: o AFETO desce como rótulo, negativo, na mesma entrada",
       isinstance(hulda.get("sentiment"), str)
       and ("mágoa" in hulda["sentiment"] or "ressentimento" in hulda["sentiment"]
@@ -235,14 +235,14 @@ check("F3: o afeto NÃO virou número em lugar nenhum",
 print("\n--- Bloco G: o SEGREDO DO MUNDO --------------------------------------")
 
 ctx_h = motor.get_context("hulda-p65")
-bram_visto = {c["id"]: c for c in ctx_h["characters_present"]}.get("bram-p65", {})
+bram_visto = {c["id"]: c for c in ctx_h["scene"]["characters"]}.get("bram-p65", {})
 
 check("G1: o ENJEITADO — o vínculo que o OUTRO declarou não desce para ela",
       "bond" not in bram_visto,
       f"vazou {bram_visto.get('bond')!r}")
 check("G2: e o afeto de TERCEIROS por ela também não desce",
       not any(k.startswith("afeto_por") or k == "sentiment_toward_me"
-              for c in ctx_h["characters_present"] for k in c))
+              for c in ctx_h["scene"]["characters"] for k in c))
 
 print("\n--- Bloco H: a régua LÊ o vínculo (US3) — não nasce inerte -------------")
 

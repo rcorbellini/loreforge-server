@@ -89,12 +89,12 @@ try:
 
     # ===================== 2/3/16: invisível, física intacta, legado ======== #
     ctx = motor.get_context("torvin-ferreiro")
-    bau_ctx = next(o for o in ctx["objects_present"] if o["id"] == "bau-lendario")
+    bau_ctx = next(o for o in ctx["scene"]["objects"] if o["id"] == "bau-lendario")
     check("2a: baú fechado não expõe 'contains' (nem ao Árbitro-contexto)",
-          bau_ctx["fechado"] is True and bau_ctx["contains"] == [])
-    caixa_ctx = next(i for i in ctx["items_present"] if i["id"] == "caixa-de-pinho")
+          bau_ctx["physics"]["is_closed"] is True and bau_ctx["contains"] == [])
+    caixa_ctx = next(i for i in ctx["scene"]["items"] if i["id"] == "caixa-de-pinho")
     check("2b: caixa fechada no chão sem conteúdo visível",
-          caixa_ctx["container"]["fechado"] is True and caixa_ctx["contains"] == [])
+          caixa_ctx["physics"]["container"]["is_closed"] is True and caixa_ctx["contains"] == [])
     idx_items = arbiter._scene_index(ctx)["items"]
     check("2c: rubi e dado fora do índice da cena (invisíveis)",
           "rubi-antigo" not in idx_items and "dado-de-osso" not in idx_items)
@@ -107,9 +107,9 @@ try:
         check(f"2d: observar '{oculto}' (dentro de fechado) negado", not vazou)
     check("3: física intacta — peso efetivo da caixa fechada inclui o dado",
           abs(motor.effective_weight(CAIXA) - 0.41) < 1e-6)
-    bau_legado = next(o for o in ctx["objects_present"] if o["id"] == "bau-trancado")
+    bau_legado = next(o for o in ctx["scene"]["objects"] if o["id"] == "bau-trancado")
     check("16: legado sem campo = ABERTO (moeda do bau-trancado segue visível)",
-          bau_legado["fechado"] is False
+          bau_legado["physics"]["is_closed"] is False
           and any(c["id"] == "moeda-de-ouro" for c in bau_legado["contains"]))
     check("sem deadlock autoral na fixture (chaves fora)",
           motor.deadlock_warnings() == [])
@@ -133,7 +133,7 @@ try:
     check("4: open sem travas aplicado",
           out4["lock_ops_applied"] == [{"op": "open", "target": "caixa-de-pinho"}])
     ctx4 = motor.get_context("torvin-ferreiro")
-    caixa4 = next(i for i in ctx4["items_present"] if i["id"] == "caixa-de-pinho")
+    caixa4 = next(i for i in ctx4["scene"]["items"] if i["id"] == "caixa-de-pinho")
     check("4: dado reaparece na consulta após abrir",
           any(c["id"] == "dado-de-osso" for c in caixa4["contains"]))
     check("4: dado agora observável",
@@ -146,10 +146,10 @@ try:
     out5 = motor.apply_resolution("torvin-ferreiro", res(
         lock_ops=[{"op": "close", "target": "caixa-de-pinho"}]))
     ctx5 = motor.get_context("torvin-ferreiro")
-    caixa5 = next(i for i in ctx5["items_present"] if i["id"] == "caixa-de-pinho")
+    caixa5 = next(i for i in ctx5["scene"]["items"] if i["id"] == "caixa-de-pinho")
     check("5: close aplicado e conteúdo some de novo",
           out5["lock_ops_applied"] == [{"op": "close", "target": "caixa-de-pinho"}]
-          and caixa5["contains"] == [] and caixa5["container"]["fechado"] is True)
+          and caixa5["contains"] == [] and caixa5["physics"]["container"]["is_closed"] is True)
     out15 = motor.apply_resolution("torvin-ferreiro", res(
         lock_ops=[{"op": "close", "target": "caixa-de-pinho"}]))
     check("15: close em já fechado = no-op aplicado (nunca erro)",
@@ -222,7 +222,7 @@ try:
     check("7: com as DUAS chaves acessíveis o baú abre",
           out7["lock_ops_applied"] == [{"op": "open", "target": "bau-lendario"}])
     ctx7 = motor.get_context("torvin-ferreiro")
-    bau7 = next(o for o in ctx7["objects_present"] if o["id"] == "bau-lendario")
+    bau7 = next(o for o in ctx7["scene"]["objects"] if o["id"] == "bau-lendario")
     inv7 = {i["id"] for i in ctx7["self"]["inventory"]}
     check("7: rubi revelado; chaves permanecem com o ator (não consumidas)",
           any(c["id"] == "rubi-antigo" for c in bau7["contains"])

@@ -162,12 +162,17 @@ def _available_routes(loc_id: str | None) -> list[dict]:
         return []
     out = []
     for path in arquivos_no_mundo("route.md"):
-        fm, _ = read_doc(path)
+        fm, body = read_doc(path)
         dest = _route_destination(fm, loc_id)
         if dest:
             out.append({
                 "id": fm.get("id"),
                 "name": fm.get("name"),
+                # A PROSA DA ROTA (2026-09-06). Faltava, e a rota é justamente a entidade
+                # cuja prosa carrega o que decide atravessá-la: "não perdoa quem sai
+                # depois do meio-dia sem provisão de água". Mesmo argumento que a spec 053
+                # fez para `object` e que nunca foi estendido às outras entidades.
+                "prose": (body or "").strip() or None,
                 "destination_id": dest,
                 "destination_name": _location_name(dest),
             })

@@ -11,21 +11,21 @@ _M = (Path(__file__).resolve().parents[3] / "loreforge-connector" / "mente.js").
 _i = _M.index("const ESCOLHER_SYSTEM = `") + 25
 SYS = _M[_i:_M.index("`;", _i)]
 ctx=motor.get_context("elga-taverneira")   # tem 5 moedas iguais e uma `peca-...`
-s,l=ctx["self"],ctx["location"]
+s,l=ctx["self"],ctx["scene"]["place"]
 IDS=set()
-for c in ctx["characters_present"]: IDS.add(c["id"])
-for i in ctx["items_present"]: IDS.add(i["id"])
+for c in ctx["scene"]["characters"]: IDS.add(c["id"])
+for i in ctx["scene"]["items"]: IDS.add(i["id"])
 for i in s["inventory"]: IDS.add(i["id"])
-for o in ctx["objects_present"]: IDS.add(o["id"])
-ENTRIES=[(c["id"],c.get("name") or "") for c in ctx["characters_present"]] \
-      + [(i["id"],i.get("name") or "") for i in ctx["items_present"]] \
+for o in ctx["scene"]["objects"]: IDS.add(o["id"])
+ENTRIES=[(c["id"],c.get("name") or "") for c in ctx["scene"]["characters"]] \
+      + [(i["id"],i.get("name") or "") for i in ctx["scene"]["items"]] \
       + [(i["id"],i.get("name") or "") for i in s["inventory"]] \
-      + [(o["id"],o.get("name") or "") for o in ctx["objects_present"]]
+      + [(o["id"],o.get("name") or "") for o in ctx["scene"]["objects"]]
 payload={"personalidade":s.get("body"),
  "contexto":{"local":l.get("name"),"descricao":l.get("narrative"),
-   "presentes":[{"id":c.get("id"),"nome":c.get("name")} for c in ctx["characters_present"] if c.get("state")!="self"],
-   "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["objects_present"]],
-   "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["items_present"]],
+   "presentes":[{"id":c.get("id"),"nome":c.get("name")} for c in ctx["scene"]["characters"] if c.get("state")!="self"],
+   "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["scene"]["objects"]],
+   "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["scene"]["items"]],
    "inventario":[{"id":i.get("id"),"nome":i.get("name")} for i in s["inventory"]]}}
 caps=face.build(ctx)
 COM=[{"type":"function","function":{"name":c["nome"],"description":c.get("descricao") or "",

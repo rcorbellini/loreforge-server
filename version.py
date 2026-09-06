@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "2.30.0"
+__version__ = "3.0.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,32 @@ __version__ = "2.30.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.0.0": "spec 067 — O CONTRATO DO CONTEXTO: estrutura, nomes e PERCEPCAO "
+            "GRADUADA. MAJOR porque quebra o contrato inteiro, sem adaptador e sem "
+            "periodo de transicao (decisao do mantenedor: 'nao tem ninguem jogando "
+            "ainda'). Nasceu de uma critica ao retrofit da 066 — 'longe de ter "
+            "dominios e estrutura bem definida, longe de ter padroes de nomes' — e o "
+            "achado que reorientou tudo: 'peso livre na mochila do outro personagem, "
+            "como que ele poderia saber disso?'. TRES MUDANCAS: (1) ESTRUTURA — a raiz "
+            "passa de 10 chaves soltas para DOIS dominios, `self` e `scene`; "
+            "`memories`/`intentions`/`known` eram do personagem e ficavam ao lado de "
+            "`characters_present`, que e da cena; `in_transit` era booleano solto e "
+            "virou objeto que diz rota, destino da perna e destino final; `known` era "
+            "mapa com id de CHAVE e virou lista de {id,name}. (2) NOMES — 11 chaves em "
+            "portugues traduzidas, fisica AGRUPADA em `physics` nas tres colecoes (era "
+            "agrupada em personagem e solta em item/object), prosa sempre `prose`, "
+            "booleano com prefixo is_/has_, e `bond`->`relation` porque bond em ingles "
+            "puxa para vinculo AFETIVO, o eixo oposto ao que nomeava. Padrao escrito em "
+            "docs/contrato-do-contexto.md. (3) PERCEPCAO GRADUADA — o contrato entrega "
+            "o que o personagem PODE SABER: `free_load_kg` de terceiro SAIU (ninguem ve "
+            "quanto o outro aguenta carregar; existia so para a guarda do Arbitro e "
+            "pegava carona no payload d'A Mente, e agora ele o busca por primitiva); "
+            "nome e prosa graduados por `recognition_of` — estranho ve o nome SEM "
+            "epiteto e so a secao `## Aparencia`, porque 'Fenn, o Dedos-Leves' entregava "
+            "que ele e batedor a quem nunca o viu, e a prosa dele conta o metodo dele. "
+            "Contrato COMPLETO: todo opcional sempre presente, null quando vazio "
+            "(convencao unica; antes o payload misturava omitir e null no mesmo objeto). "
+            "Corrige tambem `conditions` como string em 3 de 38 personagens.",
     "2.30.0": "spec 066 — VINCULO DECLARADO, o primeiro fato relacional do mundo. "
              "Ate aqui TODAS as oito relacoes existentes (dono, dono_reconhecido, "
              "has_trauma_from, remembered_about, knows_route, recognizes_route, "

@@ -95,11 +95,11 @@ check("validator: rejeita tipo fora do MVP",
 ctx = motor.get_context("torvin-ferreiro")
 # checa pelo id (estável), não pelo name (conteúdo editável do mundo)
 check("motor: location = taverna-do-gancho",
-      ctx["location"]["id"] == "taverna-do-gancho")
-present_ids = {c["id"] for c in ctx["characters_present"]}
+      ctx["scene"]["place"]["id"] == "taverna-do-gancho")
+present_ids = {c["id"] for c in ctx["scene"]["characters"]}
 check("motor: torvin e elga presentes",
       {"torvin-ferreiro", "elga-taverneira"} <= present_ids)
-self_state = next(c for c in ctx["characters_present"] if c["id"] == "torvin-ferreiro")
+self_state = next(c for c in ctx["scene"]["characters"] if c["id"] == "torvin-ferreiro")
 check("motor: self marcado", self_state["state"] == "self")
 
 inv = motor.get_inventory("torvin-ferreiro")

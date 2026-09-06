@@ -89,11 +89,11 @@ def status_de(cid: str) -> dict:
 
 
 def fome_de(cid: str) -> str:
-    return motor.get_context(cid)["self"]["necessidade"]["fome"]
+    return motor.get_context(cid)["self"]["needs"]["hunger"]
 
 
 def sede_de(cid: str) -> str:
-    return motor.get_context(cid)["self"]["necessidade"]["sede"]
+    return motor.get_context(cid)["self"]["needs"]["thirst"]
 
 
 def set_status_field(cid: str, campo: str, valor) -> None:

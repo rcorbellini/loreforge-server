@@ -258,7 +258,7 @@ motor.apply_resolution(ELGA, {"item_transfers": [
     {"item": "moeda-de-prata-3", "to": TOR}]})
 ctx_tor_depois = motor.get_context(TOR)
 check("US3: Torvin ainda tem a intenção ativa de cobrar (ninguém a fechou por ele)",
-      any(i["id"] == iid_cobranca for i in ctx_tor_depois.get("intentions") or []))
+      any(i["id"] == iid_cobranca for i in ctx_tor_depois["self"].get("intentions") or []))
 _, ultimo_corpo = memories(TOR)[-1]
 check("US3: a memória mais recente de Torvin é a do pagamento recebido de Elga",
       "Elga" in ultimo_corpo and "prometi" not in ultimo_corpo.lower())

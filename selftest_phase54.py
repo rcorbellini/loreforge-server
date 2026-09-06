@@ -240,11 +240,11 @@ check("FR-016: a fonte NÃO entra em `kindle_materiais` (fogo não é combustív
 
 # FR-013 — a PROSA desce à Mente, não só o nome. Sem isto, uma entidade cujo
 # significado inteiro vive na descrição seria muda para quem interpreta.
-_obj_ctx = next((o for o in _ctx.get("objects_present", []) if o.get("id") == _fogo_id), None)
+_obj_ctx = next((o for o in _ctx["scene"].get("objects", []) if o.get("id") == _fogo_id), None)
 check("FR-013: o fogo aparece em `objects_present`", _obj_ctx is not None)
 check("FR-013: e carrega a `description` — A Mente lê a prosa, não só o nome",
-      bool((_obj_ctx or {}).get("description"))
-      and "brasas" in ((_obj_ctx or {}).get("description") or ""),
+      bool((_obj_ctx or {}).get("prose"))
+      and "brasas" in ((_obj_ctx or {}).get("prose") or ""),
       str(_obj_ctx))
 
 # A régua de cook lê a MESMA prosa, pela primitiva do Motor (não pelo bundle)
@@ -292,7 +292,7 @@ check("FR-011a ponto 2/3: sumiu de `_walk_scene` (alcance/visão/oferta)",
       _fogo_id not in _alcance, str(list(_alcance)))
 check("FR-011a ponto 3/3: sumiu de `objects_present` (o bundle da Mente)",
       not any(o.get("id") == _fogo_id
-              for o in (_ctx_apagou or {}).get("objects_present", [])))
+              for o in (_ctx_apagou or {})["scene"].get("objects", [])))
 
 _cand2 = arbiter.scene_candidates(arbiter._scene_index(_ctx_apagou))
 check("SC-006: e sumiu dos enums de fonte de calor, sem regra nova",

@@ -74,11 +74,13 @@ try:
     route_enum = by_name["enter_route"]["parameters"]["properties"]["route"]["enum"]
     check("manifest: rota da cena no enum", "portao-lateral" in route_enum)
 
-    ctx_vazio = {"characters_present": [{"id": "a", "name": "A"}],
-                 "objects_present": [], "items_present": [],
-                 "self": {"id": "a", "inventory": [], "body_status": {}},
-                 "location": {"id": "x", "name": "X"},
-                 "routes": [], "in_transit": True}
+    ctx_vazio = {
+        "self": {"id": "a", "inventory": [], "physics": {},
+                 "transit": {"route_id": "r", "route_name": "R"}},
+        "scene": {"characters": [{"id": "a", "name": "A"}],
+                  "objects": [], "items": [],
+                  "place": {"id": "x", "name": "X"}, "exits": []},
+    }
     tools_vazio = {t["name"] for t in arbiter.build_tools(ctx_vazio)}
     check("manifest: sem itens não há verbos de item; em trânsito não há enter_route",
           not ({"take", "give", "stow", "drop", "shove", "equip", "unequip"}

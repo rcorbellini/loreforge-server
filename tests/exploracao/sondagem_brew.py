@@ -84,12 +84,12 @@ for vnome, vdesc in VARIANTES:
         ctx = get(f"/api/context?character_id={cid}")
         user = (f"O que ele faz?\n\nINSTRUÇÃO: {instr}\n\n" + json.dumps({
             "personalidade": (ctx.get("self") or {}).get("description"),
-            "necessidade": {"fome": (ctx.get("self") or {}).get("status",{}).get("hunger")},
-            "contexto": {"local": (ctx.get("location") or {}).get("name"),
-                "descricao": (ctx.get("location") or {}).get("description"),
+            "needs": {"fome": (ctx.get("self") or {}).get("status",{}).get("hunger")},
+            "contexto": {"local": (ctx["scene"].get("place") or {}).get("name"),
+                "descricao": (ctx["scene"].get("place") or {}).get("description"),
                 "presentes": [c.get("name") for c in ctx.get("characters_present",[])],
-                "objetos_presentes": ctx.get("objects_present"),
-                "itens_presentes": ctx.get("items_present"),
+                "objetos_presentes": ctx["scene"].get("objects"),
+                "itens_presentes": ctx["scene"].get("items"),
                 "inventario": (ctx.get("self") or {}).get("inventory")}}, ensure_ascii=False, indent=2))
         chamou=0; mudo=0; outras=Counter(); recips=[]
         for _ in range(R):

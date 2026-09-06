@@ -520,10 +520,10 @@ check("51.1: `fatigue` texto legado lê como descansado (dívida do item 51, vis
 # e chega ao CONTEXTO, que é a única porta da Mente
 _ctx51 = motor.get_context(TORVIN_ID if "TORVIN_ID" in dir() else "torvin-ferreiro")
 check("51.1: a necessidade DESCE no contexto, ao lado do status cru",
-      isinstance((_ctx51.get("self") or {}).get("necessidade"), dict)
-      and "fome" in _ctx51["self"]["necessidade"]
-      and "cansaco" in _ctx51["self"]["necessidade"],
-      str((_ctx51.get("self") or {}).get("necessidade")))
+      isinstance((_ctx51.get("self") or {}).get("needs"), dict)
+      and "hunger" in _ctx51["self"]["needs"]
+      and "fatigue" in _ctx51["self"]["needs"],
+      str((_ctx51.get("self") or {}).get("needs")))
 check("51.1: e o status CRU segue lá — a régua do Motor precisa do número",
       "fatigue" in (_ctx51["self"].get("status") or {}))
 

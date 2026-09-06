@@ -77,14 +77,14 @@ SYS = _M[_i:_M.index("`;", _i)]
 
 MODELO, R = "llama3.1:8b", 5
 ctx = motor.get_context("torvin-ferreiro")
-s, l = ctx["self"], ctx["location"]
+s, l = ctx["self"], ctx["scene"]["place"]
 caps = face.build(ctx)
 
-ENTRIES = ([(c["id"], c.get("name") or "") for c in ctx["characters_present"]]
-         + [(i["id"], i.get("name") or "") for i in ctx["items_present"]]
+ENTRIES = ([(c["id"], c.get("name") or "") for c in ctx["scene"]["characters"]]
+         + [(i["id"], i.get("name") or "") for i in ctx["scene"]["items"]]
          + [(i["id"], i.get("name") or "") for i in s["inventory"]]
-         + [(o["id"], o.get("name") or "") for o in ctx["objects_present"]]
-         + [(r["id"], r.get("name") or "") for r in ctx["routes"]])
+         + [(o["id"], o.get("name") or "") for o in ctx["scene"]["objects"]]
+         + [(r["id"], r.get("name") or "") for r in ctx["scene"]["exits"]])
 
 
 def chamar(msgs, tools):
@@ -152,16 +152,16 @@ print(f"\n  controle: o `tools` é objeto Python, não string — a indentação
 print(f"  json.dumps não chega ao modelo. Cobrado com o mesmo objeto: {c_normal}")
 
 # ---------------------------------------------------------------- PARTE 2 --- #
-PRES = [c for c in ctx["characters_present"] if c.get("state") != "self"]
+PRES = [c for c in ctx["scene"]["characters"] if c.get("state") != "self"]
 DADOS = dict(
     personalidade=s.get("body") or "",
     local=l.get("name"), descricao=l.get("narrative") or "",
     presentes=[(c["id"], c.get("name") or "", c.get("action") or "") for c in PRES],
-    itens=[(i["id"], i.get("name") or "") for i in ctx["items_present"]],
-    objetos=[(o["id"], o.get("name") or "") for o in ctx["objects_present"]],
+    itens=[(i["id"], i.get("name") or "") for i in ctx["scene"]["items"]],
+    objetos=[(o["id"], o.get("name") or "") for o in ctx["scene"]["objects"]],
     inventario=[(i["id"], i.get("name") or "") for i in s["inventory"]],
-    rotas=[(r["id"], r.get("name") or "", r.get("destination_name") or "") for r in ctx["routes"]],
-    memorias=[(m.get("summary") or m.get("content") or "") for m in (ctx.get("memories") or [])][:20],
+    rotas=[(r["id"], r.get("name") or "", r.get("destination_name") or "") for r in ctx["scene"]["exits"]],
+    memorias=[(m.get("summary") or m.get("content") or "") for m in (ctx["self"].get("memories") or [])][:20],
 )
 
 

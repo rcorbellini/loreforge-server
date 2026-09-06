@@ -122,10 +122,10 @@ try:
 
     # --- rotas disponíveis a partir da taverna (FR-018) -------------------- #
     ctx0 = motor.get_context("torvin-ferreiro")
-    route_ids = {r["id"] for r in ctx0["routes"]}
+    route_ids = {r["id"] for r in ctx0["scene"]["exits"]}
     check("rotas: portao-lateral disponível da taverna", "portao-lateral" in route_ids)
     check("rotas: destino nomeado",
-          any(r["destination_name"] == "Forja de Ferro" for r in ctx0["routes"]))
+          any(r["destination_name"] == "Forja de Ferro" for r in ctx0["scene"]["exits"]))
 
     # --- prerequisites: ordem e primeira negação (FR-019) ------------------ #
     d1 = motor.enter_route("torvin-ferreiro", "trilha-fechada")
@@ -155,19 +155,19 @@ try:
           any(m.get("movement") == "portao-lateral" for m in out_move["applied"]))
     check("mover: torvin agora na rota", place_id("torvin-ferreiro") == "portao-lateral")
     ctx_t = motor.get_context("torvin-ferreiro")
-    check("mover: contexto marca em trânsito", ctx_t["in_transit"] is True)
-    check("mover: lugar é a rota", ctx_t["location"]["name"] == "Portão Lateral")
+    check("mover: contexto marca em trânsito", isinstance(ctx_t["self"]["transit"], dict))
+    check("mover: lugar é a rota", ctx_t["scene"]["place"]["name"] == "Portão Lateral")
     check("mover: nunca em dois lugares (1 arquivo)", count_char_files("torvin-ferreiro") == 1)
 
     # elga não deve mais ver torvin na taverna
     ctx_e = motor.get_context("elga-taverneira")
     check("mover: torvin saiu da taverna",
-          all(c["id"] != "torvin-ferreiro" for c in ctx_e["characters_present"]))
+          all(c["id"] != "torvin-ferreiro" for c in ctx_e["scene"]["characters"]))
 
     # --- coexistência na rota (FR-021) ------------------------------------- #
     motor.enter_route("elga-taverneira", "portao-lateral")
     ctx_t2 = motor.get_context("torvin-ferreiro")
-    present_ids = {c["id"] for c in ctx_t2["characters_present"]}
+    present_ids = {c["id"] for c in ctx_t2["scene"]["characters"]}
     check("coexistência: torvin e elga juntos na rota",
           {"torvin-ferreiro", "elga-taverneira"} <= present_ids, str(present_ids))
 
@@ -176,12 +176,12 @@ try:
     backdate_arrival("elga-taverneira")
     ctx_arr = motor.get_context("torvin-ferreiro")  # dispara lazy_evaluate
     check("chegada: torvin no destino", place_id("torvin-ferreiro") == "forja-de-ferro")
-    check("chegada: contexto não está mais em trânsito", ctx_arr["in_transit"] is False)
+    check("chegada: contexto não está mais em trânsito", ctx_arr["self"]["transit"] is None)
     fm_arr, _ = motor.read_doc(motor.find_character_folder("torvin-ferreiro") / "character.md")
     check("chegada: trânsito removido do arquivo", "transit" not in fm_arr)
     check("chegada: elga também chegou", place_id("elga-taverneira") == "forja-de-ferro")
     check("chegada: torvin em 1 lugar só", count_char_files("torvin-ferreiro") == 1)
-    present_forja = {c["id"] for c in ctx_arr["characters_present"]}
+    present_forja = {c["id"] for c in ctx_arr["scene"]["characters"]}
     check("chegada: ambos presentes na forja",
           {"torvin-ferreiro", "elga-taverneira"} <= present_forja, str(present_forja))
 

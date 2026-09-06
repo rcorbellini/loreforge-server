@@ -12,25 +12,25 @@ _M = (Path(__file__).resolve().parents[3] / "loreforge-connector" / "mente.js").
 _i = _M.index("const ESCOLHER_SYSTEM = `") + 25
 SYS = _M[_i:_M.index("`;", _i)]
 ctx=motor.get_context("torvin-ferreiro")
-s,l=ctx["self"],ctx["location"]
+s,l=ctx["self"],ctx["scene"]["place"]
 
 # o universo de referências da cena: (id, nome) — o que o `_match_scene_ref` recebe
 ENTRIES=[]
-for c in ctx["characters_present"]:
+for c in ctx["scene"]["characters"]:
     if c.get("state")!="self": ENTRIES.append((c["id"], c.get("name") or ""))
-for i in ctx["items_present"]: ENTRIES.append((i["id"], i.get("name") or ""))
+for i in ctx["scene"]["items"]: ENTRIES.append((i["id"], i.get("name") or ""))
 for i in s["inventory"]: ENTRIES.append((i["id"], i.get("name") or ""))
-for o in ctx["objects_present"]: ENTRIES.append((o["id"], o.get("name") or ""))
-for r in ctx["routes"]: ENTRIES.append((r["id"], r.get("name") or ""))
+for o in ctx["scene"]["objects"]: ENTRIES.append((o["id"], o.get("name") or ""))
+for r in ctx["scene"]["exits"]: ENTRIES.append((r["id"], r.get("name") or ""))
 
-payload={"personalidade":s.get("body"),"necessidade":s.get("necessidade"),
+payload={"personalidade":s.get("body"),"needs":s.get("needs"),
  "contexto":{"local":l.get("name"),"descricao":l.get("narrative"),
-   "presentes":[{"id":c.get("id"),"nome":c.get("name"),"fazendo":c.get("action")} for c in ctx["characters_present"] if c.get("state")!="self"],
-   "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["objects_present"]],
-   "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["items_present"]],
+   "presentes":[{"id":c.get("id"),"nome":c.get("name"),"fazendo":c.get("action")} for c in ctx["scene"]["characters"] if c.get("state")!="self"],
+   "objetos_presentes":[{"id":o.get("id"),"nome":o.get("name")} for o in ctx["scene"]["objects"]],
+   "itens_presentes":[{"id":i.get("id"),"nome":i.get("name")} for i in ctx["scene"]["items"]],
    "inventario":[{"id":i.get("id"),"nome":i.get("name")} for i in s["inventory"]]},
- "memorias":[m.get("summary") or m.get("content") for m in (ctx.get("memories") or [])][:20],
- "rotas_disponiveis":[{"id":r.get("id"),"nome":r.get("name"),"para":r.get("destination_name")} for r in ctx["routes"]]}
+ "memorias":[m.get("summary") or m.get("content") for m in (ctx["self"].get("memories") or [])][:20],
+ "rotas_disponiveis":[{"id":r.get("id"),"nome":r.get("name"),"para":r.get("destination_name")} for r in ctx["scene"]["exits"]]}
 
 caps=face.build(ctx)
 COM=[{"type":"function","function":{"name":c["nome"],"description":c.get("descricao") or "",

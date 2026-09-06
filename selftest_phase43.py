@@ -42,11 +42,11 @@ def _force_roll(v):
 
 
 def _presentes(cid):
-    return {p["id"] for p in motor.get_context(cid)["characters_present"]}
+    return {p["id"] for p in motor.get_context(cid)["scene"]["characters"]}
 
 
 def _local(cid):
-    return motor.get_context(cid)["location"]["name"]
+    return motor.get_context(cid)["scene"]["place"]["name"]
 
 
 def _mk_char(cid, name, loc_folder):

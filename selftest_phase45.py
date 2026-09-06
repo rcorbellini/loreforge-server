@@ -93,10 +93,10 @@ def run() -> int:
     check("há interna declarada para guardar", len(internas) >= 3, f"{sorted(internas)}")
 
     # --- 3. os alvos são da CENA ---------------------------------------------- #
-    presentes = {c["id"] for c in (ctx.get("characters_present") or [])}
-    presentes |= {i["id"] for i in (ctx.get("items_present") or [])}
-    presentes |= {o["id"] for o in (ctx.get("objects_present") or [])}
-    presentes |= {r["id"] for r in (ctx.get("routes") or [])}
+    presentes = {c["id"] for c in (ctx["scene"].get("characters") or [])}
+    presentes |= {i["id"] for i in (ctx["scene"].get("items") or [])}
+    presentes |= {o["id"] for o in (ctx["scene"].get("objects") or [])}
+    presentes |= {r["id"] for r in (ctx["scene"].get("exits") or [])}
     # inventário do próprio ator também é alvo legítimo
     presentes |= {i["id"] for i in (((ctx.get("self") or {}).get("inventory")) or [])}
     forasteiros = []
@@ -153,7 +153,7 @@ def run() -> int:
     # numa cena sem OUTRO personagem, o que exige alguém presente some.
     sozinho = None
     for c in motor.list_characters():
-        outros = [o for o in (motor.get_context(c["id"]).get("characters_present") or [])
+        outros = [o for o in (motor.get_context(c["id"])["scene"].get("characters") or [])
                   if o.get("state") != "self"]
         if not outros:
             sozinho = c["id"]

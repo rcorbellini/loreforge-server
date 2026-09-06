@@ -43,7 +43,7 @@ def _pertence_a(node: dict | None) -> dict | None:
         return None
     return {
         "nome": node.get("name"),
-        "descricao": node.get("narrative"),
+        "descricao": node.get("prose"),
         "belongs_to": _pertence_a(node.get("belongs_to")),
     }
 
@@ -52,9 +52,9 @@ def _context_for_prompt(context: dict) -> dict:
     self_ = context.get("self", {})
     # destinos alcançáveis daqui, para medir o afeto de cada alvo por eles (spec 016)
     destinos = [(r.get("destination_id"), r.get("destination_name"))
-                for r in context.get("routes", []) if r.get("destination_id")]
+                for r in context["scene"]["exits"] if r.get("destination_id")]
     present = []
-    for c in context.get("characters_present", []):
+    for c in context["scene"]["characters"]:
         if c.get("id") == self_.get("id"):
             continue
         # afeto do ALVO por cada destino reachable_entities — insumo da vontade de ser
@@ -72,7 +72,7 @@ def _context_for_prompt(context: dict) -> dict:
             "mood": c.get("mood"),
             "conditions": c.get("conditions"),
             "carried_item_ids": c.get("carrying") or [],
-            "body_status": c.get("body_status"),
+            "physics": c.get("physics"),
         }
         if afeto_lugares:
             entry["afeto_por_lugar"] = afeto_lugares
@@ -104,27 +104,31 @@ def _context_for_prompt(context: dict) -> dict:
         present.append(entry)
     rotas = [
         {"id": r.get("id"), "name": r.get("name"), "para": r.get("destination_name")}
-        for r in context.get("routes", [])
+        for r in context["scene"]["exits"]
     ]
     # objects/items presentes, com interactions consultivas quando declaradas (spec 002)
     # e a física de cada item (spec 004): tamanho, peso, onde veste, o que guarda.
     objetos = [
         {"id": o.get("id"), "name": o.get("name"), "interactions": o.get("interactions"),
          "contem": o.get("contains")}
-        for o in context.get("objects_present", [])
+        for o in context["scene"]["objects"]
     ]
+    # spec 067: a física do item ficou AGRUPADA em `physics`, como o personagem já
+    # tinha. Antes vinha solta na raiz da entrada — a mesma informação em duas formas.
     itens = [
         {"id": it.get("id"), "name": it.get("name"),
          "interactions": it.get("interactions"),
-         "tamanho": it.get("size"), "peso_kg": it.get("weight_kg"),
-         "veste_em": it.get("veste_em"), "guarda": it.get("container")}
-        for it in context.get("items_present", [])
+         "tamanho": (it.get("physics") or {}).get("size"),
+         "peso_kg": (it.get("physics") or {}).get("weight_kg"),
+         "worn_at": (it.get("physics") or {}).get("worn_at"),
+         "guarda": (it.get("physics") or {}).get("container")}
+        for it in context["scene"]["items"]
     ]
     return {
         "location": {
-            "id": context.get("location", {}).get("id"),
-            "name": context.get("location", {}).get("name"),
-            "descricao": context.get("location", {}).get("narrative"),
+            "id": context["scene"]["place"].get("id"),
+            "name": context["scene"]["place"].get("name"),
+            "descricao": context["scene"]["place"].get("prose"),
             # spec 035: a location que contém o lugar atual, estrutura aninhada
             # (mais próxima primeiro, mesma chave "belongs_to" se repetindo pra
             # quem a contém) — mesma forma do que vai pra A Mente (client/mente.js).
@@ -132,8 +136,8 @@ def _context_for_prompt(context: dict) -> dict:
             # plausível num porto vs. numa vila do interior) — o Árbitro não
             # narra atmosfera com isso; "narrate" continua exigindo resumo
             # curto e factual, a evocação fica inteira com A Mente.
-            "belongs_to": _pertence_a(context.get("location", {}).get("belongs_to")),
-            "em_transito": context.get("in_transit", False),
+            "belongs_to": _pertence_a(context["scene"]["place"].get("belongs_to")),
+            "em_transito": bool(context["self"].get("transit")),
         },
         "personagem_que_age": {
             "id": self_.get("id"),
@@ -147,7 +151,7 @@ def _context_for_prompt(context: dict) -> dict:
             "status": self_.get("status"),
             "personalidade": self_.get("body"),
             "inventario": self_.get("inventory") or [],
-            "body_status": self_.get("body_status"),
+            "physics": self_.get("physics"),
         },
         "outros_presentes": present,
         "rotas_disponiveis": rotas,
@@ -328,23 +332,28 @@ def _item_entry(it: dict, porter: str | None, in_object: str | None = None) -> d
     """Ficha física de um item no índice da cena (dados vindos do contexto)."""
     return {
         "name": it.get("name") or "",
-        "size": it.get("size") or "P",
-        "weight": it.get("weight_kg") if isinstance(it.get("weight_kg"), (int, float))
-                  else 1.0,
-        "veste_em": it.get("veste_em"),
-        "container": it.get("container"),
-        "for_sale": it.get("for_sale"),
-        "negotiable": it.get("negotiable"),
-        "currency": it.get("currency"),
-        "value": it.get("value"),
-        "slot": it.get("slot"),
+        # spec 067: `physics` agrupado. `it` aqui vem tanto do contexto (agrupado)
+        # quanto de `carrying`/`inventory` (ainda solto, é `item_physics` cru) — o
+        # `or it` cobre as duas origens sem duplicar a montagem.
+        **(lambda f: {
+            "size": f.get("size") or "P",
+            "weight": f.get("weight_kg") if isinstance(f.get("weight_kg"), (int, float))
+                      else 1.0,
+            "worn_at": f.get("worn_at"),
+            "container": f.get("container"),
+            "for_sale": f.get("for_sale"),
+            "negotiable": f.get("negotiable"),
+            "currency": f.get("currency"),
+            "value": f.get("value"),
+            "slot": f.get("slot"),
+        })(it.get("physics") or it),
         "estado": it.get("estado"),
         "porter": porter,
         "in_object": in_object,
         # spec 052: peça em processo (lâmina na bigorna, panela no fogo) — carrega o
         # NOME da capacidade que a criou, para que a retomada seja oferecida só à
         # tool certa. O conteúdo do bloco (banda, tetos, tempos) continua fora.
-        "em_trabalho": it.get("em_trabalho"),
+        "work_in_progress": it.get("work_in_progress"),
     }
 
 
@@ -357,24 +366,28 @@ def _scene_index(context: dict) -> dict:
     """
     self_ = context.get("self") or {}
     actor_id = self_.get("id")
-    fis = self_.get("body_status") or {}
+    fis = self_.get("physics") or {}
     chars, objects, items, char_fisico = {}, {}, {}, {}
     char_conditions = {}
-    for c in context.get("characters_present", []):
+    for c in context["scene"]["characters"]:
         cid = c.get("id")
         if not cid:
             continue
         chars[cid] = c.get("name") or ""
         # derrota é pública na cena (spec 008): quem caiu, caiu à vista de todos
         char_conditions[cid] = list(c.get("conditions") or [])
-        cf = c.get("body_status") or {}
+        cf = c.get("physics") or {}
         char_fisico[cid] = {
             # spec 019: a capacidade de mão vem do corpo (já derivada no summary);
             # o fallback é conservador (0), nunca o humano global.
             "free_hands": cf.get("free_hands", 0),
             "total_hands": cf.get("total_hands", 0),
             "hands_holding": list(cf.get("hands_holding") or []),
-            "free_load_kg": cf.get("free_load_kg", float("inf")),
+            # spec 067: a FOLGA DE CARGA DE TERCEIRO saiu do contexto — quanto mais
+            # alguém aguenta carregar não se vê, e o campo existia só para esta guarda,
+            # pegando carona no payload d'A Mente. O Árbitro é onisciente e a busca por
+            # conta própria, no mesmo padrão de `sentiment_toward` acima.
+            "free_load_kg": motor.folga_de_carga(cid),
         }
         if cid != actor_id:
             for it in c.get("carrying") or []:
@@ -386,32 +399,34 @@ def _scene_index(context: dict) -> dict:
             "total_hands": fis.get("total_hands", 0),
             # spec 019: o corpo do ator (mapa slot->capacidade) — o guard de
             # equipar precisa da capacidade de um slot QUALQUER, não só da mão.
-            "corpo": fis.get("corpo") or {},
-            "hands_holding": list((fis.get("slots_ocupados") or {})
+            "body": fis.get("body") or {},
+            "hands_holding": list((fis.get("slots_in_use") or {})
                                       .get(motor.HAND_SLOT) or []),
-            "free_load_kg": (fis.get("capacidade_carga_kg", float("inf"))
-                               - fis.get("peso_carregado_kg", 0.0)),
-            "capacidade_empurrar_kg": fis.get("capacidade_empurrar_kg", float("inf")),
-            "slots_ocupados": {s: list(ids) for s, ids
-                               in (fis.get("slots_ocupados") or {}).items()},
+            "free_load_kg": (fis.get("carry_capacity_kg", float("inf"))
+                               - fis.get("carried_weight_kg", 0.0)),
+            "push_capacity_kg": fis.get("push_capacity_kg", float("inf")),
+            "slots_in_use": {s: list(ids) for s, ids
+                               in (fis.get("slots_in_use") or {}).items()},
         }
     objects_info = {}
-    for o in context.get("objects_present", []):
+    for o in context["scene"]["objects"]:
         if o.get("id"):
             objects[o["id"]] = o.get("name") or ""
-            objects_info[o["id"]] = {"fechado": bool(o.get("fechado")),
-                                     "tem_fecho": bool(o.get("tem_fecho")),
+            # spec 067: a física do object ficou agrupada em `physics`
+            _of = o.get("physics") or {}
+            objects_info[o["id"]] = {"is_closed": bool(_of.get("is_closed")),
+                                     "has_latch": bool(_of.get("has_latch")),
                                      # spec 057: RAW (não `bool()`) — igual `_item_entry`
                                      # já faz para item. Craft é o primeiro domínio a
                                      # precisar distinguir QUAL tool ocupa um object em
                                      # processo (`craft_pecas_abertas` filtra por
                                      # `== "craft"`, não só "há trabalho aqui"); truthiness
                                      # de string não-vazia preserva todo uso anterior.
-                                     "em_trabalho": o.get("em_trabalho")}
+                                     "work_in_progress": _of.get("work_in_progress")}
         for it in o.get("contains") or []:
             if it.get("id"):
                 items[it["id"]] = _item_entry(it, porter=None, in_object=o.get("id"))
-    for it in context.get("items_present", []):
+    for it in context["scene"]["items"]:
         if it.get("id"):
             items[it["id"]] = _item_entry(it, porter=None)
         for sub in it.get("contains") or []:  # contêiner aberto no chão (spec 005)
@@ -420,10 +435,10 @@ def _scene_index(context: dict) -> dict:
     for it in self_.get("inventory") or []:
         if it.get("id"):
             items[it["id"]] = _item_entry(it, porter=actor_id)
-    loc = context.get("location") or {}
+    loc = context["scene"]["place"]
     routes = {}
-    if not context.get("in_transit"):
-        for r in context.get("routes", []):
+    if not context["self"].get("transit"):
+        for r in context["scene"]["exits"]:
             if r.get("id"):
                 routes[r["id"]] = f"{r.get('name') or ''} → {r.get('destination_name') or ''}"
     return {
@@ -460,7 +475,7 @@ def _verb_candidates(idx: dict) -> dict:
     return {
         # vestíveis ao alcance do ator (soltos, em objects, ou já com ele)
         "equip": sorted(i for i, e in items.items()
-                        if e["veste_em"] and e["porter"] in (None, actor)),
+                        if e["worn_at"] and e["porter"] in (None, actor)),
         # vestidos do ator
         "unequip": sorted(i for i, e in items.items() if worn(e)),
         # pegável: tudo ao alcance que não está já na própria mão
@@ -507,7 +522,7 @@ def _verb_candidates(idx: dict) -> dict:
         # (`steal`, sem checagem nenhuma) nem `disponível` (`comercio.py`, só
         # aceita posse COMPROVADA seu — bloquearia pegar uma fibra solta).
         "cook_ingredientes": sorted(i for i, e in items.items()
-                                    if not worn(e) and not e.get("em_trabalho")
+                                    if not worn(e) and not e.get("work_in_progress")
                                     and _livre(i)),
         # spec 052 (FR-043a): o LUGAR entra no universo de fontes de calor, ao lado
         # dos objects — molde EXATO de `shove_to`, logo abaixo. A lareira de uma
@@ -526,7 +541,7 @@ def _verb_candidates(idx: dict) -> dict:
         # `kindle_materiais`/`forge_materiais`, que já excluem `em_trabalho`). O
         # LUGAR nunca é filtrado: `location` não tem bloco `trabalho` (FR-013).
         "forage_onde": sorted(o for o in idx["objects"]
-                              if not idx["objects_info"].get(o, {}).get("em_trabalho"))
+                              if not idx["objects_info"].get(o, {}).get("work_in_progress"))
                        + ([idx["place_id"]] if idx["place_id"] else []),
         # spec 055 — preparar. Cópias LITERAIS de `cook_ingredientes`/`cook_fonte`,
         # não a MESMA chave: um enum compartilhado entre duas tools impediria dar a
@@ -537,7 +552,7 @@ def _verb_candidates(idx: dict) -> dict:
         # `brew` não escreve nele, então `em_trabalho` não precisa ser filtrado aqui —
         # um alambique nunca fica ocupado por causa de `brew`.
         "brew_ingredientes": sorted(i for i, e in items.items()
-                                    if not worn(e) and not e.get("em_trabalho")
+                                    if not worn(e) and not e.get("work_in_progress")
                                     and _livre(i)),
         "brew_recipiente": sorted(idx["objects"])
                            + ([idx["place_id"]] if idx["place_id"] else []),
@@ -546,7 +561,7 @@ def _verb_candidates(idx: dict) -> dict:
         # lá é "metal batido não volta a ser barra", aqui é "a panela no fogo não é
         # lenha". Mesma regra, e herdá-la é reuso; reescrevê-la seria duplicação.
         "kindle_materiais": sorted(i for i, e in items.items()
-                                   if not worn(e) and not e.get("em_trabalho")
+                                   if not worn(e) and not e.get("work_in_progress")
                                    and _livre(i)),
         # spec 052 — forjar. `forge_materiais` reusa o filtro de `cook_ingredientes`
         # (mão, chão, dentro de contêiner aberto), MENOS as peças em processo: metal
@@ -555,7 +570,7 @@ def _verb_candidates(idx: dict) -> dict:
         # a peça da outra oficina aparece e é recusada com motivo próprio, que
         # ensina; escondê-la só produziria silêncio.
         "forge_materiais": sorted(i for i, e in items.items()
-                                  if not worn(e) and not e.get("em_trabalho")
+                                  if not worn(e) and not e.get("work_in_progress")
                                   and _livre(i)),
         "forge_fonte": sorted(idx["objects"])
                        + ([idx["place_id"]] if idx["place_id"] else []),
@@ -568,9 +583,9 @@ def _verb_candidates(idx: dict) -> dict:
         # errar. A recusa `peca_de_outra_oficina` fica como defesa em profundidade,
         # para quem chama pela bancada HTTP.
         "forge_peca_arma": sorted(i for i, e in items.items()
-                                  if e.get("em_trabalho") == "forge_weapon"),
+                                  if e.get("work_in_progress") == "forge_weapon"),
         "forge_peca_armadura": sorted(i for i, e in items.items()
-                                      if e.get("em_trabalho") == "forge_armor"),
+                                      if e.get("work_in_progress") == "forge_armor"),
         # spec 057 — craft. Mesmo molde de `forge_materiais`/`forge_peca_arma`:
         # materiais alcançáveis, menos peças já em processo; peças em processo
         # filtradas ESTRUTURALMENTE por `em_trabalho == "craft"` (zero LLM). Cobre
@@ -578,27 +593,27 @@ def _verb_candidates(idx: dict) -> dict:
         # só um item na mão) — `location` em processo fica de fora (US5, fora deste
         # lote: `_walk_scene` ainda não anda por `location.md` filha nenhuma).
         "craft_materiais": sorted(i for i, e in items.items()
-                                  if not worn(e) and not e.get("em_trabalho")
+                                  if not worn(e) and not e.get("work_in_progress")
                                   and _livre(i)),
         "craft_pecas_abertas": sorted(
-            [i for i, e in items.items() if e.get("em_trabalho") == "craft"]
+            [i for i, e in items.items() if e.get("work_in_progress") == "craft"]
             + [o for o, info in idx["objects_info"].items()
-               if info.get("em_trabalho") == "craft"]),
+               if info.get("work_in_progress") == "craft"]),
         # empurra-se o que ninguém carried_item_ids
         "shove": sorted(i for i, e in items.items() if e["porter"] is None),
         "shove_to": sorted(idx["objects"])
                     + ([idx["place_id"]] if idx["place_id"] else []),
         # abre-se o que está fechado; fecha-se contêiner aberto com fecho (spec 005)
         "open": sorted(i for i, e in items.items()
-                       if e["container"] and e["container"].get("fechado")
+                       if e["container"] and e["container"].get("is_closed")
                        and e["porter"] in (None, actor))
                 + sorted(o for o, info in idx["objects_info"].items()
-                         if info["fechado"]),
+                         if info["is_closed"]),
         "close": sorted(i for i, e in items.items()
-                        if e["container"] and not e["container"].get("fechado")
+                        if e["container"] and not e["container"].get("is_closed")
                         and e["porter"] in (None, actor))
                  + sorted(o for o, info in idx["objects_info"].items()
-                          if info["tem_fecho"] and not info["fechado"]),
+                          if info["has_latch"] and not info["is_closed"]),
         # persuade-se OUTRO personagem presente a partir por uma rota (spec 007)
         "persuade": sorted(c for c in idx["chars"] if c != actor),
         # persuade_give (spec 023): o DONO (outro presente) cede um item DELE; o item
@@ -786,11 +801,11 @@ def build_tools(context: dict) -> list[dict]:
     dormindo = motor.fisica.is_resting({"status": self_status})
     # spec 048/052: mesmo gate cosmético do descanso, generalizado — enquanto há
     # trabalho em curso, NENHUMA tool de mutação aparece.
-    # spec 052: "ocupado" deixou de ser um campo do personagem. `get_context`
+    # spec 052: "is_busy" deixou de ser um campo do personagem. `get_context`
     # DERIVA o booleano da peça em processo na cena (nunca persistido, mesmo
     # espírito de `proficiencies_for`) — o gate lê o fato derivado, e `character.md`
     # segue sem campo nenhum de trabalho.
-    cozinhando = bool((context.get("self") or {}).get("ocupado"))
+    cozinhando = bool((context.get("self") or {}).get("is_busy"))
     idx = _scene_index(context)
     cand = scene_candidates(idx)
     chars = sorted(idx["chars"])
@@ -801,7 +816,7 @@ def build_tools(context: dict) -> list[dict]:
     mut_targets = chars + objects + items
     # ids das intenções ATIVAS do PRÓPRIO ator — computado uma vez (give/trade/
     # prometer/set_intention compartilham o mesmo enum, specs 026/027).
-    active_intention_ids = [i["id"] for i in (context.get("intentions") or [])
+    active_intention_ids = [i["id"] for i in (context["self"].get("intentions") or [])
                             if i.get("id")]
     # A FACE de cada tool mora com ela (arbiter_tools.MANIFESTS); aqui só se monta
     # a CENA e itera o registro — acrescentar tool nunca edita este ponto
@@ -917,9 +932,9 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     loc = {i: {"porter": e["porter"], "slot": e["slot"]} for i, e in items.items()}
     moved: set = set()
     # estado de fecho do turno (spec 005): contêineres-item e objects
-    fechado_state = {i: bool((e["container"] or {}).get("fechado"))
+    fechado_state = {i: bool((e["container"] or {}).get("is_closed"))
                      for i, e in items.items() if e.get("container")}
-    fechado_state.update({o: info["fechado"]
+    fechado_state.update({o: info["is_closed"]
                           for o, info in idx["objects_info"].items()})
 
     # spec 038 (L4): os canais MUTADORES não são mais lista à mão — DERIVAM do
@@ -1111,7 +1126,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
             if cont_id == item_id or ce.get("porter") != actor:
                 continue
             c = ce.get("container")
-            if not isinstance(c, dict) or c.get("fechado"):
+            if not isinstance(c, dict) or c.get("is_closed"):
                 continue
             if motor.check_encaixe(item_id, e.get("size") or "P",
                                    cont_id, c.get("max_size")):

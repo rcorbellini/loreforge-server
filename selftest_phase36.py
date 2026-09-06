@@ -72,7 +72,7 @@ check("item da sub-location NÃO vaza para a cena de fora (o bug corrigido)",
       "item-oculto" not in items_fora, str(sorted(items_fora)))
 
 ctx_elga = motor.get_context("elga-taverneira")
-ctx_item_ids = {i["id"] for i in ctx_elga.get("items_present", [])}
+ctx_item_ids = {i["id"] for i in ctx_elga["scene"].get("items", [])}
 check("get_context de quem está na taverna não lista o item do quarto",
       "item-oculto" not in ctx_item_ids, str(ctx_item_ids))
 
@@ -86,9 +86,9 @@ check("item do quarto aparece na própria cena",
 
 ctx_hospede = motor.get_context("hospede-oculto")
 check("localização do hóspede resolve para a sub-location (parent direto)",
-      ctx_hospede["location"]["id"] == "quarto-oculto",
-      str(ctx_hospede["location"]))
-hospede_item_ids = {i["id"] for i in ctx_hospede.get("items_present", [])}
+      ctx_hospede["scene"]["place"]["id"] == "quarto-oculto",
+      str(ctx_hospede["scene"]["place"]))
+hospede_item_ids = {i["id"] for i in ctx_hospede["scene"].get("items", [])}
 check("get_context de quem está no quarto vê o item solto do quarto",
       "item-oculto" in hospede_item_ids, str(hospede_item_ids))
 

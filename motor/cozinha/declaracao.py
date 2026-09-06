@@ -163,7 +163,7 @@ def _cook(name: str, args: dict, ctx) -> tuple[dict, bool]:
         # válidos morreria justamente na recusa que existe para orientar quem errou.
         return ctx.err(f"'{fonte_calor}' não é uma fonte de calor presente", "fonte_calor",
                        ctx.validos({o: ctx.objects.get(o)
-                                    or {"name": (ctx.context.get("location") or {}).get("name") or o}
+                                    or {"name": (ctx.context["scene"]["place"]).get("name") or o}
                                     for o in fontes})), False
     chave = (tuple(sorted(ingredientes)), fonte_calor)
     if chave in ctx.cooked_asked:

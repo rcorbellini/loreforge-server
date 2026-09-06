@@ -103,29 +103,29 @@ ANTES DE AGIR, pense na SEQUÊNCIA de ações que ele quer realizar e escolha as
 def _payload(ctx):
     """O mesmo recorte de `_contextoPayload(context, {comCapacidades:false})`."""
     self_ = ctx.get("self") or {}
-    loc = ctx.get("location") or {}
+    loc = ctx["scene"].get("place") or {}
     return {
         "personalidade": self_.get("body"),
-        "necessidade": self_.get("necessidade"),
+        "needs": self_.get("needs"),
         "contexto": {
             "local": loc.get("name"),
             "descricao": loc.get("narrative") or loc.get("description"),
             "presentes": [{"id": c.get("id"), "nome": c.get("name"),
                            "fazendo": c.get("action")}
-                          for c in (ctx.get("characters_present") or [])
+                          for c in (ctx["scene"].get("characters") or [])
                           if c.get("state") != "self"],
             "objetos_presentes": [{"id": o.get("id"), "nome": o.get("name")}
-                                  for o in (ctx.get("objects_present") or [])],
+                                  for o in (ctx["scene"].get("objects") or [])],
             "itens_presentes": [{"id": i.get("id"), "nome": i.get("name")}
-                                for i in (ctx.get("items_present") or [])],
+                                for i in (ctx["scene"].get("items") or [])],
             "inventario": [{"id": i.get("id"), "nome": i.get("name")}
                            for i in (self_.get("inventory") or [])],
         },
         "memorias": [m.get("summary") or m.get("content")
-                     for m in (ctx.get("memories") or [])][:20],
+                     for m in (ctx["self"].get("memories") or [])][:20],
         "rotas_disponiveis": [{"id": r.get("id"), "nome": r.get("name"),
                                "para": r.get("destination_name")}
-                              for r in (ctx.get("routes") or [])],
+                              for r in (ctx["scene"].get("exits") or [])],
     }
 
 

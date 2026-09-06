@@ -986,3 +986,25 @@ _CROSSING_BY_SIZE = {
     "PP": 1, "P": 3, "M": 8, "G": 20, "XG": 50,
     "XXG": 110, "XXXG": 200, "XXXXG": 450, "XXXXXG": 900,
 }
+
+
+def folga_de_carga(character_id: str) -> float:
+    """Quanto ainda cabe no corpo deste personagem, em kg (spec 067).
+
+    NASCEU DE UM VAZAMENTO: este número descia no contexto de TODO terceiro presente, e
+    ninguém pode saber quanto mais o outro aguenta carregar — deriva da força dele e do
+    que já leva. Ele existia para um consumidor só, a guarda de dar/receber do Árbitro,
+    e viajava no payload que também vai para A Mente: duas plateias, um contrato.
+
+    Agora o Árbitro o busca aqui, no mesmo padrão que ele já usa para `sentiment_toward`.
+    Onisciência mora no Árbitro; o contexto entrega o que o personagem PERCEBE.
+
+    `inf` para quem não existe: quem chama trata ausência como "sem limite conhecido",
+    que é o fallback conservador que a guarda já usava.
+    """
+    try:
+        folder = io.find_character_folder(character_id)
+    except io.MotorError:
+        return float("inf")
+    fm, _ = io.read_doc(folder / "character.md")
+    return round(carry_capacity(fm) - carried_weight(folder), 3)

@@ -74,7 +74,7 @@ def _forage(name: str, args: dict, ctx) -> tuple[dict, bool]:
         # o mapa por `ctx.objects[o]` levantaria KeyError no id do lugar.
         return ctx.err(f"'{onde}' não está disponível para colher", "onde",
                        ctx.validos({o: ctx.objects.get(o)
-                                    or {"name": (ctx.context.get("location") or {}).get("name") or o}
+                                    or {"name": (ctx.context["scene"]["place"]).get("name") or o}
                                     for o in disponiveis})), False
     if onde in ctx.forage_asked:
         return ctx.err("colher desse alvo já foi tentado neste turno — o "

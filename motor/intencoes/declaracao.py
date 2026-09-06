@@ -18,7 +18,7 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return ctx.err(f"status '{status}' inválido", "status",
                        [{"id": s, "nome": s} for s in ctx.INTENTION_STATUSES]), False
     if intention_id:
-        active_ids = {i["id"] for i in (ctx.context.get("intentions") or [])
+        active_ids = {i["id"] for i in (ctx.context["self"].get("intentions") or [])
                       if i.get("id")}
         if intention_id not in active_ids:
             return ctx.err(f"intention_id '{intention_id}' não é uma intenção ativa "

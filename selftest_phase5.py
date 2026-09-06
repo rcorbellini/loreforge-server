@@ -68,14 +68,14 @@ try:
 
     # --- baú presente na cena, moeda oculta enquanto dentro dele ------------- #
     ctx = motor.get_context("torvin-ferreiro")
-    objects_by_id = {o["id"]: o for o in ctx["objects_present"]}
+    objects_by_id = {o["id"]: o for o in ctx["scene"]["objects"]}
     check("motor: bau-trancado presente em objects_present", "bau-trancado" in objects_by_id)
     check("motor: interactions do bau chegam no contexto",
           bool(objects_by_id.get("bau-trancado", {}).get("interactions")))
     contains_ids = {c["id"] for c in objects_by_id.get("bau-trancado", {}).get("contains") or []}
     check("motor: 'contains' do bau referencia a moeda (Árbitro sabe que ela existe)",
           "moeda-de-ouro" in contains_ids)
-    items_ids = {it["id"] for it in ctx["items_present"]}
+    items_ids = {it["id"] for it in ctx["scene"]["items"]}
     check("motor: moeda-de-ouro NÃO aparece em items_present (ainda dentro do baú)",
           "moeda-de-ouro" not in items_ids)
 
@@ -85,7 +85,7 @@ try:
           "bolsa-de-couro" in inv_ids)
     check("motor: inventário do ator inclui itens aninhados (frasco-de-oleo)",
           "frasco-de-oleo" in inv_ids)
-    presentes = {c["id"]: c for c in ctx["characters_present"]}
+    presentes = {c["id"]: c for c in ctx["scene"]["characters"]}
     check("motor: presentes trazem 'carrying' (o que cada um carried_item_ids)",
           "carrying" in presentes.get("elga-taverneira", {}))
 
@@ -124,7 +124,7 @@ try:
           bau_fm2.get("origin") == "editorial")
 
     ctx2 = motor.get_context("torvin-ferreiro")
-    objects_by_id2 = {o["id"]: o for o in ctx2["objects_present"]}
+    objects_by_id2 = {o["id"]: o for o in ctx2["scene"]["objects"]}
     check("motor: bau continua presente, identidade intacta (name não mudou)",
           objects_by_id2.get("bau-trancado", {}).get("name") == "Baú de ferro trancado")
 
@@ -152,7 +152,7 @@ try:
           "moeda-de-ouro" in elga_ids)
 
     ctx_dar = motor.get_context("torvin-ferreiro")
-    elga_ctx = next(c for c in ctx_dar["characters_present"] if c["id"] == "elga-taverneira")
+    elga_ctx = next(c for c in ctx_dar["scene"]["characters"] if c["id"] == "elga-taverneira")
     check("motor: 'carrying' de elga no contexto reflete a moeda recebida",
           "moeda-de-ouro" in {it["id"] for it in elga_ctx.get("carrying") or []})
 
@@ -279,8 +279,8 @@ try:
                                                      "to": "bau-trancado"}])
     ctx_bau = motor.get_context("torvin-ferreiro")
     check("moeda escondida no baú some de items_present e volta ao 'contains'",
-          "moeda-de-ouro" not in {it["id"] for it in ctx_bau["items_present"]}
-          and "moeda-de-ouro" in {c["id"] for o in ctx_bau["objects_present"]
+          "moeda-de-ouro" not in {it["id"] for it in ctx_bau["scene"]["items"]}
+          and "moeda-de-ouro" in {c["id"] for o in ctx_bau["scene"]["objects"]
                                   if o["id"] == "bau-trancado"
                                   for c in o.get("contains") or []})
 
@@ -299,7 +299,7 @@ try:
           (motor.WORLD_DIR / "taverna-do-gancho" / "moeda-de-ouro" / "item.md").exists())
     ctx_chao = motor.get_context("torvin-ferreiro")
     check("moeda largada no chão reaparece em items_present (visível a todos)",
-          "moeda-de-ouro" in {it["id"] for it in ctx_chao["items_present"]})
+          "moeda-de-ouro" in {it["id"] for it in ctx_chao["scene"]["items"]})
 
     # --- referências frouxas do Árbitro (nome por extenso, 'chão de...') ----- #
     # modelos pequenos escrevem nome em vez de id; o Motor canoniza sem chutar.
@@ -367,15 +367,15 @@ try:
 
     # --- US3: objects presentes no contexto (location e rota) --------------- #
     ctx3 = motor.get_context("torvin-ferreiro")
-    objects_ids3 = {o["id"] for o in ctx3["objects_present"]}
+    objects_ids3 = {o["id"] for o in ctx3["scene"]["objects"]}
     check("US3: bau-trancado e mesa-de-madeira presentes juntos na location",
           {"bau-trancado", "mesa-de-madeira"} <= objects_ids3)
 
     move = motor.enter_route("torvin-ferreiro", "portao-lateral")
     check("US3: torvin entrou na rota portao-lateral", move.get("moved") is True)
     ctx_rota = motor.get_context("torvin-ferreiro")
-    check("US3: torvin está em trânsito (na rota)", ctx_rota.get("in_transit") is True)
-    objects_rota_ids = {o["id"] for o in ctx_rota["objects_present"]}
+    check("US3: torvin está em trânsito (na rota)", isinstance(ctx_rota["self"].get("transit"), dict))
+    objects_rota_ids = {o["id"] for o in ctx_rota["scene"]["objects"]}
     check("US3: object ancorado na rota (placa-de-aviso) presente para quem está em trânsito",
           "placa-de-aviso" in objects_rota_ids)
 

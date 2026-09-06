@@ -47,19 +47,19 @@ def cena(quem):
     """Os candidatos reais: (id, texto que o representa)."""
     ctx = motor.get_context(quem)
     out = []
-    for c in ctx["characters_present"]:
+    for c in ctx["scene"]["characters"]:
         if c.get("state") == "self":
             continue
         out.append((c["id"], c.get("name") or c["id"]))
         for it in (c.get("carrying") or []):
             out.append((it["id"], it.get("name") or it["id"]))
-    for i in ctx["items_present"]:
+    for i in ctx["scene"]["items"]:
         out.append((i["id"], i.get("name") or i["id"]))
     for i in ctx["self"]["inventory"]:
         out.append((i["id"], i.get("name") or i["id"]))
-    for o in ctx["objects_present"]:
+    for o in ctx["scene"]["objects"]:
         out.append((o["id"], o.get("name") or o["id"]))
-    for r in ctx["routes"]:
+    for r in ctx["scene"]["exits"]:
         out.append((r["id"], r.get("name") or r["id"]))
     vistos, uniq = set(), []
     for i, t in out:

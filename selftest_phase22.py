@@ -168,7 +168,7 @@ author("taverna-do-gancho/elmo-teste/item.md",
 author("taverna-do-gancho/anel-teste/item.md",
        item_md("anel-teste", "Anel Simples", "mao", size="PP", weight=0.05))
 
-fis_vesna = motor.get_context("perna-de-pau")["self"]["body_status"]
+fis_vesna = motor.get_context("perna-de-pau")["self"]["physics"]
 check("D0: perna de pau ainda pega com a MÃO (fallback) — grasp_slot=mao, 2 livres",
       fis_vesna["grasp_slot"] == "mao" and fis_vesna["free_hands"] == 2)
 out_bota = motor.apply_resolution("perna-de-pau", res(
@@ -205,12 +205,12 @@ author("taverna-do-gancho/graveto-teste/item.md",
 author("taverna-do-gancho/osso-teste/item.md",
        item_md("osso-teste", "Osso Roído", "mao", size="P", weight=0.4))
 
-fis_dog = motor.get_context("cao-farejador")["self"]["body_status"]
+fis_dog = motor.get_context("cao-farejador")["self"]["physics"]
 check("E1: o slot de pega do cão é a BOCA (grasp_slot=focinho, 1 vaga)",
       fis_dog["grasp_slot"] == "focinho" and fis_dog["total_hands"] == 1)
 check("E2: o corpo do cão desce no contexto do próprio dono (pata:4, cauda:1)",
-      motor.slot_capacity({"body": fis_dog.get("corpo", {})}, "pata") == 4
-      and fis_dog.get("corpo", {}).get("cauda") == 1)
+      motor.slot_capacity({"body": fis_dog.get("body", {})}, "pata") == 4
+      and fis_dog.get("body", {}).get("cauda") == 1)
 out_esp = motor.apply_resolution("cao-farejador", res(
     equip_ops=[{"op": "equip", "item": "espada-teste"}]))
 check("E3: VESTIR espada em 'mao' que o cão não tem → corpo_sem_slot",
@@ -239,7 +239,7 @@ author("taverna-do-gancho/enguia-teste/character.md",
        char_md("enguia-teste", "Enguia", "body:\n  cabeca: 1\n  torso: 1\n"))
 author("taverna-do-gancho/isca-teste/item.md",
        item_md("isca-teste", "Isca", "mao", size="PP", weight=0.05))
-fis_eng = motor.get_context("enguia-teste")["self"]["body_status"]
+fis_eng = motor.get_context("enguia-teste")["self"]["physics"]
 check("F1: enguia sem pega → free_hands 0, total_hands 0, grasp_slot None",
       fis_eng["free_hands"] == 0 and fis_eng["total_hands"] == 0
       and fis_eng["grasp_slot"] is None)
@@ -266,7 +266,7 @@ tor_fm, _ = motor.read_doc(TAVERNA / "torvin-ferreiro" / "character.md")
 check("G2 (US1): Torvin sem body → slot_capacity mao == 2, body_of == humano",
       motor.slot_capacity(tor_fm, "mao") == 2
       and motor.body_of(tor_fm) == validator.DEFAULT_BODY)
-fis_tor = motor.get_context("torvin-ferreiro")["self"]["body_status"]
+fis_tor = motor.get_context("torvin-ferreiro")["self"]["physics"]
 check("G3 (US1): free_hands do Torvin == 2 e grasp_slot == mao",
       fis_tor["free_hands"] == 2 and fis_tor["grasp_slot"] == "mao")
 

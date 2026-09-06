@@ -150,34 +150,35 @@ _presentes = sorted({k for k, _ in chaves(CTX)} & _INTRUSOES_PT)
 esperado_falhar("1b: nenhuma chave em português (o retrofit da US5)",
                 not _presentes, f"ainda em PT: {_presentes}")
 
-print("\n--- 2. OPCIONAL AUSENTE, NUNCA None ----------------------------------")
+print("\n--- 2. OPCIONAL SEMPRE PRESENTE, `null` quando vazio -----------------")
 
-_nulos = sorted({c.rsplit(".", 1)[-1] for c, v in folhas(CTX) if v is None})
-# O payload MISTURA DUAS CONVENÇÕES hoje, e é isso que o teste mede:
-#   - `bond`/`sentiment`/`vinculo_com_o_local` (spec 066): OMITIDOS quando não se aplicam
-#   - `slot`/`veste_em`/`description`/`action`... (anteriores): descem como `null`
+# A CONVENÇÃO ÚNICA (spec 067). A versão anterior deste teste cobrava o OPOSTO — "campo
+# que não se aplica é omitido" — e o payload real convivia com as DUAS: `bond` sumia,
+# `slot` descia como `null`. Duas convenções no mesmo objeto obrigam quem escreve um
+# conector a checar as duas formas para a mesma pergunta.
 #
-# As duas são defensáveis isoladamente ("null explícito" é estilo legítimo de API); o
-# que não é defensável é MISTURAR, porque quem escreve um conector precisa checar as
-# duas formas. Uniformizar é mudança de contrato do tamanho da US5, e NÃO foi feita
-# aqui: seria expandir uma spec de vínculo para reescrever a física de item.
-#
-# Por isso a lista abaixo é EXPLÍCITA e o check é PENDENTE, não falha. Se ela crescer,
-# alguém acrescentou mais um `null` num payload que já devia estar caminhando para o
-# outro estilo — e o teste avisa.
-_NULOS_LEGADO = {"slot", "veste_em", "sono", "description", "interactions", "contem",
-                 "em_trabalho", "action", "mood", "value", "narrative", "belongs_to",
-                 "wearable", "container", "trabalho", "destination_name",
-                 "destination_id", "prerequisites", "carrying", "conditions"}
-_nulos_novos = sorted(set(_nulos) - _NULOS_LEGADO)
-check("2a: nenhuma chave NOVA vale None (campo que não se aplica é omitido)",
-      not _nulos_novos, f"nulos fora do legado conhecido: {_nulos_novos}")
-esperado_falhar("2c: payload com UMA convenção só de opcional (hoje mistura null e ausente)",
-                not (set(_nulos) & _NULOS_LEGADO),
-                f"ainda descem como null: {sorted(set(_nulos) & _NULOS_LEGADO)}")
-check("2b: `bond` e `sentiment` NUNCA aparecem como None",
-      not [c for c, v in folhas(CTX)
-           if c.rsplit(".", 1)[-1] in ("bond", "sentiment") and v is None])
+# `null` sempre presente vence porque distingue "consultei e não há" de "nem consultei",
+# e porque `Object.keys()` deixa de variar com o conteúdo: o leitor vê a forma inteira do
+# contrato em qualquer resposta. O payload cresce, e isso é decisão registrada do
+# mantenedor — "não tem problema inflar a resposta da API, desde que seja algo útil da
+# forma que vier".
+_OPCIONAIS = ("prose", "relation", "sentiment", "physics")
+_faltando = []
+for col in ("characters", "items", "objects"):
+    for e in (CTX["scene"].get(col) or []):
+        for campo in _OPCIONAIS:
+            if campo not in e:
+                _faltando.append(f"scene.{col}[{e.get('id')}].{campo}")
+check("2a: todo campo opcional está PRESENTE em toda entidade (null quando vazio)",
+      not _faltando, f"faltando: {_faltando[:6]}")
+
+check("2b: `sentiment` está presente em 100% das entidades da cena (SC-005)",
+      all("sentiment" in e
+          for col in ("characters", "items", "objects")
+          for e in (CTX["scene"].get(col) or [])))
+
+check("2c: `transit` está presente em `self`, mesmo parado (null)",
+      "transit" in CTX["self"])
 
 print("\n--- 3. FORMA UNIFORME entre coleções ---------------------------------")
 
@@ -213,12 +214,14 @@ _FISICA_OK = {"weight_kg", "size", "max_size", "max_items", "itens", "free_hands
               # crescer com corpos novos — o que é o comportamento certo: um slot novo
               # aparece aqui e alguém confere que é física, não vazamento.
               "cabeca", "rosto", "pescoco", "torso", "costas", "cintura", "bracos",
-              "mao", "dedo", "pernas", "pes", "capacidade", "capacidade_carga_kg",
-              "capacidade_empurrar_kg", "peso_carregado_kg",
+              "mao", "dedo", "pernas", "pes", "capacidade", "carry_capacity_kg",
+              "push_capacity_kg", "carried_weight_kg",
               # DECLARADOS PELO AUTOR do object, em `interactions` (spec 002): a
               # dificuldade e o nível que a PRÓPRIA entidade anuncia. Não é medida
               # derivada de crença vazando — é a regra que o objeto carrega escrita.
-              "dc", "min_level"}
+              "dc", "min_level",
+              # itens dentro de um contêiner aberto — contagem visível (spec 005)
+              "count"}
 # O que NUNCA pode ser número: medida de crença. O número morre no server.
 _PROIBIDO_NUMERO = {"sentiment", "bond", "afeto", "apego", "saldo", "familiaridade",
                     "intensity", "salience", "recency", "disposicao", "nota",
@@ -267,10 +270,11 @@ _b = motor.get_context("contrato-ator")
 # `memories` carrega recência/saliência, que são função do relógio — comparar o payload
 # inteiro daria falso negativo por motivo legítimo. A estabilidade que interessa é a da
 # ESTRUTURA da cena.
-for campo in ("location", "characters_present", "items_present", "objects_present",
-              "routes", "in_transit"):
-    check(f"7: '{campo}' é idêntico em duas chamadas seguidas",
-          _a.get(campo) == _b.get(campo))
+for campo in ("place", "characters", "items", "objects", "exits"):
+    check(f"7: scene.'{campo}' é idêntico em duas chamadas seguidas",
+          _a["scene"].get(campo) == _b["scene"].get(campo))
+check("7: self.transit é idêntico em duas chamadas seguidas",
+      _a["self"].get("transit") == _b["self"].get("transit"))
 
 print()
 shutil.rmtree(_tmp, ignore_errors=True)

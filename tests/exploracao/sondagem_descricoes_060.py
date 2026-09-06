@@ -64,13 +64,13 @@ def _descricoes_antigas(caps):
 
 
 def payload(ctx):
-    s, l = ctx["self"], ctx["location"]
+    s, l = ctx["self"], ctx["scene"]["place"]
     return {"personalidade": s.get("body"),
             "contexto": {"local": l.get("name"), "descricao": l.get("narrative"),
-              "presentes": [{"nome": c.get("name")} for c in ctx["characters_present"]
+              "presentes": [{"nome": c.get("name")} for c in ctx["scene"]["characters"]
                             if c.get("state") != "self"],
-              "itens_presentes": [{"nome": i.get("name")} for i in ctx["items_present"]],
-              "objetos_presentes": [{"nome": o.get("name")} for o in ctx["objects_present"]],
+              "itens_presentes": [{"nome": i.get("name")} for i in ctx["scene"]["items"]],
+              "objetos_presentes": [{"nome": o.get("name")} for o in ctx["scene"]["objects"]],
               "inventario": [i.get("name") for i in s["inventory"]]}}
 
 

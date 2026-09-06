@@ -93,30 +93,120 @@ from ..rotas import (
 )
 
 
-# spec 066: o corte abaixo do qual o afeto NÃO desce. É o MESMO 2 que `sentiment_label`
-# usa como fronteira de "guarda um leve incômodo"/"nutre alguma simpatia", e o mesmo que
-# o Árbitro já aplicava em `afeto_por_lugar`/`afeto_por_voce` — um lugar só decide o
-# limiar. Abaixo dele a única faixa disponível seria "sem história que pese num sentido
-# ou noutro", que não compõe frase e só inflaria o contexto.
-_AFETO_PISO = 2
+# A seção da prosa que é PÚBLICA — o que qualquer um vê ao olhar (spec 067).
+#
+# Toda a demais prosa do personagem é PRIVADA, e a razão está nos dados: a ficha do Fenn
+# diz "aprendeu cedo que uma bolsa se abre melhor num aperto"; a da Sarga diz "descarrega
+# o que ninguém declarou e cobra caro pelo silêncio — uma carga sumiu na semana passada, e
+# ela sabe quem levou". Isso não é aparência, é o MÉTODO e o ENREDO. Descer para uma
+# estranha entrega a trama de graça.
+#
+# Nenhum personagem declara `## Aparência` hoje (27 de 38 têm só `## Voz e Sotaque`, 11
+# não têm seção nenhuma). Quem não a declarar degrada para o comportamento anterior à
+# spec 067 — estranho não vê prosa — então a migração do mundo pode ser progressiva.
+_SECAO_PUBLICA = "aparência"
+
+
+def _grau_de_conhecimento(self_id: str, alvo_id: str) -> str:
+    """nitido / vago / ausente — o MESMO critério de `recognition_of` (spec 018).
+
+    Reusado de propósito, e não reimplementado: um segundo critério de "conhecer alguém"
+    divergiria do primeiro no dia em que um dos dois fosse calibrado (FR-011).
+    """
+    if not self_id or not alvo_id or alvo_id == self_id:
+        return "nitido"                      # de si mesmo se sabe tudo
+    if remembered_about(self_id, alvo_id):
+        return "nitido"
+    if familiarity_with(self_id, alvo_id) > _FAMILIARIDADE_PISO:
+        return "vago"
+    return "ausente"
+
+
+def _nome_percebido(nome: str | None, grau: str) -> str | None:
+    """O epíteto é REPUTAÇÃO, e reputação se conhece — não se vê (spec 067, FR-008).
+
+    "Fenn, o Dedos-Leves" entrega que ele é batedor de carteiras a quem nunca o viu; a
+    Mira tinha isso de graça sobre 7 dos 13 presentes na praça. Ao estranho desce só o
+    nome próprio — o bastante para A Mente apontar (spec 060, "ela aponta por NOME"),
+    sem a alcunha que carrega o que ela não poderia saber.
+
+    Nome sem vírgula ("Bram") é igual nos dois graus: não há epíteto a esconder.
+    """
+    if not nome or grau != "ausente":
+        return nome
+    return nome.split(",")[0].strip() or nome
+
+
+def _prosa_percebida(corpo: str, grau: str) -> str | None:
+    """A prosa inteira a quem conhece; só a seção pública a quem não conhece."""
+    corpo = (corpo or "").strip()
+    if not corpo:
+        return None
+    if grau != "ausente":
+        return corpo
+    publica, capturando = [], False
+    for linha in corpo.splitlines():
+        if linha.lstrip().startswith("##"):
+            capturando = linha.lstrip("# ").strip().lower().startswith(_SECAO_PUBLICA)
+            continue
+        if capturando:
+            publica.append(linha)
+    return "\n".join(publica).strip() or None
+
+
+def _com_eixos(bloco: dict, self_id: str, alvo_id: str | None) -> dict:
+    """Carimba os DOIS EIXOS em qualquer entidade do contexto (spec 066, revisto 09/06).
+
+    É o que dá FORMA UNIFORME ao contrato: quem aprendeu a ler um personagem sabe ler um
+    item, porque `relation` e `sentiment` significam a mesma coisa nos dois e estão sempre
+    no mesmo lugar. Antes desta função, personagem tinha os eixos e item não tinha — a
+    mesma pergunta respondida de duas formas, que é o que quebra quem escreve um conector.
+
+      relation   CAMADA 2, fato DECLARADO — o que ESTE personagem declarou sobre o alvo.
+                 `None` quando não declarou. Nunca o que o OUTRO declarou: o contexto é
+                 vista subjetiva, e o lado inverso é do Árbitro.
+      sentiment  CAMADA 3, crença DERIVADA — sempre presente, inclusive `"neutro"`.
+
+    POR QUE `sentiment` DESCE SEMPRE, inclusive neutro: o contrato é COMPLETO e quem
+    filtra é o conector (`docs/contrato-do-contexto.md`). A primeira versão omitia abaixo
+    de um piso 2 herdado do Árbitro — o que embutia decisão de APRESENTAÇÃO dentro da API
+    e obrigava todo leitor a distinguir "não pesa" de "não consultei". O piso nunca foi
+    medido para esta face; era palpite carregado de outro contexto.
+
+    O NÚMERO MORRE AQUI (Princípio V): sai o rótulo, nunca o saldo.
+    """
+    if not self_id or not alvo_id or alvo_id == self_id:
+        # A FORMA NÃO MUDA nem para o próprio personagem. Ele não tem vínculo nem afeto
+        # consigo, mas omitir os campos aqui daria a UMA entrada da lista uma forma
+        # diferente das outras — e o leitor teria de tratar um caso especial que não
+        # existe. `null` diz "consultei e não há"; ausente diria "nem consultei".
+        bloco["relation"] = None
+        bloco["sentiment"] = None
+        return bloco
+    bloco["relation"] = vinculos.bond_toward(self_id, alvo_id)
+    bloco["sentiment"] = sentiment_label(sentiment_toward(self_id, alvo_id))
+    return bloco
 
 
 def item_physics(fm: dict, folder: Path | None = None) -> dict:
-    """Bloco físico de um item para o contexto (Mente e guarda do Árbitro)."""
+    """Bloco físico de um item para o contexto (Mente e guarda do Árbitro).
+
+    Nomes em inglês e booleano com prefixo `is_`, conforme `docs/contrato-do-contexto.md`.
+    """
     container = fm.get("container")
     cont = None
     if isinstance(container, dict) and container.get("max_size"):
         cont = {
             "max_size": container.get("max_size"),
             "max_items": container.get("max_items"),
-            "itens": len(_direct_items(folder)) if folder else 0,
-            "fechado": is_closed(fm),
+            "count": len(_direct_items(folder)) if folder else 0,
+            "is_closed": is_closed(fm),
         }
     wearable = fm.get("wearable")
     bloco = {
         "size": item_size(fm),
         "weight_kg": round(effective_weight(folder) if folder else item_own_weight(fm), 3),
-        "veste_em": wearable.get("slot") if isinstance(wearable, dict) else None,
+        "worn_at": wearable.get("slot") if isinstance(wearable, dict) else None,
         "container": cont,
         "slot": item_slot(fm),
     }
@@ -137,75 +227,77 @@ def item_physics(fm: dict, folder: Path | None = None) -> dict:
 
 
 def _character_summary(folder: Path, self_id: str) -> dict:
-    fm, _ = read_doc(folder / "character.md")
+    """Um personagem na cena, na FORMA UNIFORME do contrato.
+
+    Ver `docs/contrato-do-contexto.md`: identidade, prosa, física agrupada e os dois
+    eixos — a mesma forma que item, objeto e lugar têm.
+    """
+    fm, body = read_doc(folder / "character.md")
     status = fm.get("status") or {}
     # spec 019: "mãos" na verdade é o SLOT DE PEGA deste corpo (a boca do cão), e
-    # a capacidade sai dele. Os nomes maos_* seguem no contrato por estabilidade.
+    # a capacidade sai dele.
     pega = grasp_slot_of(fm)
     hands = (slots_in_use(folder).get(pega) or []) if pega else []
     cap_pega = slot_capacity(fm, pega) if pega else 0
+    eu = fm.get("id") == self_id
+    # A PERCEPÇÃO GRADUADA (spec 067): o que desce depende do que ESTE observador
+    # conhece. O próprio personagem nunca é graduado — de si se sabe tudo.
+    grau = _grau_de_conhecimento(self_id, fm.get("id"))
     bloco = {
         "id": fm.get("id"),
-        "name": fm.get("name"),
-        "state": "self" if fm.get("id") == self_id else "idle",
+        "name": _nome_percebido(fm.get("name"), grau),
+        # A PROSA DO PERSONAGEM (2026-09-06). Faltava, e era o buraco maior do contrato:
+        # 0 de 14 presentes na praça tinham descrição, então A Mente via catorze pessoas
+        # e não sabia como nenhuma era. A spec 053 já tinha feito este argumento para
+        # `object` — "uma entidade cujo significado inteiro vive na descrição seria muda
+        # para ela" — e ninguém o estendeu a personagem, item e rota.
+        #
+        # `None` quando não há prosa, e isso é DELIBERADO: a ausência de prosa é
+        # informação, e quem lê precisa distinguir "não tem" de "não consultei".
+        #
+        # GRADUADA (spec 067): a quem conhece, a prosa inteira; a quem não conhece, só a
+        # seção `## Aparência`. A prosa de um personagem não é aparência — é a ficha, com
+        # método e segredo dentro.
+        "prose": _prosa_percebida(body, grau),
+        # o quanto ESTE observador reconhece o alvo. Desce explícito para o conector não
+        # ter de reconstituir por ausência de campo (o contrato diz o que sabe, não deixa
+        # adivinhar).
+        "recognition": grau,
+        "state": "self" if eu else "idle",
         "action": status.get("action"),
         "mood": status.get("mood"),
-        "conditions": status.get("conditions") or [],
+        # spec 067: NORMALIZA. 3 de 38 personagens do mundo têm `conditions` como
+        # STRING — dois com o literal `'[]'` e a Nerissa com uma frase de ação que
+        # alguma mutação gravou no campo errado. O contexto não propaga tipo errado:
+        # um conector que fizesse `conditions.forEach` receberia caracteres soltos.
+        "conditions": (status.get("conditions")
+                       if isinstance(status.get("conditions"), list) else []),
         # O que os OUTROS veem: apenas o acoplado ao corpo (vestido/segurado).
         # Item guardado dentro de contêiner é invisível a terceiros (spec 004,
         # FR-009) — o que está no bolso não se vê. Pra SI MESMO (spec 036,
-        # FR-010) a visão é a mesma que `self.inventory`/`get_inventory` já
-        # usam — `_nested_item_refs`, recursiva e sem a opacidade de
-        # terceiro — não `_visible_item_refs`, que ficaria incorreta pro
-        # próprio personagem quando `visible_entities` virar simétrica.
-        "carrying": (_nested_item_refs(folder) if fm.get("id") == self_id
-                    else _visible_item_refs(folder)),
+        # FR-010) a visão é a mesma que `self.inventory`/`get_inventory` já usam.
+        "carrying": (_nested_item_refs(folder) if eu else _visible_item_refs(folder)),
         # física visível do corpo: pega e folga de carga (a guarda do Árbitro
         # valida dar/receber sem expor atributos crus de terceiros)
-        "body_status": {
+        # A física VISÍVEL de um corpo alheio: quantas mãos ele tem, quais estão
+        # ocupadas e com quê. Tudo isso se vê.
+        #
+        # `free_load_kg` SAIU daqui (spec 067, FR-010). Quanto mais alguém aguenta
+        # carregar NÃO se vê — deriva da força dele e do que já leva. Ele existia para
+        # um consumidor só, `arbiter.py`, e pegava carona no contrato d'A Mente: duas
+        # plateias, um payload. O Árbitro agora o busca por primitiva, como já fazia com
+        # `sentiment_toward`.
+        "physics": {
             "free_hands": max(0, cap_pega - len(hands)),
             "total_hands": cap_pega,
             "grasp_slot": pega,
             "hands_holding": hands,
-            "free_load_kg": round(carry_capacity(fm) - carried_weight(folder), 3),
+            **({"free_load_kg": round(carry_capacity(fm) - carried_weight(folder), 3)}
+               if eu else {}),
         },
     }
-    # spec 066 — O FATO NA ENTIDADE A QUE ELE SE REFERE.
-    #
-    # `bond` é a CAMADA 2 (fato declarado); `sentiment` é a CAMADA 3 (crença derivada).
-    # Os dois eixos são ORTOGONAIS: o irmão que se odeia tem `bond` e `sentiment`
-    # negativo ao mesmo tempo, e é a célula que motivou a spec. Nenhum dos dois soma no
-    # outro, e nenhum entra em DC (FR-017, FR-018).
-    #
-    # Só desce o que ESTE personagem pode saber (o princípio do contrato 1). O que o
-    # outro declarou sobre ele NÃO entra — é o que sustenta o enjeitado, e quem precisa
-    # dos dois lados é o Árbitro, que chama `bonds_toward_me` por conta própria.
-    #
-    # AUSENTE, nunca `None`: campo que não se aplica não aparece. É o contrato de API
-    # que `tests/contrato_get_context.py` guarda.
-    if self_id and fm.get("id") and fm.get("id") != self_id:
-        rotulo = vinculos.bond_toward(self_id, fm.get("id"))
-        if rotulo:
-            bloco["bond"] = rotulo
-        # O NÚMERO MORRE AQUI (Princípio V): sai o rótulo, nunca o saldo. E só quando
-        # PESA — a banda neutra é omitida, pelo mesmo corte que `afeto_por_lugar` já usa
-        # no Árbitro. Isso enxuga o contexto e evita a única faixa de `sentiment_label`
-        # que não compõe frase ("sem história que pese num sentido ou noutro").
-        saldo = sentiment_toward(self_id, fm.get("id"))
-        if abs(saldo) >= _AFETO_PISO:
-            bloco["sentiment"] = sentiment_label(saldo)
-    return bloco
+    return _com_eixos(bloco, self_id, fm.get("id"))
 
-
-# --------------------------------------------------------------------------- #
-# Pertencimento por memória (spec 036) — primitivos de nível 0.
-#
-# Quatro perguntas, quatro funções, um consumidor cada: `carried_item_ids` (física
-# pura), `is_blocked` (barreira física condicional), `reachable_entities` (furto/
-# transferência), `visible_entities` (narração), `dono` (memória — a única que
-# precisa dela) e `offerable_entities` (comércio, walk próprio). Ver
-# specs/036-pertencimento-por-memoria/data-model.md para as fórmulas.
-# --------------------------------------------------------------------------- #
 
 def is_blocked(personagem_id: str, no_folder: Path, no_fm: dict) -> bool:
     """Barreira física: fechado E sem chave acessível. `is_closed` sozinho
@@ -561,32 +653,47 @@ def get_context(character_id: str) -> dict:
                 # liam por `io.descricao_de`; quem não lia era quem interpreta.
                 # Custo medido no mundo: 12 objects, no máximo 4 numa location,
                 # prosa média de 243 bytes — ~240 tokens na pior cena.
-                "description": obj_body or None,
+                "prose": (obj_body or "").strip() or None,
                 "interactions": obj_fm.get("interactions"),
                 # spec 054: um object com bloco `trabalho` pendente (a panela no fogo,
                 # a fonte de chama, um canteiro recém-colhido) É visivelmente uma coisa
                 # em processo — mesmo booleano que item já expõe (`em_trabalho`
                 # abaixo). É o que permite `forage_onde` excluir do enum um alvo ainda
                 # não rebrotado sem custar chamada nenhuma ao Árbitro (FR-003).
-                "em_trabalho": ((obj_fm.get(trabalho.BLOCO) or {}).get("tool")
-                                if isinstance(obj_fm.get(trabalho.BLOCO), dict)
-                                else None),
                 # fechado esconde o conteúdo até do Árbitro-contexto (spec 005)
                 "contains": [] if is_closed(obj_fm) else _nested_item_refs(child),
-                "fechado": is_closed(obj_fm),
-                # tem fecho declarado? (para o manifest de open/close)
-                "tem_fecho": ("fechado" in (obj_fm.get("state") or {})
-                              or bool(obj_fm.get("locks"))),
+                # spec 067: FÍSICA AGRUPADA, como personagem e item. Antes o object a
+                # trazia solta na raiz (`is_closed`, `has_latch`, `work_in_progress`) —
+                # a terceira forma diferente para a mesma pergunta.
+                "physics": {
+                    "is_closed": is_closed(obj_fm),
+                    # tem fecho declarado? (para o manifest de open/close)
+                    "has_latch": ("fechado" in (obj_fm.get("state") or {})
+                                  or bool(obj_fm.get("locks"))),
+                    # spec 054: um object com bloco `trabalho` pendente É visivelmente
+                    # uma coisa em processo — a CAPACIDADE que o criou, não um booleano.
+                    "work_in_progress": ((obj_fm.get(trabalho.BLOCO) or {}).get("tool")
+                                         if isinstance(obj_fm.get(trabalho.BLOCO), dict)
+                                         else None),
+                },
             })
         elif (child / "item.md").exists():
-            item_fm, _ = read_doc(child / "item.md")
+            item_fm, item_body = read_doc(child / "item.md")
             if not _is_valid(item_fm):
                 continue
             entry = {
                 "id": item_fm.get("id"),
                 "name": item_fm.get("name"),
+                # A PROSA DO ITEM (2026-09-06) — faltava em 7 de 7 na praça. Um item
+                # cujo significado inteiro vive na descrição (uma carta, uma inscrição,
+                # um mapa) era mudo para A Mente. Mesmo argumento da spec 053.
+                "prose": (item_body or "").strip() or None,
                 "interactions": item_fm.get("interactions"),
-                **item_physics(item_fm, child),
+                # FÍSICA AGRUPADA, como o personagem já tinha. Antes ela vinha solta na
+                # raiz da entrada (`size`, `weight_kg`, `slot`...) enquanto o personagem
+                # a trazia agrupada: a mesma informação em duas formas, que é o que
+                # quebra quem escreve um conector.
+                "physics": item_physics(item_fm, child),
             }
             # spec 052: uma peça em processo é VISIVELMENTE uma peça em processo —
             # uma lâmina meio batida na bigorna, uma panela no fogo. O booleano é o
@@ -598,7 +705,7 @@ def get_context(character_id: str) -> dict:
                 # manifesto oferecer a retomada só à tool certa. Não é segredo — é
                 # visível que uma lâmina meio batida é uma lâmina. O CONTEÚDO do
                 # bloco (banda, tetos, tempos) continua fora.
-                entry["em_trabalho"] = _bloco_trab.get("tool") or True
+                entry["work_in_progress"] = _bloco_trab.get("tool") or True
             # contêiner ABERTO no chão expõe o que tem (spec 005); fechado, nada
             if isinstance(item_fm.get("container"), dict):
                 entry["contains"] = [] if is_closed(item_fm) \
@@ -607,6 +714,10 @@ def get_context(character_id: str) -> dict:
 
     self_fm, self_body = read_doc(char_folder / "character.md")
     _self_pega = grasp_slot_of(self_fm)  # spec 019: slot de pega do ator (mão/boca)
+    # O deslocamento em curso, lido da ficha (spec 038): esta perna e a jornada inteira.
+    _transit_fm = self_fm.get("transit") if isinstance(self_fm.get("transit"), dict) else {}
+    _destino_atual = _transit_fm.get("destination")
+    _destino_final = _transit_fm.get("destino_final")
     routes = [] if in_transit else _available_routes(place_fm.get("id"))
     # a cena EVOCA: quem está presente e onde se está decidem o que volta à
     # mente, junto com o que está vívido por si (spec 013)
@@ -622,130 +733,125 @@ def get_context(character_id: str) -> dict:
         | {i["id"] for i in items_present if i.get("id")}
         | {o["id"] for o in objects_present if o.get("id")})
 
-    # spec 066 — O VÍNCULO EM TODA ENTIDADE, num lugar só.
+    # OS DOIS EIXOS EM TODA ENTIDADE, num lugar só (spec 066, revisto 2026-09-06).
     #
-    # Carimbado aqui, e não dentro de cada laço, de propósito: é o que faz `bond`
-    # significar EXATAMENTE a mesma coisa em `characters_present`, `items_present`,
-    # `objects_present` e `location`, sem três implementações para divergirem depois
-    # (FR-008; guardado por `tests/contrato_get_context.py`).
-    #
-    # `characters_present` já foi carimbado em `_character_summary`, junto do
-    # `sentiment` — lá o vínculo anda com a crença, e aqui só com o fato.
+    # Carimbado aqui, e não dentro de cada laço, de propósito: é o que faz `relation` e
+    # `sentiment` significarem EXATAMENTE a mesma coisa em toda coleção, sem várias
+    # implementações para divergirem depois. `characters_present` já foi carimbado em
+    # `_character_summary`, pela mesma função.
     local = {
         "id": place_fm.get("id"),
         "name": place_fm.get("name"),
-        "narrative": place_body,
+        "prose": (place_body or "").strip() or None,
         "belongs_to": _location_lineage(place_folder),
     }
-    for entrada in (*items_present, *objects_present, local):
-        alvo = entrada.get("id")
-        if not alvo:
-            continue
-        rotulo = vinculos.bond_toward(character_id, alvo)
-        if rotulo:                     # AUSENTE, nunca None (contrato de API)
-            entrada["bond"] = rotulo
+    for entrada in (*items_present, *objects_present, *routes, local):
+        _com_eixos(entrada, character_id, entrada.get("id"))
 
+    # ------------------------------------------------------------------ #
+    # OS DOIS DOMÍNIOS (2026-09-06). Ver `docs/contrato-do-contexto.md`.
+    #
+    #   self   — o que o personagem É, SABE, TEM e PRETENDE
+    #   scene  — o que está à volta dele agora
+    #
+    # Nada mais fica na raiz. Antes, `memories`, `intentions` e `known` (que são DELE)
+    # ficavam lado a lado com `characters_present` (que é da CENA), e `in_transit` era
+    # um booleano solto que não dizia quem se deslocava, nem para onde, nem quando
+    # chegava — três perguntas que a estrutura agora responde por construção.
+    # ------------------------------------------------------------------ #
     return {
-        "location": local,
-        "in_transit": in_transit,
-        "routes": routes,
-        "characters_present": characters_present,
-        "items_present": items_present,
-        "objects_present": objects_present,
-        # a cena EVOCA: quem está presente e onde se está decidem o que volta à
-        # mente, junto com o que está vívido por si (spec 013)
-        "memories": memorias_ativas,
-        # o que o personagem PRETENDE — nunca o que viveu (spec 026). Consultivo
-        # de client (Princípio IX nível 2), disponível à Mente antes de decidir,
-        # por sussurro ou pelo gatilho autônomo.
-        "intentions": intencoes.get_active_intentions(char_folder),
-        # QUEM ELE SABE NOMEAR, mesmo não estando aqui (spec 060, 2026-08-31).
-        #
-        # O par id -> nome de tudo que aparece no `involved` das memórias vivas
-        # dele e que NÃO está na cena. Não é informação nova: o id já descia no
-        # `involved`, e o nome ele conhece — está escrito no texto da própria
-        # lembrança ("Vi Ossa, a Cavadora partir, rumo a Forja de Ferro").
-        #
-        # PARA QUE SERVE, e o caso que a criou: a memória ESTENDE O ALCANCE (item
-        # 53.1) — o personagem propõe sobre quem ele LEMBRA, e o desfecho certo é
-        # o mundo recusar na execução, com frase de mundo, não alguém pré-filtrar
-        # a proposta. A Elga tem intenção ativa de ajudar a Ossa e uma lembrança
-        # de tê-la visto PARTIR; ao tentar agir sobre ela, o conector não
-        # conseguia sequer converter o nome em id, e a recusa saía como "isso não
-        # corresponde a nada" — falha de nomear — em vez de "ela não está aqui",
-        # que é fato do mundo e diz a ela o que fazer a seguir.
-        #
-        # Não fere o Princípio IX: nome não é juízo, e o id nunca chega à LLM —
-        # ele para no conector, que é quem converte.
-        #
-        # + OS DESTINOS ALCANÇÁVEIS SEM MEMÓRIA (spec 062, US4). O enum de
-        # `travel_to.destino` já expõe esses ids (`reachable_destinations`,
-        # mesma função) — só faltava o NOME de quem nunca foi mencionado em
-        # memória nenhuma, e por isso `_conhecidos_por_memoria` não os pegava.
-        # Nenhum conhecimento NOVO desce à Mente: o id já estava no enum que
-        # ela vê; só a etiqueta estava faltando (`registrarNomes`, no conector,
-        # caía no fallback nome=id). Memória por cima em caso de colisão — não
-        # muda o comportamento já testado dessa fonte.
-        "known": {
-            **{d: io.name_of(d) for d in deslocamento.reachable_destinations(character_id)
-               if d not in _presentes_para_conhecidos and io.name_of(d) != d},
-            **_conhecidos_por_memoria(memorias_ativas, _presentes_para_conhecidos),
-        },
         "self": {
             "id": self_fm.get("id"),
             "name": self_fm.get("name"),
+            # a prosa do próprio personagem — quem ele é, escrito pelo autor
+            "prose": (self_body or "").strip() or None,
             "attributes": self_fm.get("attributes") or {},
             "skills": self_fm.get("skills") or {},
             "status": self_fm.get("status") or {},
-            # A NECESSIDADE EM RÓTULO (item 51, fatia 1). ADITIVO: `status` segue
-            # cru ao lado, porque a régua do Motor precisa do número. Isto é o que
-            # desce à Mente — e o que faltava para o personagem poder SABER que
-            # está com fome. Ver `fisica.hunger_label`.
-            "necessidade": {
-                "fome": hunger_label(self_fm),
-                "sede": thirst_label(self_fm),
-                "cansaco": fatigue_label(self_fm),
-                # `None` para quem está acordado. Prosa, nunca a fração nem o
-                # tempo (Princípios V/IX) — o mesmo contrato de `consultar_momento`,
-                # que devolve "fim de tarde" e jamais a hora.
-                "sono": sono_label(self_fm),
+            # A NECESSIDADE EM RÓTULO (item 51, fatia 1). ADITIVO: `status` segue cru ao
+            # lado, porque a régua do Motor precisa do número. Isto é o que desce à
+            # Mente — e o que faltava para o personagem poder SABER que está com fome.
+            "needs": {
+                "hunger": hunger_label(self_fm),
+                "thirst": thirst_label(self_fm),
+                "fatigue": fatigue_label(self_fm),
+                # `None` para quem está acordado. Prosa, nunca a fração nem o tempo
+                # (Princípios V/IX) — mesmo contrato de `consultar_momento`.
+                "sleep": sono_label(self_fm),
             },
-            # DERIVADO e BOOLEANO, no mesmo molde de `ocupado` logo abaixo: é o
-            # sinal que o CONECTOR lê para não acionar A Mente em sono profundo
-            # (dormir não é decidir a cada minuto se já deu). Separado do rótulo
-            # de propósito: o rótulo é prosa para o personagem ler, isto é estado
-            # para a máquina decidir — casar decisão com substring de prosa seria
-            # frágil. Os dois saem da MESMA `fisica.sleep_state`, então não podem
-            # divergir.
-            "sono_profundo": (sleep_state(self_fm)["dormindo"]
-                              and not sleep_state(self_fm)["pode_acordar"]),
-            "body": self_body,
-            # spec 052 — OCUPADO, DERIVADO. Substitui a leitura de
-            # `status.cozinhando`, que era um campo no personagem: o fato passou a
-            # morar na peça (a panela no fogo), e isto é recalculado a cada leitura,
-            # nunca persistido — mesmo espírito de `familiarity_with`/
-            # `proficiencies_for`. Um BOOLEANO, nada mais: nenhum tempo, nenhuma
-            # banda, nenhum número desce por aqui.
-            "ocupado": trabalho.is_busy(char_folder),
+            # DERIVADO e BOOLEANO: o sinal que o CONECTOR lê para não acionar A Mente em
+            # sono profundo. Separado do rótulo de propósito — o rótulo é prosa para o
+            # personagem ler, isto é estado para a máquina decidir, e casar decisão com
+            # substring de prosa seria frágil. Saem da MESMA `fisica.sleep_state`.
+            "is_deep_asleep": (sleep_state(self_fm)["dormindo"]
+                               and not sleep_state(self_fm)["pode_acordar"]),
+            # spec 052 — DERIVADO, recalculado a cada leitura e nunca persistido: o fato
+            # mora na peça (a panela no fogo), não num campo do personagem.
+            "is_busy": trabalho.is_busy(char_folder),
             "inventory": _nested_item_refs(char_folder),
             # física do corpo (spec 004): a Mente narra esforço, a guarda valida
-            "body_status": {
-                "capacidade_carga_kg": carry_capacity(self_fm),
-                "capacidade_empurrar_kg": push_capacity(self_fm),
-                "peso_carregado_kg": round(carried_weight(char_folder), 3),
+            "physics": {
+                "carry_capacity_kg": carry_capacity(self_fm),
+                "push_capacity_kg": push_capacity(self_fm),
+                "carried_weight_kg": round(carried_weight(char_folder), 3),
                 # spec 019: "mãos" = o slot de pega do corpo (mão / boca / ...)
                 "free_hands": max(0, slot_capacity(self_fm, _self_pega)
                                - len(slots_in_use(char_folder).get(_self_pega) or []))
                                if _self_pega else 0,
                 "total_hands": slot_capacity(self_fm, _self_pega) if _self_pega else 0,
                 "grasp_slot": _self_pega,
-                # spec 019: o próprio corpo do ator (mapa slot->capacidade). É a
-                # anatomia dele — expô-la ao próprio dono não é metagaming, e o
-                # guard de equipar precisa da capacidade de um slot QUALQUER.
-                "corpo": body_of(self_fm),
-                "slots_ocupados": {s: ids for s, ids
-                                   in slots_in_use(char_folder).items()},
+                # spec 019: a anatomia dele (mapa slot->capacidade). Expô-la ao próprio
+                # dono não é metagaming, e o guard de equipar precisa dela.
+                "body": body_of(self_fm),
+                "slots_in_use": {s: ids for s, ids
+                                 in slots_in_use(char_folder).items()},
             },
+            # a cena EVOCA: quem está presente e onde se está decidem o que volta à
+            # mente, junto com o que está vívido por si (spec 013)
+            "memories": memorias_ativas,
+            # o que o personagem PRETENDE — nunca o que viveu (spec 026)
+            "intentions": intencoes.get_active_intentions(char_folder),
+            # QUEM ELE SABE NOMEAR, mesmo não estando aqui (spec 060/062).
+            #
+            # LISTA de {id, name}, não mais um mapa com id de CHAVE: id é dado, não nome
+            # de campo, e um objeto cujas chaves variam com o conteúdo é impossível de
+            # tipar para quem escreve um conector.
+            #
+            # Não é informação nova: o id já descia no `involved` das memórias, e o nome
+            # está escrito no texto da própria lembrança. Serve para a memória ESTENDER O
+            # ALCANCE (item 53.1) — o personagem propõe sobre quem ele LEMBRA, e o mundo
+            # recusa na execução com frase de mundo, em vez de alguém pré-filtrar.
+            # Não fere o Princípio IX: nome não é juízo, e o id para no conector.
+            "known": [
+                {"id": eid, "name": nome} for eid, nome in sorted({
+                    **{d: io.name_of(d)
+                       for d in deslocamento.reachable_destinations(character_id)
+                       if d not in _presentes_para_conhecidos and io.name_of(d) != d},
+                    **_conhecidos_por_memoria(memorias_ativas,
+                                              _presentes_para_conhecidos),
+                }.items())
+            ],
+            # O DESLOCAMENTO, que era um booleano solto na raiz. Agora diz QUEM (está em
+            # `self`), POR ONDE e PARA ONDE. `None` quando parado — a ausência do objeto
+            # é a resposta, sem um booleano à parte para manter em sincronia.
+            "transit": ({
+                "route_id": place_fm.get("id"),
+                "route_name": place_fm.get("name"),
+                "to_id": _destino_atual,
+                "to_name": io.name_of(_destino_atual) if _destino_atual else None,
+                # o destino FINAL da jornada, quando há plano de várias pernas —
+                # diferente do destino desta perna (spec 038)
+                "journey_to_id": _destino_final,
+                "journey_to_name": (io.name_of(_destino_final)
+                                    if _destino_final else None),
+            } if in_transit else None),
+        },
+        "scene": {
+            "place": local,
+            "characters": characters_present,
+            "items": items_present,
+            "objects": objects_present,
+            "exits": routes,
         },
     }
 
@@ -849,14 +955,15 @@ def _perceivable_ids(ctx: dict) -> set:
     Extraído do `observe_entity` para o reconhecer (spec 018) reusar o MESMO
     recorte — o reconhecimento nunca alcança o que o olhar não alcança.
     """
-    allowed = {(ctx.get("location") or {}).get("id")}
-    for r in ctx.get("routes", []):
+    cena = ctx.get("scene") or {}
+    allowed = {(cena.get("place") or {}).get("id")}
+    for r in cena.get("exits") or []:
         allowed.add(r.get("id"))
-    for c in ctx.get("characters_present", []):
+    for c in cena.get("characters") or []:
         allowed.add(c.get("id"))
-    for o in ctx.get("objects_present", []):
+    for o in cena.get("objects") or []:
         allowed.add(o.get("id"))
-    for it in ctx.get("items_present", []):
+    for it in cena.get("items") or []:
         allowed.add(it.get("id"))
         for sub in it.get("contains") or []:  # contêiner aberto no chão (spec 005)
             allowed.add(sub.get("id"))
@@ -999,7 +1106,7 @@ def investigar(character_id: str, args: dict | None = None) -> dict:
     # A memoria do LUGAR e dos ITENS presentes (US5) — reuso puro de
     # remembered_about no alcance de CONSULTA, com a mesma renovacao da 064.
     ctx = get_context(character_id)
-    local_id = (ctx.get("location") or {}).get("id")
+    local_id = ((ctx.get("scene") or {}).get("place") or {}).get("id")
     evocadas_ids: set[str] = set()
     memorias_do_lugar = []
     if local_id:
@@ -1007,7 +1114,7 @@ def investigar(character_id: str, args: dict | None = None) -> dict:
                                                           alcance_consulta)
         evocadas_ids |= {m["id"] for m in memorias_do_lugar if m.get("id")}
     memorias_dos_itens: dict[str, list] = {}
-    for item in (ctx.get("items_present") or []):
+    for item in ((ctx.get("scene") or {}).get("items") or []):
         item_id = item.get("id")
         if not item_id:
             continue

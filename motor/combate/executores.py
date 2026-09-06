@@ -108,7 +108,11 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
             found = find_entity(arma_id)
             if found is not None:
                 _, arma_fm, _ = found
-        damage, attribute = weapon_of(arma_fm)
+        # spec 068: a FONTE da arma. Item na mão quando a Mente escolheu um; o CORPO
+        # de quem golpeia quando não — é a garra do dragão, que antes valia 1 de dano
+        # como um soco. A escolha EXPLÍCITA sempre vence: um item sem bloco `weapon`
+        # (uma pedra) segue valendo improvisado, nunca a garra — ela escolheu a pedra.
+        damage, attribute = weapon_of(arma_fm if arma_id else actor_fm)
 
         try:
             vantagem = int(op.get("vantagem"))

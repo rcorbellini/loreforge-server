@@ -810,8 +810,14 @@ def spend_fatigue(character_id: str, custo: str) -> None:
 
 
 def weapon_of(item_fm: dict | None) -> tuple[int, str]:
-    """(dano-base, atributo) da arma. Item sem bloco `weapon` — ou mão vazia —
-    é improvisado: o golpe vale o mínimo e sai da força."""
+    """(dano-base, atributo) da arma. Sem bloco `weapon` — ou mão vazia — é
+    improvisado: o golpe vale o mínimo e sai da força.
+
+    A FONTE pode ser um ITEM (a espada na mão) ou o CORPO de quem golpeia (spec 068:
+    a garra do dragão, `character.weapon`). Esta primitiva não sabe nem precisa saber
+    qual dos dois recebeu — lê o bloco de qualquer frontmatter. QUEM é entregue a ela
+    é regra de combate, e mora no executor (`_apply_attack_ops`).
+    """
     weapon = (item_fm or {}).get("weapon")
     if not isinstance(weapon, dict):
         return IMPROVISED_DAMAGE, IMPROVISED_ATTRIBUTE
@@ -826,14 +832,29 @@ def weapon_of(item_fm: dict | None) -> tuple[int, str]:
 
 
 def protection_of(char_folder: Path) -> int:
-    """Absorção do personagem: soma de `armor.protection` do que está VESTIDO.
+    """Absorção do personagem: a PELE mais a soma do que está VESTIDO.
 
     Só peças acopladas ao corpo em slot que não seja a mão contam — armadura
     guardada num contêiner ou segurada na mão não protege ninguém.
+
+    A COURAÇA NATURAL (spec 068, `character.armor`) entra como mais uma parcela: as
+    escamas do dragão, o casco, o couro grosso. SOMA, nunca substitui — vestir um
+    peitoral sobre escamas protege mais que só as escamas, pela mesma razão que duas
+    peças vestidas já somam entre si. E ela não exige `wearable`, ao contrário da
+    peça de item: a pele não se veste.
+
+    Sem o bloco, um corpo sem nada vestido devolve 0, como sempre devolveu — era o
+    que fazia uma criatura de escamas cair para a adaga de qualquer camponês.
     """
     char_fm = _char_fm(char_folder)
     body, pega = body_of(char_fm), grasp_slot_of(char_fm)
     total = 0
+    natural = char_fm.get("armor")
+    if isinstance(natural, dict):
+        try:
+            total += max(0, int(natural["protection"]))
+        except (KeyError, TypeError, ValueError):
+            pass          # mesma disciplina do laço: bloco torto contribui 0
     for _, fm in _direct_items(char_folder):
         slot = item_slot(fm)
         if slot not in body or slot == pega:  # spec 019: vestido no corpo, salvo o de pega

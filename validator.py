@@ -264,6 +264,12 @@ def _validate_character(fm: dict) -> list[str]:
                         f"ou um mapa {{capacidade, pega}}."
                     )
     errors.extend(_validate_bonds(fm))
+    # spec 068: o CORPO que luta. Os mesmos blocos do item, no personagem — a garra
+    # que golpeia quando não há nada na mão, a pele que absorve sem vestir peça. Sem
+    # esta linha os blocos passavam em SILÊNCIO (medido antes da spec: `weapon`
+    # parcial num personagem era ACEITO), e a declaração parcial degradaria para
+    # improvisado sem ninguém saber. `exige_wearable=False`: a pele não se veste.
+    errors.extend(_validate_combat_blocks(fm, "character", exige_wearable=False))
     return errors
 
 
@@ -752,12 +758,22 @@ def _validate_item_commerce(fm: dict) -> list[str]:
     return errors
 
 
-def _validate_item_combat(fm: dict) -> list[str]:
-    """Arma e armadura do item (spec 008): weapon/armor.
+def _validate_combat_blocks(fm: dict, prefixo: str,
+                            exige_wearable: bool) -> list[str]:
+    """Arma e armadura, a regra COMUM a item e personagem (spec 008 + 068).
 
-    Ambos opcionais (item sem `weapon` vale como improvisado; sem `armor` não
-    protege), estritos quando presentes. `armor` exige `wearable` no mesmo item —
-    o que não se veste não protege (espelho de `locks` exigindo `container`).
+    Nasceu dentro de `_validate_item_combat` e saiu de lá quando a spec 068 fez os
+    MESMOS blocos valerem no `character.md` (a garra do dragão, a couraça de
+    escamas). Uma cópia em `_validate_character` divergiria da de item no primeiro
+    campo novo — a segunda fonte de verdade que o Princípio I proíbe.
+
+    Duas diferenças, e só duas, viram parâmetro:
+
+    - `prefixo`: a mensagem diz `item:` ou `character:`. Sem isto, um erro na garra
+      mandaria o autor procurar no arquivo errado.
+    - `exige_wearable`: item com `armor` exige `wearable` — o que não se veste não
+      protege. **A pele não se veste**, então o personagem não tem essa exigência.
+      É a ÚNICA regra que não atravessa.
     """
     errors: list[str] = []
     weapon = fm.get("weapon")
@@ -765,32 +781,43 @@ def _validate_item_combat(fm: dict) -> list[str]:
         if not isinstance(weapon, dict) or \
                 "damage" not in weapon or "attribute" not in weapon:
             errors.append(
-                "item: 'weapon' exige 'damage' e 'attribute' "
+                f"{prefixo}: 'weapon' exige 'damage' e 'attribute' "
                 "(declaração parcial é inválida)."
             )
         else:
             damage = weapon.get("damage")
             if isinstance(damage, bool) or not isinstance(damage, int) or damage < 1:
-                errors.append("item: 'weapon.damage' deve ser inteiro >= 1.")
+                errors.append(f"{prefixo}: 'weapon.damage' deve ser inteiro >= 1.")
             if weapon.get("attribute") not in WEAPON_ATTRIBUTES:
                 errors.append(
-                    f"item: 'weapon.attribute' inválido: '{weapon.get('attribute')}' "
+                    f"{prefixo}: 'weapon.attribute' inválido: "
+                    f"'{weapon.get('attribute')}' "
                     f"(permitidos: {', '.join(sorted(WEAPON_ATTRIBUTES))})."
                 )
 
     armor = fm.get("armor")
     if armor is not None:
         if not isinstance(armor, dict) or "protection" not in armor:
-            errors.append("item: 'armor' exige 'protection'.")
+            errors.append(f"{prefixo}: 'armor' exige 'protection'.")
         else:
             protection = armor.get("protection")
             if isinstance(protection, bool) or not isinstance(protection, int) \
                     or protection < 0:
-                errors.append("item: 'armor.protection' deve ser inteiro >= 0.")
-        if fm.get("wearable") is None:
-            errors.append("item: 'armor' exige 'wearable' (o que não se veste não "
-                          "protege).")
+                errors.append(f"{prefixo}: 'armor.protection' deve ser inteiro >= 0.")
+        if exige_wearable and fm.get("wearable") is None:
+            errors.append(f"{prefixo}: 'armor' exige 'wearable' (o que não se veste "
+                          "não protege).")
     return errors
+
+
+def _validate_item_combat(fm: dict) -> list[str]:
+    """Arma e armadura do item (spec 008): weapon/armor.
+
+    Ambos opcionais (item sem `weapon` vale como improvisado; sem `armor` não
+    protege), estritos quando presentes. `armor` exige `wearable` no mesmo item —
+    o que não se veste não protege (espelho de `locks` exigindo `container`).
+    """
+    return _validate_combat_blocks(fm, "item", exige_wearable=True)
 
 
 def _validate_rastro(fm: dict) -> list[str]:

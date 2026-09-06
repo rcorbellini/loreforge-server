@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,17 @@ __version__ = "3.0.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.1.0": "spec 067, revisao — A PROSA GRADUADA EM TRES CAMADAS, nao duas. "
+            "Conhecer alguem era BINARIO: uma UNICA memoria viva abria a ficha "
+            "inteira. A Mira tem uma lembranca da Sarga e lia 'uma carga sumiu na "
+            "semana passada, e ela sabe quem levou' — o enredo em curso, de graca. "
+            "Agora: `ausente` ve `## Aparencia` (corpo e porte); `vago` ve tambem "
+            "`## Voz e Sotaque` (ja cruzou o bastante para saber COMO a pessoa fala); "
+            "`nitido` ve a prosa inteira. O PREAMBULO — o texto antes da primeira "
+            "secao — e SEMPRE privado: e ali que o autor escreve quem a pessoa E, e "
+            "conhecer de vista nao da acesso a isso. A camada do meio nao custou "
+            "autoria nenhuma: `## Voz e Sotaque` ja existia em 27 dos 38 personagens, "
+            "escrita antes desta spec — era a divisao que o mundo ja fazia sozinho.",
     "3.0.0": "spec 067 — O CONTRATO DO CONTEXTO: estrutura, nomes e PERCEPCAO "
             "GRADUADA. MAJOR porque quebra o contrato inteiro, sem adaptador e sem "
             "periodo de transicao (decisao do mantenedor: 'nao tem ninguem jogando "

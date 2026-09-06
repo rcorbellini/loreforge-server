@@ -104,7 +104,23 @@ from ..rotas import (
 # Nenhum personagem declara `## Aparência` hoje (27 de 38 têm só `## Voz e Sotaque`, 11
 # não têm seção nenhuma). Quem não a declarar degrada para o comportamento anterior à
 # spec 067 — estranho não vê prosa — então a migração do mundo pode ser progressiva.
-_SECAO_PUBLICA = "aparência"
+# As três camadas de prosa, uma por grau de reconhecimento (spec 067, revisto):
+#
+#   ausente  -> só `## Aparência`. O que qualquer um vê ao olhar: corpo e porte.
+#   vago     -> + `## Voz e Sotaque`. Já cruzou com a pessoa o bastante para saber
+#               COMO ela fala — mas não o que ela guarda.
+#   nitido   -> a prosa INTEIRA, incluindo o preâmbulo, que é onde moram o método e o
+#               segredo ("uma bolsa se abre melhor num aperto").
+#
+# A camada do meio não custou autoria nenhuma: `## Voz e Sotaque` já existia em 27 dos
+# 38 personagens, escrita antes desta spec. Era a divisão que o mundo já fazia sozinho.
+#
+# O PREÂMBULO (o texto antes da primeira seção) é sempre privado. É deliberado: é ali
+# que o autor escreve quem a pessoa É, e conhecer alguém de vista não dá acesso a isso.
+_SECOES_POR_GRAU = {
+    "ausente": ("aparência",),
+    "vago": ("aparência", "voz e sotaque"),
+}
 
 
 def _grau_de_conhecimento(self_id: str, alvo_id: str) -> str:
@@ -138,20 +154,28 @@ def _nome_percebido(nome: str | None, grau: str) -> str | None:
 
 
 def _prosa_percebida(corpo: str, grau: str) -> str | None:
-    """A prosa inteira a quem conhece; só a seção pública a quem não conhece."""
+    """A prosa que ESTE observador alcança, graduada em três camadas.
+
+    Ver `_SECOES_POR_GRAU`. Conhecer alguém deixou de ser binário: uma única memória
+    viva abria a ficha inteira, incluindo o que a pessoa esconde.
+    """
     corpo = (corpo or "").strip()
     if not corpo:
         return None
-    if grau != "ausente":
+    permitidas = _SECOES_POR_GRAU.get(grau)
+    if permitidas is None:            # nitido: a prosa inteira, preâmbulo incluído
         return corpo
-    publica, capturando = [], False
+    saida, secao = [], None
     for linha in corpo.splitlines():
         if linha.lstrip().startswith("##"):
-            capturando = linha.lstrip("# ").strip().lower().startswith(_SECAO_PUBLICA)
+            titulo = linha.lstrip("# ").strip().lower()
+            secao = next((s for s in permitidas if titulo.startswith(s)), None)
+            if secao:
+                saida.append(linha.strip())   # o título fica: ele diz o que se está lendo
             continue
-        if capturando:
-            publica.append(linha)
-    return "\n".join(publica).strip() or None
+        if secao:
+            saida.append(linha)
+    return "\n".join(saida).strip() or None
 
 
 def _com_eixos(bloco: dict, self_id: str, alvo_id: str | None) -> dict:

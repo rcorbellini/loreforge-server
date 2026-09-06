@@ -244,6 +244,36 @@ check("G2: e o afeto de TERCEIROS por ela também não desce",
       not any(k.startswith("afeto_por") or k == "sentiment_toward_me"
               for c in ctx_h["scene"]["characters"] for k in c))
 
+print("\n--- Bloco K: a PERCEPÇÃO GRADUADA em três camadas (spec 067) --------")
+
+from motor.percepcao import consultas as _cons
+
+_FICHA = ("Ele guarda um segredo que ninguém sabe.\n"
+          "\n## Aparência\nMagro, de casaco puído.\n"
+          "\n## Voz e Sotaque\nFala baixo e devagar.\n")
+
+_ausente = _cons._prosa_percebida(_FICHA, "ausente")
+_vago = _cons._prosa_percebida(_FICHA, "vago")
+_nitido = _cons._prosa_percebida(_FICHA, "nitido")
+
+check("K1: AUSENTE vê só a aparência",
+      "Magro" in _ausente and "Fala baixo" not in _ausente
+      and "segredo" not in _ausente, f"veio {_ausente!r}")
+check("K2: VAGO vê aparência + voz, e NÃO o preâmbulo",
+      "Magro" in _vago and "Fala baixo" in _vago and "segredo" not in _vago,
+      f"veio {_vago!r}")
+check("K3: NITIDO vê a prosa inteira, preâmbulo incluído",
+      "segredo" in _nitido and "Magro" in _nitido and "Fala baixo" in _nitido)
+# O PREÂMBULO É SEMPRE PRIVADO — é ali que o autor escreve quem a pessoa É. Antes da
+# 067 conhecer alguém era binário: UMA memória viva abria a ficha inteira, e a Mira,
+# com uma lembrança da Sarga, lia "uma carga sumiu; ela sabe quem levou".
+check("K4: o preâmbulo NUNCA vaza fora de `nitido`",
+      "segredo" not in (_ausente + _vago))
+check("K5: ficha sem seção nenhuma não vaza para quem não conhece",
+      _cons._prosa_percebida("Só o segredo, sem seções.", "ausente") is None)
+check("K6: o título da seção acompanha o trecho (o leitor sabe o que está lendo)",
+      _ausente.startswith("## Aparência"))
+
 print("\n--- Bloco H: a régua LÊ o vínculo (US3) — não nasce inerte -------------")
 
 import arbiter

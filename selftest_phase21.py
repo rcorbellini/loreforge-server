@@ -190,10 +190,26 @@ check("o PACOTE desce por `reconhecimentos` (não ao raciocínio do Árbitro)",
       str(_r.get("reconhecimentos")))
 # o contexto do Árbitro NÃO carried_item_ids reconhecimento
 ctx_arb = arbiter._context_for_prompt(motor.get_context(TOR))
+# A checagem é ESTRUTURAL (nomes de chave), não busca de substring no payload inteiro.
+# A versão anterior procurava "reconhec" em `str(ctx_arb)` e passava por sorte: assim
+# que a prosa dos personagens passou a descer (spec 067), a ficha da Mira — que diz
+# "RECONHECE um rosto que voltou depois de anos" — derrubou o teste sem que nada
+# tivesse vazado. Guarda que lê prosa procurando nome de campo acusa ficção, não bug.
+def _chaves_de(no):
+    if isinstance(no, dict):
+        for k, v in no.items():
+            yield k
+            yield from _chaves_de(v)
+    elif isinstance(no, list):
+        for v in no:
+            yield from _chaves_de(v)
+
+_chaves_arb = set(_chaves_de(ctx_arb))
 check("o contexto do Árbitro NÃO ganha reconhecimento (a fronteira)",
-      "reconhec" not in str(ctx_arb).lower()
-      and "memorias_vivas" not in str(ctx_arb),
-      "vazou reconhecimento ao contexto do Árbitro")
+      not ({"reconhecimentos", "reconhecimento", "recognition", "memorias_vivas"}
+           & _chaves_arb),
+      f"vazou ao contexto do Árbitro: "
+      f"{sorted({'reconhecimentos','reconhecimento','recognition','memorias_vivas'} & _chaves_arb)}")
 
 
 print()

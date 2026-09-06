@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,18 @@ __version__ = "3.2.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.3.0": "spec 067 — A FORMA UNIFORME EM QUALQUER PROFUNDIDADE, e o teste que "
+            "estava furado. O contrato_get_context so olhava as colecoes de TOPO e so "
+            "checava id+name: por baixo dele passaram TRES defeitos, um de cada vez, e "
+            "cada um so apareceu quando alguem leu o payload de verdade — a fisica "
+            "solta em `carrying`, o lugar-PAI sem os eixos, e itens aninhados sem "
+            "prosa. Agora a varredura e RECURSIVA (62 entidades contra 23) e exige o "
+            "nucleo `prose`/`relation`/`sentiment` em toda entidade da cena, em "
+            "qualquer profundidade, mais a proibicao de fisica solta. `carrying`, "
+            "`contains` e `inventory` ganharam prosa e os dois eixos: o mesmo pe de "
+            "cabra vinha descrito no chao e MUDO na mao de alguem. `known_elsewhere` "
+            "fica de fora por desenho, com excecao explicita — e referencia, nao "
+            "entidade percebida, e dar-lhe prosa seria vazamento.",
     "3.2.0": "spec 067, revisao — TRES criticas do mantenedor ao payload real, todas "
             "procedentes. (1) `hunger` aparecia em `status` E em `needs`, com "
             "VOCABULARIOS DIFERENTES para a mesma pergunta ('saciado' x 'sem fome', "

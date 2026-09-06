@@ -300,7 +300,8 @@ def _character_summary(folder: Path, self_id: str) -> dict:
         # Item guardado dentro de contêiner é invisível a terceiros (spec 004,
         # FR-009) — o que está no bolso não se vê. Pra SI MESMO (spec 036,
         # FR-010) a visão é a mesma que `self.inventory`/`get_inventory` já usam.
-        "carrying": (_nested_item_refs(folder) if eu else _visible_item_refs(folder)),
+        "carrying": (_nested_item_refs(folder, self_id) if eu
+                     else _visible_item_refs(folder, self_id)),
         # física visível do corpo: pega e folga de carga (a guarda do Árbitro
         # valida dar/receber sem expor atributos crus de terceiros)
         # A física VISÍVEL de um corpo alheio: quantas mãos ele tem, quais estão
@@ -496,7 +497,7 @@ def craftable_entities(personagem_id: str) -> dict[str, dict]:
     return _walk_scene(loc, _para, incluir_barrado=False)
 
 
-def _visible_item_refs(char_folder: Path) -> list[dict]:
+def _visible_item_refs(char_folder: Path, self_id: str = "") -> list[dict]:
     """Itens visíveis de um personagem para TERCEIROS: os filhos diretos
     (vestidos/segurados), com o slot e a física de cada um. O conteúdo dos
     contêineres fica oculto (FR-009), mas a existência do contêiner não.
@@ -517,19 +518,30 @@ def _visible_item_refs(char_folder: Path) -> list[dict]:
             continue
         # spec 067: FORMA UNIFORME — a mesma de `scene.items`. Antes a física vinha
         # solta aqui e agrupada lá, para o MESMO tipo de coisa.
-        refs.append({"id": fm.get("id"), "name": fm.get("name"),
-                     "physics": item_physics(fm, child)})
+        # FORMA UNIFORME em qualquer profundidade (spec 067). Um item na mão de alguém
+        # é o MESMO tipo de coisa que um item no chão: se o do chão tem prosa e os dois
+        # eixos, o da mão também tem. Antes, o mesmo pé de cabra vinha descrito em
+        # `scene.items` e mudo em `carrying` — e quem escreve um conector teria de
+        # tratar dois casos para a mesma pergunta.
+        refs.append(_com_eixos({
+            "id": fm.get("id"), "name": fm.get("name"),
+            "prose": (read_doc(child / "item.md")[1] or "").strip() or None,
+            "physics": item_physics(fm, child),
+        }, self_id, fm.get("id")))
         if _is_wide_open(fm):
             for neto, nfm in _walk_open_items(child):
                 if not _is_valid(nfm):
                     continue
-                refs.append({"id": nfm.get("id"), "name": nfm.get("name"),
-                             "on_display_in": fm.get("id"),
-                             "physics": item_physics(nfm, neto)})
+                refs.append(_com_eixos({
+                    "id": nfm.get("id"), "name": nfm.get("name"),
+                    "prose": (read_doc(neto / "item.md")[1] or "").strip() or None,
+                    "on_display_in": fm.get("id"),
+                    "physics": item_physics(nfm, neto),
+                }, self_id, nfm.get("id")))
     return refs
 
 
-def _nested_item_refs(container_folder: Path) -> list[dict]:
+def _nested_item_refs(container_folder: Path, self_id: str = "") -> list[dict]:
     """Itens aninhados dentro de um contêiner — object (loot de um baú) ou personagem
     (inventário), com aninhamento arbitrário.
 
@@ -548,8 +560,11 @@ def _nested_item_refs(container_folder: Path) -> list[dict]:
     for child, fm in _walk_open_items(container_folder):
         if not _is_valid(fm):
             continue
-        ref = {"id": fm.get("id"), "name": fm.get("name"),
-               "physics": item_physics(fm, child)}
+        ref = _com_eixos({
+            "id": fm.get("id"), "name": fm.get("name"),
+            "prose": (read_doc(child / "item.md")[1] or "").strip() or None,
+            "physics": item_physics(fm, child),
+        }, self_id, fm.get("id"))
         if is_char:
             if child.parent == container_folder:
                 slot = item_slot(fm)
@@ -693,7 +708,8 @@ def get_context(character_id: str) -> dict:
                 # abaixo). É o que permite `forage_onde` excluir do enum um alvo ainda
                 # não rebrotado sem custar chamada nenhuma ao Árbitro (FR-003).
                 # fechado esconde o conteúdo até do Árbitro-contexto (spec 005)
-                "contains": [] if is_closed(obj_fm) else _nested_item_refs(child),
+                "contains": ([] if is_closed(obj_fm)
+                             else _nested_item_refs(child, character_id)),
                 # spec 067: FÍSICA AGRUPADA, como personagem e item. Antes o object a
                 # trazia solta na raiz (`is_closed`, `has_latch`, `work_in_progress`) —
                 # a terceira forma diferente para a mesma pergunta.
@@ -740,8 +756,8 @@ def get_context(character_id: str) -> dict:
                 entry["work_in_progress"] = _bloco_trab.get("tool") or True
             # contêiner ABERTO no chão expõe o que tem (spec 005); fechado, nada
             if isinstance(item_fm.get("container"), dict):
-                entry["contains"] = [] if is_closed(item_fm) \
-                    else _nested_item_refs(child)
+                entry["contains"] = ([] if is_closed(item_fm)
+                                     else _nested_item_refs(child, character_id))
             items_present.append(entry)
 
     self_fm, self_body = read_doc(char_folder / "character.md")
@@ -836,7 +852,7 @@ def get_context(character_id: str) -> dict:
             # derivado, como os dois acima: o Árbitro precisava de `descansando_desde`
             # cru só para responder esta pergunta.
             "is_resting": fisica.is_resting(self_fm),
-            "inventory": _nested_item_refs(char_folder),
+            "inventory": _nested_item_refs(char_folder, character_id),
             # física do corpo (spec 004): a Mente narra esforço, a guarda valida
             "physics": {
                 "carry_capacity_kg": carry_capacity(self_fm),

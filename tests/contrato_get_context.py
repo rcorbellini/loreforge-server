@@ -180,21 +180,76 @@ check("2b: `sentiment` está presente em 100% das entidades da cena (SC-005)",
 check("2c: `transit` está presente em `self`, mesmo parado (null)",
       "transit" in CTX["self"])
 
-print("\n--- 3. FORMA UNIFORME entre coleções ---------------------------------")
+print("\n--- 3. FORMA UNIFORME, EM QUALQUER PROFUNDIDADE --------------------")
 
-for col in ("characters_present", "items_present", "objects_present"):
-    itens = CTX.get(col) or []
-    check(f"3a: '{col}' — toda entrada expõe id e name",
-          all("id" in e and "name" in e for e in itens),
-          f"faltando em {[e for e in itens if 'id' not in e or 'name' not in e]}")
+# A DÍVIDA QUE DEIXOU TRÊS DEFEITOS PASSAREM. A primeira versão deste bloco só olhava
+# as coleções de TOPO (`characters`, `items`, `objects`) e só checava `id`+`name`.
+# Passaram por baixo dela, um de cada vez, e cada um só apareceu quando alguém leu o
+# payload de verdade:
+#
+#   - a física SOLTA em `carrying`/`inventory` enquanto `scene.items` a trazia agrupada
+#   - o lugar-PAI em `belongs_to` sem `relation`/`sentiment`
+#   - itens em `carrying`/`contains` sem prosa: o mesmo pé de cabra descrito no chão e
+#     mudo na mão de alguém
+#
+# Agora a varredura é RECURSIVA e a regra é uma só.
+_NUCLEO = ("prose", "relation", "sentiment")
 
-# `bond` tem de significar a MESMA coisa em toda coleção: string, nunca outro tipo.
-_bonds = [(c, v) for c, v in folhas(CTX) if c.rsplit(".", 1)[-1] == "bond"]
-check("3b: 'bond' é sempre string, em qualquer coleção",
-      all(isinstance(v, str) and v.strip() for _, v in _bonds),
-      f"{_bonds}")
-check("3c: 'bond' aparece na entidade, nunca num bloco à parte",
-      not any(k == "bonds" or k == "vinculos" for k, _ in chaves(CTX)))
+
+def entidades(no, caminho="$"):
+    """Todo nó com `id` E `name` é uma ENTIDADE, esteja onde estiver."""
+    if isinstance(no, dict):
+        if "id" in no and "name" in no:
+            yield caminho, no
+        for k, v in no.items():
+            yield from entidades(v, f"{caminho}.{k}")
+    elif isinstance(no, list):
+        for v in no:
+            yield from entidades(v, f"{caminho}[]")
+
+
+# `known_elsewhere` é REFERÊNCIA, não entidade: são nomes que o personagem sabe
+# pronunciar sobre quem NÃO está na cena. Dar-lhe `prose` seria vazamento — ele não
+# está vendo ninguém. A exceção é EXPLÍCITA para não virar buraco por descuido.
+_REFERENCIAS = ("$.self.known_elsewhere[]",)
+
+_incompletas = []
+for cam, e in entidades(CTX.get("scene") or {}, "$.scene"):
+    faltando = [c for c in _NUCLEO if c not in e]
+    if faltando:
+        _incompletas.append(f"{cam}[{e.get('id')}] sem {faltando}")
+check("3a: toda entidade da CENA tem o núcleo, em qualquer profundidade",
+      not _incompletas, f"{_incompletas[:4]}")
+
+_refs = [cam for cam, _ in entidades(CTX.get("self") or {}, "$.self")
+         if cam not in _REFERENCIAS and cam != "$.self"]
+_self_incompletas = []
+for cam, e in entidades(CTX.get("self") or {}, "$.self"):
+    if cam in _REFERENCIAS or cam == "$.self":
+        continue
+    faltando = [c for c in _NUCLEO if c not in e]
+    if faltando:
+        _self_incompletas.append(f"{cam}[{e.get('id')}] sem {faltando}")
+check("3b: e as entidades dentro de `self` (inventário) também",
+      not _self_incompletas, f"{_self_incompletas[:4]}")
+
+# `bond`/`relation` tem de significar a MESMA coisa em toda profundidade
+_rel = [(c, v) for c, v in folhas(CTX) if c.rsplit(".", 1)[-1] == "relation"]
+check("3c: `relation` é sempre string ou None, nunca outro tipo",
+      all(v is None or (isinstance(v, str) and v.strip()) for _, v in _rel),
+      f"{[x for x in _rel if x[1] is not None and not isinstance(x[1], str)][:3]}")
+_sent = [(c, v) for c, v in folhas(CTX) if c.rsplit(".", 1)[-1] == "sentiment"]
+check("3d: `sentiment` é sempre string ou None",
+      all(v is None or isinstance(v, str) for _, v in _sent))
+
+# a física, onde existe, é sempre um BLOCO — nunca campos soltos na raiz da entidade
+_solta = []
+for cam, e in entidades(CTX, "$"):
+    for campo in ("size", "weight_kg", "worn_at", "slot", "free_hands", "grasp_slot"):
+        if campo in e:
+            _solta.append(f"{cam}[{e.get('id')}].{campo}")
+check("3e: nenhuma entidade traz física SOLTA — ela mora em `physics`",
+      not _solta, f"{_solta[:4]}")
 
 print("\n--- 4. NENHUM NÚMERO DE MEDIDA INTERNA (Princípio V) -----------------")
 

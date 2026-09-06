@@ -585,7 +585,7 @@ def _conhecidos_por_memoria(memorias: list, presentes: set) -> dict:
     return fora
 
 
-def _location_lineage(place_folder: Path) -> dict | None:
+def _location_lineage(place_folder: Path, self_id: str = "") -> dict | None:
     """A location mais PRÓXIMA que contém `place_folder`, com um ponteiro
     recursivo `belongs_to` pra quem contém ELA — mesma forma da árvore de
     pastas de verdade (spec 035: região contém cidade, cidade contém lugar,
@@ -609,12 +609,18 @@ def _location_lineage(place_folder: Path) -> dict | None:
         if loc_file.exists():
             fm, body = read_doc(loc_file)
             if fm.get("id"):
-                return {
+                # O lugar-pai é ENTIDADE como qualquer outra, e por isso leva os dois
+                # eixos (spec 067, revisão). Sem eles, a mesma coisa tinha duas formas
+                # conforme o nível: a praça trazia `relation`/`sentiment`, e Porto Negro,
+                # que a contém, não — e um leitor teria de saber que a forma muda com a
+                # profundidade. Um personagem PODE ter vínculo com a cidade e não com a
+                # praça (ou o contrário), então não é campo decorativo.
+                return _com_eixos({
                     "id": fm["id"],
                     "name": fm.get("name"),
-                    "prose": body,
-                    "belongs_to": _location_lineage(cur),
-                }
+                    "prose": (body or "").strip() or None,
+                    "belongs_to": _location_lineage(cur, self_id),
+                }, self_id, fm["id"])
         cur = cur.parent
     return None
 
@@ -769,7 +775,7 @@ def get_context(character_id: str) -> dict:
         "id": place_fm.get("id"),
         "name": place_fm.get("name"),
         "prose": (place_body or "").strip() or None,
-        "belongs_to": _location_lineage(place_folder),
+        "belongs_to": _location_lineage(place_folder, character_id),
     }
     for entrada in (*items_present, *objects_present, *routes, local):
         _com_eixos(entrada, character_id, entrada.get("id"))
@@ -793,7 +799,20 @@ def get_context(character_id: str) -> dict:
             "prose": (self_body or "").strip() or None,
             "attributes": self_fm.get("attributes") or {},
             "skills": self_fm.get("skills") or {},
-            "status": self_fm.get("status") or {},
+            # O ESTADO AGORA — e SÓ ele. A NECESSIDADE saiu daqui (spec 067, revisão):
+            # `status.hunger` e `status.fatigue` desciam ao lado de `needs.hunger` e
+            # `needs.fatigue`, com vocabulários DIFERENTES para a mesma pergunta
+            # ("saciado" x "sem fome", "leve" x "descansado"). Pior que duplicata: era
+            # SEGUNDA VERDADE DEFASADA — `hunger_label` IGNORA o texto estático de
+            # `status.hunger` quando há `hunger_ts`, então o campo cru podia contradizer
+            # o rótulo no mesmo payload. `needs` é a resposta; aqui ficou o que só existe
+            # aqui.
+            #
+            # Os cronômetros (`hunger_ts`, `descansando_desde`, ...) também saíram: são
+            # maquinário do Motor, não algo que o personagem saiba. O que se precisava
+            # deles vira booleano derivado, no molde que `is_busy` já estabeleceu.
+            "status": {k: v for k, v in (self_fm.get("status") or {}).items()
+                       if k in ("hp", "hp_max", "action", "mood", "conditions")},
             # A NECESSIDADE EM RÓTULO (item 51, fatia 1). ADITIVO: `status` segue cru ao
             # lado, porque a régua do Motor precisa do número. Isto é o que desce à
             # Mente — e o que faltava para o personagem poder SABER que está com fome.
@@ -814,6 +833,9 @@ def get_context(character_id: str) -> dict:
             # spec 052 — DERIVADO, recalculado a cada leitura e nunca persistido: o fato
             # mora na peça (a panela no fogo), não num campo do personagem.
             "is_busy": trabalho.is_busy(char_folder),
+            # derivado, como os dois acima: o Árbitro precisava de `descansando_desde`
+            # cru só para responder esta pergunta.
+            "is_resting": fisica.is_resting(self_fm),
             "inventory": _nested_item_refs(char_folder),
             # física do corpo (spec 004): a Mente narra esforço, a guarda valida
             "physics": {
@@ -848,7 +870,7 @@ def get_context(character_id: str) -> dict:
             # ALCANCE (item 53.1) — o personagem propõe sobre quem ele LEMBRA, e o mundo
             # recusa na execução com frase de mundo, em vez de alguém pré-filtrar.
             # Não fere o Princípio IX: nome não é juízo, e o id para no conector.
-            "known": [
+            "known_elsewhere": [
                 {"id": eid, "name": nome} for eid, nome in sorted({
                     **{d: io.name_of(d)
                        for d in deslocamento.reachable_destinations(character_id)

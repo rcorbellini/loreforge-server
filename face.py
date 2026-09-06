@@ -71,9 +71,11 @@ def build(context: dict) -> list[dict]:
         })
     # QUEM DORME NÃO PERGUNTA. O gate de descanso do manifesto é um early-return que
     # deixa só a capacidade de acordar; se a consulta entrasse por fora dele, um dormindo
-    # checaria a hora. Reusa `fisica.is_resting`, a ÚNICA definição de "está dormindo"
-    # no código (spec 031) — a mesma que o manifesto consulta.
-    if not motor.fisica.is_resting({"status": (context.get("self") or {}).get("status") or {}}):
+    # checaria a hora. spec 067: o contexto ENTREGA o booleano derivado — antes esta
+    # linha remontava um `fm` falso a partir do `status` cru só para chamar
+    # `fisica.is_resting`, e o cronômetro (`descansando_desde`) saiu do contrato por ser
+    # maquinário do Motor. A definição segue única; muda só de onde a resposta vem.
+    if not (context.get("self") or {}).get("is_resting"):
         exposta.extend(_consultas())
     return sorted(exposta, key=lambda c: c["nome"])
 

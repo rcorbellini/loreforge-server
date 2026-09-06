@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.1.1"
+__version__ = "3.2.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,19 @@ __version__ = "3.1.1"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.2.0": "spec 067, revisao — TRES criticas do mantenedor ao payload real, todas "
+            "procedentes. (1) `hunger` aparecia em `status` E em `needs`, com "
+            "VOCABULARIOS DIFERENTES para a mesma pergunta ('saciado' x 'sem fome', "
+            "'leve' x 'descansado'). Pior que duplicata: `hunger_label` IGNORA o texto "
+            "estatico de `status.hunger` quando ha `hunger_ts`, entao o cru podia "
+            "CONTRADIZER o rotulo no mesmo payload — segunda verdade DEFASADA. `status` "
+            "ficou so com hp/action/mood/conditions; os cronometros (hunger_ts, "
+            "descansando_desde) sairam por serem maquinario do Motor, e viraram o "
+            "booleano derivado `is_resting`, no molde de `is_busy`. (2) O lugar-PAI em "
+            "`belongs_to` nao tinha `relation`/`sentiment`: a mesma entidade mudava de "
+            "forma conforme a profundidade, e um personagem PODE ter vinculo com a "
+            "cidade e nao com a praca. (3) `known` nao dizia o que nem onde — virou "
+            "`known_elsewhere`: as entidades que ele sabe NOMEAR e que NAO estao na cena.",
     "3.1.1": "spec 067, PATCH — duas quebras da forma uniforme que so apareceram ao "
             "olhar o payload real: (1) a linhagem `belongs_to` ainda chamava a prosa de "
             "`narrative`, e o conector JA lia `.prose` — estava recebendo undefined em "

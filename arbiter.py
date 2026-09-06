@@ -797,8 +797,9 @@ def build_tools(context: dict) -> list[dict]:
     embaixo (`dormindo != spec.only_while_resting`), e a face de acordar sai do
     registro como todas as outras. Acrescentar tool não edita mais este ponto.
     """
-    self_status = (context.get("self") or {}).get("status") or {}
-    dormindo = motor.fisica.is_resting({"status": self_status})
+    # spec 067: `descansando_desde` saiu do contrato — é cronômetro do Motor, não algo
+    # que o personagem saiba. O booleano vem derivado, no molde de `is_busy`.
+    dormindo = bool((context.get("self") or {}).get("is_resting"))
     # spec 048/052: mesmo gate cosmético do descanso, generalizado — enquanto há
     # trabalho em curso, NENHUMA tool de mutação aparece.
     # spec 052: "is_busy" deixou de ser um campo do personagem. `get_context`

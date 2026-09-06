@@ -524,8 +524,14 @@ check("51.1: a necessidade DESCE no contexto, ao lado do status cru",
       and "hunger" in _ctx51["self"]["needs"]
       and "fatigue" in _ctx51["self"]["needs"],
       str((_ctx51.get("self") or {}).get("needs")))
-check("51.1: e o status CRU segue lá — a régua do Motor precisa do número",
-      "fatigue" in (_ctx51["self"].get("status") or {}))
+# spec 067 INVERTEU esta asserção, e o motivo é que a premissa original era falsa: o
+# `status.hunger`/`status.fatigue` que descia NÃO era "o número que a régua precisa" —
+# era TEXTO estático que `hunger_label` IGNORA quando há `hunger_ts`. Ou seja, o campo
+# cru podia CONTRADIZER o rótulo no mesmo payload, com vocabulários diferentes
+# ("saciado" x "sem fome"). A régua do Motor lê a ficha, não o contexto.
+check("51.1: a necessidade NÃO se repete no status cru (era segunda verdade defasada)",
+      not ({"hunger", "thirst", "fatigue"} & set(_ctx51["self"].get("status") or {})),
+      str(_ctx51["self"].get("status")))
 
 
 print()

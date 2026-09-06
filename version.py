@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,28 @@ __version__ = "3.3.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.4.0": "spec 068 — O CORPO QUE LUTA. Os blocos `weapon`/`armor`, que so valiam "
+            "em item, passam a valer no `character.md`: a garra do dragao, a couraca "
+            "de escamas. Sem isto criatura nenhuma funcionava — um bicho nao segura "
+            "espada nem veste gibao, entao golpeava por 1 de dano (improvisado) e "
+            "absorvia 0, batendo como um homem irritado e morrendo como um homem "
+            "desarmado. Mudanca de PRIMITIVA, nao de tool: `attack` nao tem uma linha "
+            "alterada, e nenhuma chamada nova ao modelo entra no turno. `weapon_of` "
+            "manteve assinatura E comportamento — ela ja lia o bloco de qualquer "
+            "frontmatter e nunca soube se veio de item ou de corpo; so mudou QUEM lhe "
+            "e entregue, numa unica expressao no executor "
+            "(`arma_fm if arma_id else actor_fm`), de onde a precedencia inteira cai "
+            "sem `if` extra: a escolha explicita da Mente sempre vence, e bater com "
+            "uma pedra segue valendo improvisado, nunca a garra. `protection_of` soma "
+            "a pele ao vestido (soma, nunca substitui). O validador ganhou "
+            "`_validate_combat_blocks` extraida de `_validate_item_combat`, "
+            "parametrizada por prefixo e por exigir `wearable` — a UNICA regra que nao "
+            "atravessa, porque a pele nao se veste; antes disso um `weapon` PARCIAL "
+            "num personagem passava em silencio e degradava para improvisado. Os "
+            "numeros NAO descem ao contexto (como `attributes` de terceiros ja nao "
+            "desciam): A Mente percebe a criatura pela `## Aparencia`, que e onde as "
+            "garras estao escritas. Primeira criatura do mundo: o Rastejante das "
+            "Galerias, no Poco da Mina.",
     "3.3.0": "spec 067 — A FORMA UNIFORME EM QUALQUER PROFUNDIDADE, e o teste que "
             "estava furado. O contrato_get_context so olhava as colecoes de TOPO e so "
             "checava id+name: por baixo dele passaram TRES defeitos, um de cada vez, e "

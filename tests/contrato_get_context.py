@@ -137,8 +137,16 @@ print("--- 1. NOMENCLATURA: uma língua, snake_case --------------------------")
 # contrato não tinha uma linha única de verdade para os consumidores citarem — e os
 # testes dos consumidores hoje citam esta lista (`RAIZ_DO_CONTRATO`, no conector e na
 # tela). Mudar a raiz aqui é mudá-la lá, e é para ser trabalhoso: é uma quebra de API.
+# CUIDADO ao ler esta invariante: ela é sobre a FUNÇÃO, não sobre o endpoint. A camada
+# HTTP acrescenta um terceiro nó em cima do que sai daqui:
+#
+#   motor.get_context()  ->  {self, scene}                (o que este teste crava)
+#   GET /api/context     ->  {self, scene, capacidades}   (app.py:1143, face.build)
+#
+# Os dois consumidores falam com o ENDPOINT, então os testes de contrato deles listam
+# as TRÊS chaves. Confundir as duas fronteiras já custou uma conclusão errada.
 _RAIZ = {"self", "scene"}
-check("0: a raiz tem EXATAMENTE `self` e `scene` — 'nada mais fica na raiz'",
+check("0: a raiz de get_context tem EXATAMENTE `self` e `scene` (a face é da camada HTTP)",
       set(CTX.keys()) == _RAIZ,
       f"raiz veio {sorted(CTX.keys())}, esperado {sorted(_RAIZ)}")
 

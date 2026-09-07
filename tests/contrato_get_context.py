@@ -122,6 +122,26 @@ def chaves(no, caminho=""):
 
 print("--- 1. NOMENCLATURA: uma língua, snake_case --------------------------")
 
+# --------------------------------------------------------------------------- #
+# 0. A RAIZ — o teste mais barato do arquivo, e o que faltava
+# --------------------------------------------------------------------------- #
+#
+# ACRESCENTADO EM 2026-09-07, depois de um incidente. O Draven passou seis horas sem
+# agir e a tela mostrava zero memórias para um personagem com 38. A causa foi deriva de
+# chave de RAIZ: a spec 067 moveu `memories`/`intentions` para dentro de `self`, e dois
+# consumidores continuaram lendo a raiz. Em JavaScript isso não estoura — devolve
+# `undefined` —, então o defeito ficou invisível dos dois lados.
+#
+# Este arquivo verificava a FORMA do payload (nomenclatura, uniformidade, ausência de
+# número interno) e nunca cravou o mais simples: QUAIS são os nós de raiz. Sem isso, o
+# contrato não tinha uma linha única de verdade para os consumidores citarem — e os
+# testes dos consumidores hoje citam esta lista (`RAIZ_DO_CONTRATO`, no conector e na
+# tela). Mudar a raiz aqui é mudá-la lá, e é para ser trabalhoso: é uma quebra de API.
+_RAIZ = {"self", "scene"}
+check("0: a raiz tem EXATAMENTE `self` e `scene` — 'nada mais fica na raiz'",
+      set(CTX.keys()) == _RAIZ,
+      f"raiz veio {sorted(CTX.keys())}, esperado {sorted(_RAIZ)}")
+
 import re
 _SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 # Os SEIS ATRIBUTOS são acrônimos maiúsculos por convenção de domínio (STR/DEX/CON/

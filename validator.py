@@ -258,18 +258,34 @@ def _validate_character(fm: dict) -> list[str]:
                                       f"inteiro >= 0.")
                     if "pega" in val and not isinstance(val.get("pega"), bool):
                         errors.append(f"character: 'body.{slot}.pega' deve ser booleano.")
+                    # spec 068: a PARTE que luta. A garra e a couraça de escamas são
+                    # partes do corpo, não um bloco solto no topo do personagem — o
+                    # `body` já é o sistema que diz o que o corpo TEM, e ter uma
+                    # segunda via para descrever a mesma coisa é o que o Princípio I
+                    # proíbe. Mesmíssima regra do item, sem exigir `wearable`.
+                    errors.extend(_validate_combat_blocks(
+                        val, "character", exige_wearable=False,
+                        caminho=f"body.{slot}."))
                 elif isinstance(val, bool) or not isinstance(val, int) or val < 0:
                     errors.append(
                         f"character: 'body.{slot}' deve ser inteiro >= 0 (capacidade) "
                         f"ou um mapa {{capacidade, pega}}."
                     )
     errors.extend(_validate_bonds(fm))
-    # spec 068: o CORPO que luta. Os mesmos blocos do item, no personagem — a garra
-    # que golpeia quando não há nada na mão, a pele que absorve sem vestir peça. Sem
-    # esta linha os blocos passavam em SILÊNCIO (medido antes da spec: `weapon`
-    # parcial num personagem era ACEITO), e a declaração parcial degradaria para
-    # improvisado sem ninguém saber. `exige_wearable=False`: a pele não se veste.
-    errors.extend(_validate_combat_blocks(fm, "character", exige_wearable=False))
+    # spec 068: `weapon`/`armor` NO TOPO do personagem são recusados de propósito.
+    # A primeira versão desta spec os aceitou ali, e era uma SEGUNDA VIA para
+    # descrever o corpo, ao lado do `body` que já existe desde a spec 019 — a
+    # duplicação que o Princípio I proíbe. A garra é uma PARTE (`body.garras.weapon`);
+    # a couraça é o dorso (`body.dorso.armor`). Recusar explicitamente, em vez de
+    # ignorar, é o que impede o formato morto de voltar em silêncio pela mão de
+    # quem leu a doc antiga.
+    for bloco in ("weapon", "armor"):
+        if fm.get(bloco) is not None:
+            errors.append(
+                f"character: '{bloco}' não vale no topo do personagem — declare na "
+                f"PARTE do corpo que luta (ex.: 'body.garras.{bloco}'). O corpo já "
+                "é descrito por 'body'."
+            )
     return errors
 
 
@@ -758,22 +774,25 @@ def _validate_item_commerce(fm: dict) -> list[str]:
     return errors
 
 
-def _validate_combat_blocks(fm: dict, prefixo: str,
-                            exige_wearable: bool) -> list[str]:
-    """Arma e armadura, a regra COMUM a item e personagem (spec 008 + 068).
+def _validate_combat_blocks(fm: dict, prefixo: str, exige_wearable: bool,
+                            caminho: str = "") -> list[str]:
+    """Arma e armadura, a regra COMUM ao item e à PARTE DO CORPO (spec 008 + 068).
 
     Nasceu dentro de `_validate_item_combat` e saiu de lá quando a spec 068 fez os
-    MESMOS blocos valerem no `character.md` (a garra do dragão, a couraça de
-    escamas). Uma cópia em `_validate_character` divergiria da de item no primeiro
-    campo novo — a segunda fonte de verdade que o Princípio I proíbe.
+    MESMOS blocos valerem numa parte do corpo (`body.garras.weapon`, a garra do
+    dragão; `body.dorso.armor`, a couraça de escamas). Uma cópia divergiria da de
+    item no primeiro campo novo — a segunda fonte de verdade que o Princípio I
+    proíbe.
 
-    Duas diferenças, e só duas, viram parâmetro:
+    Três coisas viram parâmetro:
 
     - `prefixo`: a mensagem diz `item:` ou `character:`. Sem isto, um erro na garra
       mandaria o autor procurar no arquivo errado.
+    - `caminho`: o prefixo do CAMPO, para a mensagem apontar a parte exata
+      (`body.garras.weapon`) em vez de um `weapon` solto que não existe mais.
     - `exige_wearable`: item com `armor` exige `wearable` — o que não se veste não
-      protege. **A pele não se veste**, então o personagem não tem essa exigência.
-      É a ÚNICA regra que não atravessa.
+      protege. **A pele não se veste**, então a parte do corpo não tem essa
+      exigência. É a ÚNICA regra que não atravessa.
     """
     errors: list[str] = []
     weapon = fm.get("weapon")
@@ -781,16 +800,17 @@ def _validate_combat_blocks(fm: dict, prefixo: str,
         if not isinstance(weapon, dict) or \
                 "damage" not in weapon or "attribute" not in weapon:
             errors.append(
-                f"{prefixo}: 'weapon' exige 'damage' e 'attribute' "
+                f"{prefixo}: '{caminho}weapon' exige 'damage' e 'attribute' "
                 "(declaração parcial é inválida)."
             )
         else:
             damage = weapon.get("damage")
             if isinstance(damage, bool) or not isinstance(damage, int) or damage < 1:
-                errors.append(f"{prefixo}: 'weapon.damage' deve ser inteiro >= 1.")
+                errors.append(
+                    f"{prefixo}: '{caminho}weapon.damage' deve ser inteiro >= 1.")
             if weapon.get("attribute") not in WEAPON_ATTRIBUTES:
                 errors.append(
-                    f"{prefixo}: 'weapon.attribute' inválido: "
+                    f"{prefixo}: '{caminho}weapon.attribute' inválido: "
                     f"'{weapon.get('attribute')}' "
                     f"(permitidos: {', '.join(sorted(WEAPON_ATTRIBUTES))})."
                 )
@@ -798,15 +818,16 @@ def _validate_combat_blocks(fm: dict, prefixo: str,
     armor = fm.get("armor")
     if armor is not None:
         if not isinstance(armor, dict) or "protection" not in armor:
-            errors.append(f"{prefixo}: 'armor' exige 'protection'.")
+            errors.append(f"{prefixo}: '{caminho}armor' exige 'protection'.")
         else:
             protection = armor.get("protection")
             if isinstance(protection, bool) or not isinstance(protection, int) \
                     or protection < 0:
-                errors.append(f"{prefixo}: 'armor.protection' deve ser inteiro >= 0.")
+                errors.append(
+                    f"{prefixo}: '{caminho}armor.protection' deve ser inteiro >= 0.")
         if exige_wearable and fm.get("wearable") is None:
-            errors.append(f"{prefixo}: 'armor' exige 'wearable' (o que não se veste "
-                          "não protege).")
+            errors.append(f"{prefixo}: '{caminho}armor' exige 'wearable' (o que não "
+                          "se veste não protege).")
     return errors
 
 

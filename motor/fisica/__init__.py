@@ -75,6 +75,8 @@ from .primitivas import (  # noqa: F401
     item_size,
     item_slot,
     porter_of,
+    natural_weapons_of,
+    pick_natural_weapon,
     protection_of,
     push_capacity,
     read_doc,

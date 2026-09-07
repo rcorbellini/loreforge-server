@@ -68,11 +68,23 @@ status:
   action: enrodilhado sobre a pedra fria
   mood: indiferente
   conditions: []
-weapon:
-  damage: 12
-  attribute: STR
-armor:
-  protection: 8
+body:
+  cabeca: 1
+  garras:
+    capacidade: 0
+    weapon:
+      damage: 12
+      attribute: STR
+  fauces:
+    capacidade: 0
+    weapon:
+      damage: 4
+      attribute: STR
+  dorso:
+    capacidade: 1
+    armor:
+      protection: 8
+  pernas: 1
 origin: editorial
 ---
 
@@ -163,51 +175,91 @@ def regras_rejeitadas(out) -> set:
     return {r.get("regra") for r in out.get("rejected") or [] if isinstance(r, dict)}
 
 
+def fixar_parte(slot):
+    """Fixa o SORTEIO da parte (o análogo de `force_roll` para o dado)."""
+    motor.fisica.primitivas._escolher_parte = \
+        lambda armadas: next(a for a in armadas if a[0] == slot)
+
+
+def parte_de(out):
+    ap = out.get("attack_ops_applied") or []
+    return ap[0].get("parte") if ap else None
+
+
 try:
-    print("\n--- US1: a criatura golpeia com o corpo ---------------------------")
+    print("\n--- US1: a criatura golpeia com uma PARTE do corpo ----------------")
 
-    # unidade: a primitiva não sabe de onde veio o frontmatter (item ou corpo)
-    check("weapon_of sobre PERSONAGEM com bloco = (12, STR)",
-          motor.weapon_of(char_fm(VULTO)) == (12, "STR"),
-          f"{motor.weapon_of(char_fm(VULTO))}")
-    check("weapon_of sobre PERSONAGEM sem bloco = improvisado (1, STR)",
-          motor.weapon_of(char_fm(ELGA)) == (1, "STR"),
-          f"{motor.weapon_of(char_fm(ELGA))}")
+    vulto = char_fm(VULTO)
+    check("natural_weapons_of lista as duas partes armadas, na ordem de declaração",
+          motor.natural_weapons_of(vulto) == [("garras", 12, "STR"),
+                                              ("fauces", 4, "STR")],
+          f"{motor.natural_weapons_of(vulto)}")
+    check("quem não tem parte armada devolve lista vazia",
+          motor.natural_weapons_of(char_fm(ELGA)) == []
+          and motor.pick_natural_weapon(char_fm(ELGA)) is None)
 
-    # contrato preservado da primitiva (não pode regredir — contracts/)
-    check("weapon_of(None) e weapon_of({}) seguem improvisados",
+    # a primitiva de item NÃO mudou: lê o bloco de qualquer mapa (item OU parte)
+    check("weapon_of sobre a PARTE do corpo = (12, STR)",
+          motor.weapon_of(motor.fisica.body_of(vulto)["garras"]) == (12, "STR"))
+    check("weapon_of(None)/({}) seguem improvisados (contrato preservado)",
           motor.weapon_of(None) == (1, "STR") and motor.weapon_of({}) == (1, "STR"))
 
-    # fim a fim: garra vale 12 + mod(STR 22 = +6) − proteção 0 = 18
+    # o sorteio é VARIADO: as duas partes saem ao longo de muitas tentativas
+    vistas = {motor.pick_natural_weapon(vulto)[0] for _ in range(200)}
+    check("o sorteio da parte é VARIADO (golpear com o corpo é instintivo)",
+          vistas == {"garras", "fauces"}, f"{vistas}")
+
+    # fim a fim: garra 12 + mod(STR 22 = +6) − proteção 0 = 18
+    fixar_parte("garras")
     force_roll(15)                       # 15 + 6 = 21 vs defesa 11 de Elga
     set_status(ELGA, hp=90, hp_max=90)
     out_garra = attack(VULTO, ELGA)      # SEM arma
-    check("golpe sem 'arma' usa a GARRA: dano 12+6−0 = 18",
+    check("golpe sem `arma` usa a GARRA sorteada: dano 12+6−0 = 18",
           dano_de(out_garra) == 18, f"dano={dano_de(out_garra)}")
+    check("a op RELATA a parte que golpeou (senão A Mente não narra o COMO)",
+          parte_de(out_garra) == "garras", f"parte={parte_de(out_garra)}")
 
-    # NÃO-REGRESSÃO: quem não tem garra segue improvisado (1 + mod STR 16 = +3)
+    fixar_parte("fauces")
     force_roll(15)
     set_status(ELGA, hp=90)
-    out_soco = attack(TORVIN, ELGA)      # SEM arma, e Torvin não tem bloco
-    check("NÃO-REGRESSÃO: sem bloco `weapon`, golpe desarmado segue valendo 1+3 = 4",
-          dano_de(out_soco) == 4, f"dano={dano_de(out_soco)}")
+    out_fauces = attack(VULTO, ELGA)
+    check("a outra parte dá OUTRO dano: fauces 4+6−0 = 10",
+          dano_de(out_fauces) == 10 and parte_de(out_fauces) == "fauces",
+          f"dano={dano_de(out_fauces)} parte={parte_de(out_fauces)}")
 
-    print("\n--- US2: a pele que segura o aço ---------------------------------")
+    # a memória precisa dizer COM O QUÊ — é ela que A Mente relê para narrar depois
+    resumos = []
+    for md in (char_folder(VULTO) / "memories").glob("mem-*.md"):
+        fm_m, _ = motor.read_doc(md)
+        resumos.append(str(fm_m.get("summary", "")))
+    check("a memória do golpe nomeia a PARTE, não some com o COMO",
+          any("fauces" in r for r in resumos),
+          f"{[r for r in resumos if 'olpe' in r]}")
 
-    check("protection_of: couraça natural sozinha = 8",
+    # NÃO-REGRESSÃO: quem não tem parte armada segue improvisado (1 + mod STR 16 = +3)
+    force_roll(15)
+    set_status(ELGA, hp=90)
+    out_soco = attack(TORVIN, ELGA)
+    check("NÃO-REGRESSÃO: sem parte armada, golpe desarmado segue valendo 1+3 = 4",
+          dano_de(out_soco) == 4 and parte_de(out_soco) is None,
+          f"dano={dano_de(out_soco)} parte={parte_de(out_soco)}")
+
+    print("\n--- US2: a PARTE que segura o aço --------------------------------")
+
+    check("protection_of: a parte `dorso` com `armor` sozinha = 8",
           motor.protection_of(char_folder(VULTO)) == 8,
           f"{motor.protection_of(char_folder(VULTO))}")
 
-    attach(VULTO, GIBAO, "torso")
-    check("protection_of: couraça natural + peça VESTIDA SOMA = 8 + 2 = 10",
+    attach(VULTO, GIBAO, "dorso")
+    check("protection_of: parte + peça VESTIDA SOMA = 8 + 2 = 10",
           motor.protection_of(char_folder(VULTO)) == 10,
           f"{motor.protection_of(char_folder(VULTO))}")
 
-    check("NÃO-REGRESSÃO: sem bloco `armor` e nada vestido = 0",
+    check("NÃO-REGRESSÃO: sem parte que absorve e nada vestido = 0",
           motor.protection_of(char_folder(ELGA)) == 0)
 
     # absorção: atiçador (improvisado 1) + mod(+3) = 4 contra couraça 10 ⇒ 0
-    force_roll(20)                       # acerta com folga: o dado não é o assunto
+    force_roll(20)
     attach(TORVIN, ATICADOR, motor.HAND_SLOT)
     hp_antes = read_status(VULTO).get("hp")
     out_abs = attack(TORVIN, VULTO, ATICADOR)
@@ -220,27 +272,59 @@ try:
 
     print("\n--- US3: a mão vence o corpo -------------------------------------")
 
-    attach(VULTO, ESPADA, motor.HAND_SLOT)
+    # o Vulto NÃO tem slot de pega — a criatura de verdade não segura nada
+    check("criatura sem `mao` nem `pega` não tem slot de pega",
+          motor.fisica.grasp_slot_of(vulto) is None)
+
+    # um corpo COM mão e COM parte armada: a escolha explícita vence
+    f_t = char_folder(TORVIN)
+    fm_t, body_t = motor.read_doc(f_t / "character.md")
+    fm_t["body"] = {**validator.DEFAULT_BODY,
+                    "unhas": {"capacidade": 0,
+                              "weapon": {"damage": 9, "attribute": "STR"}}}
+    motor.write_doc(f_t / "character.md", fm_t, body_t)
+    fixar_parte("unhas")
+
+    attach(TORVIN, ESPADA, motor.HAND_SLOT)
     force_roll(15)
     set_status(ELGA, hp=90)
-    out_espada = attack(VULTO, ELGA, ESPADA)
-    check("com `arma` declarada vale a ESPADA (6+6 = 12), não a garra (18)",
-          dano_de(out_espada) == 12, f"dano={dano_de(out_espada)}")
+    out_espada = attack(TORVIN, ELGA, ESPADA)
+    check("com `arma` declarada vale a ESPADA (6+3 = 9), não a parte (9+3 = 12)",
+          dano_de(out_espada) == 9 and parte_de(out_espada) is None,
+          f"dano={dano_de(out_espada)} parte={parte_de(out_espada)}")
 
     force_roll(15)
     set_status(ELGA, hp=90)
-    out_sem = attack(VULTO, ELGA)        # a espada segue na mão, mas não foi passada
-    check("sem `arma`, mesmo com espada na mão, vale a GARRA (18)",
-          dano_de(out_sem) == 18, f"dano={dano_de(out_sem)}")
+    out_sem = attack(TORVIN, ELGA)       # espada na mão, mas não passada
+    check("sem `arma`, mesmo com espada na mão, vale a PARTE (9+3 = 12)",
+          dano_de(out_sem) == 12 and parte_de(out_sem) == "unhas",
+          f"dano={dano_de(out_sem)} parte={parte_de(out_sem)}")
 
-    attach(VULTO, ATICADOR, motor.HAND_SLOT)
+    attach(TORVIN, ATICADOR, motor.HAND_SLOT)
     force_roll(15)
     set_status(ELGA, hp=90)
-    out_pedra = attack(VULTO, ELGA, ATICADOR)
-    check("item SEM bloco `weapon` vale IMPROVISADO (1+6 = 7), nunca a garra",
-          dano_de(out_pedra) == 7, f"dano={dano_de(out_pedra)}")
+    out_pedra = attack(TORVIN, ELGA, ATICADOR)
+    check("item SEM bloco `weapon` vale IMPROVISADO (1+3 = 4), nunca a parte",
+          dano_de(out_pedra) == 4 and parte_de(out_pedra) is None,
+          f"dano={dano_de(out_pedra)} parte={parte_de(out_pedra)}")
 
-    print("\n--- validador: a regra compartilhada -----------------------------")
+    print("\n--- a fronteira: o NÚMERO não desce à Mente ----------------------")
+
+    ctx = motor.get_context(VULTO)
+    corpo = ctx["self"]["physics"]["body"]
+    import json as _json
+    bruto = _json.dumps(ctx, ensure_ascii=False)
+    check("o `body` que desce marca a parte como arma, sem o dano",
+          corpo["garras"] == {"capacidade": 0, "weapon": True},
+          f"{corpo.get('garras')}")
+    check("o `body` que desce marca a parte que protege, sem a proteção",
+          corpo["dorso"].get("armor") is True and "protection" not in bruto,
+          f"{corpo.get('dorso')}")
+    check("slot de valor inteiro cru passa intacto", corpo["cabeca"] == 1)
+    check("nenhum número de combate no contexto inteiro",
+          '"damage"' not in bruto and '"protection"' not in bruto)
+
+    print("\n--- validador: uma via só, e é a do corpo ------------------------")
 
     base = {"type": "character", "id": "x", "name": "X", "controlled_by": "none",
             "attributes": {a: 10 for a in ("STR", "DEX", "CON", "INT", "WIS", "CHA")},
@@ -251,23 +335,32 @@ try:
         fm.update(extra)
         return validator.validate(fm)
 
-    parcial = com(weapon={"damage": 12})
-    check("character: `weapon` parcial é RECUSADO, com prefixo 'character:'",
-          bool(parcial) and parcial[0].startswith("character: 'weapon'"),
-          f"{parcial}")
-    check("character: `weapon.damage` < 1 é recusado",
-          any("weapon.damage" in e for e in com(weapon={"damage": 0,
-                                                       "attribute": "STR"})))
-    check("character: `weapon.attribute` fora de (STR, DEX) é recusado",
-          any("weapon.attribute" in e for e in com(weapon={"damage": 5,
-                                                          "attribute": "CON"})))
-    check("character: `armor` SEM `wearable` é ACEITO (a pele não se veste)",
-          com(armor={"protection": 8}) == [])
-    check("character: `armor.protection` negativa é recusada",
-          any("armor.protection" in e for e in com(armor={"protection": -1})))
-    check("character: os dois blocos bem declarados passam",
-          com(weapon={"damage": 12, "attribute": "STR"},
-              armor={"protection": 8}) == [])
+    topo = com(weapon={"damage": 12, "attribute": "STR"})
+    check("`weapon` NO TOPO do personagem é RECUSADO (a via morta não volta)",
+          bool(topo) and "body.garras.weapon" in topo[0], f"{topo}")
+    check("`armor` NO TOPO do personagem é RECUSADO",
+          any("não vale no topo" in e for e in com(armor={"protection": 8})))
+
+    parcial = com(body={"garras": {"capacidade": 0, "weapon": {"damage": 12}}})
+    check("parte com `weapon` parcial é recusada, apontando a PARTE exata",
+          bool(parcial) and "body.garras.weapon" in parcial[0], f"{parcial}")
+    check("parte com `weapon.damage` < 1 é recusada",
+          any("body.garras.weapon.damage" in e for e in com(
+              body={"garras": {"capacidade": 0,
+                               "weapon": {"damage": 0, "attribute": "STR"}}})))
+    check("parte com `weapon.attribute` inválido é recusada",
+          any("body.garras.weapon.attribute" in e for e in com(
+              body={"garras": {"capacidade": 0,
+                               "weapon": {"damage": 5, "attribute": "CON"}}})))
+    check("parte com `armor` e SEM `wearable` é ACEITA (a pele não se veste)",
+          com(body={"dorso": {"capacidade": 1, "armor": {"protection": 8}}}) == [])
+    check("parte com `armor.protection` negativa é recusada",
+          any("body.dorso.armor.protection" in e for e in com(
+              body={"dorso": {"capacidade": 1, "armor": {"protection": -1}}})))
+    check("corpo bem declarado passa",
+          com(body={"garras": {"capacidade": 0,
+                               "weapon": {"damage": 12, "attribute": "STR"}},
+                    "dorso": {"capacidade": 1, "armor": {"protection": 8}}}) == [])
 
     item_sem_wearable = validator.validate(
         {"type": "item", "id": "i", "name": "I", "armor": {"protection": 2}})
@@ -281,17 +374,17 @@ try:
     print("\n--- imutabilidade: a garra é editorial ---------------------------")
 
     out_mut = motor.apply_resolution(VULTO, res(mutations=[
-        {"target": VULTO, "path": "weapon.damage", "value": 99}]))
+        {"target": VULTO, "path": "body.garras.weapon.damage", "value": 99}]))
     # `applied` NUNCA vem vazio: `_ensure_actor_touched` (FR-014, spec 020) grava
     # `status.action` quando nada mais tocou o ator. A asserção precisa ser sobre a
     # AUSÊNCIA da mutação pedida, não sobre a lista estar vazia.
-    aplicou_garra = any(a.get("path") == "weapon.damage"
-                        for a in out_mut.get("applied") or [] if isinstance(a, dict))
-    check("mutar `weapon.damage` em jogo é RECUSADO (só `status.*` é mutável)",
-          not aplicou_garra and bool(out_mut.get("rejected")),
-          f"applied={out_mut.get('applied')} rejected={out_mut.get('rejected')}")
+    aplicou = any(a.get("path", "").startswith("body.")
+                  for a in out_mut.get("applied") or [] if isinstance(a, dict))
+    check("mutar o dano da parte em jogo é RECUSADO (só `status.*` é mutável)",
+          not aplicou and bool(out_mut.get("rejected")),
+          f"applied={out_mut.get('applied')}")
     check("a garra continua valendo 12 depois da tentativa",
-          motor.weapon_of(char_fm(VULTO)) == (12, "STR"))
+          motor.natural_weapons_of(char_fm(VULTO))[0] == ("garras", 12, "STR"))
 
     print()
     if FAILS:

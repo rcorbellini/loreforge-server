@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,7 +170,30 @@ __version__ = "3.4.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
-    "3.4.0": "spec 068 — O CORPO QUE LUTA. Os blocos `weapon`/`armor`, que so valiam "
+    "3.5.0": "spec 068 REFEITA — A PARTE QUE LUTA, e a segunda via que nao devia ter "
+            "nascido. A 3.4.0 pos `weapon`/`armor` no TOPO do personagem; o mantenedor "
+            "apontou o erro: o `body` (spec 019) JA e o sistema que descreve o que o "
+            "corpo tem, com nome de slot livre e forma rica extensivel — um bloco de "
+            "topo era uma SEGUNDA VIA para a mesma coisa, o que o Principio I proibe, e "
+            "o argumento de 'simetria com o item' apontava para a assimetria errada (o "
+            "item e um objeto inteiro; a garra e uma PARTE). Agora e "
+            "`body.garras.weapon` e `body.dorso.armor`, e o topo e RECUSADO com "
+            "mensagem que ensina o lugar certo — recusar, nao ignorar, e o que impede o "
+            "formato morto de voltar pela mao de quem leu a doc antiga. Tres coisas que "
+            "so o modelo de partes da: (1) VARIAS partes armadas convivem (garra E "
+            "mordida E cauda), onde o bloco de topo permitia uma so para sempre; (2) a "
+            "Mente passa a SABER que tem garras, porque `physics.body` ja descia ao "
+            "dono — com o bloco fora do corpo ela so sabia pela prosa, um problema que "
+            "a verificacao chegou a reportar como aceitavel e era sintoma do erro; (3) "
+            "a couraca vira o que ela e, o dorso, no mesmo lugar em que armadura ja se "
+            "acopla. Sem `arma` declarada a parte e SORTEADA, nao a mais forte: golpear "
+            "com o corpo e instintivo, e escolher a melhor faria o Motor otimizar no "
+            "lugar do bicho. Sorteio exige RELATO, entao `parte` viaja no applied, no "
+            "roll_info, na rejeicao de golpe_absorvido e na memoria ('Golpeei Fulano "
+            "com garras'). E `body` precisou ser SANEADO no contexto: descia cru, e o "
+            "damage da parte chegaria a Mente — agora desce `weapon: true`/`armor: "
+            "true`, o fato sem o quanto (Principio IX).",
+    "3.4.0": "spec 068 (SUPERADA pela 3.5.0 — ver acima) — O CORPO QUE LUTA. Os blocos `weapon`/`armor`, que so valiam "
             "em item, passam a valer no `character.md`: a garra do dragao, a couraca "
             "de escamas. Sem isto criatura nenhuma funcionava — um bicho nao segura "
             "espada nem veste gibao, entao golpeava por 1 de dano (improvisado) e "

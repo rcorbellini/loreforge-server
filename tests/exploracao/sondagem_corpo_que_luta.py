@@ -100,7 +100,8 @@ try:
 
     bicho = fm_de(BICHO)
     print(f"\nCriatura: {bicho['name']} | STR {bicho['attributes']['STR']} "
-          f"| garra {motor.weapon_of(bicho)} | couraça {motor.protection_of(folder(BICHO))} "
+          f"| partes armadas {motor.natural_weapons_of(bicho)} "
+          f"| couraça {motor.protection_of(folder(BICHO))} "
           f"| hp {status(BICHO).get('hp')} | {bicho.get('weight_kg')} kg")
 
     # ---- LENTE: o protagonista de ponta a ponta -------------------------- #
@@ -165,7 +166,7 @@ try:
     # couraça absurda: satura?
     f = folder(BICHO)
     fm, body = motor.read_doc(f / "character.md")
-    fm["armor"] = {"protection": 99}
+    fm["body"] = {**fm["body"], "dorso": {"capacidade": 1, "armor": {"protection": 99}}}
     motor.write_doc(f / "character.md", fm, body)
     force_roll(20)
     out_abs = atacar(HESPER, BICHO)
@@ -177,16 +178,19 @@ try:
            "sempre — combate que não pode ser vencido, sem o mundo avisar ninguém. "
            "O validador só exige `>= 0`. Mesma questão vale para `weapon.damage`: "
            "não há teto, e uma garra 999 mata qualquer um de um golpe.")
-    fm["armor"] = {"protection": 6}
+    fm["body"] = {**fm["body"], "dorso": {"capacidade": 1, "armor": {"protection": 6}}}
     motor.write_doc(f / "character.md", fm, body)
 
-    # couraça 0 declarada: é diferente de ausente?
-    fm["armor"] = {"protection": 0}
-    motor.write_doc(f / "character.md", fm, body)
-    obs(f"couraça 0 DECLARADA: protection_of = {motor.protection_of(f)} "
-        "(idêntico a ausente — nenhuma semântica extra)")
-    fm["armor"] = {"protection": 6}
-    motor.write_doc(f / "character.md", fm, body)
+    # o SORTEIO cobre as duas partes?
+    from collections import Counter
+    saidas = Counter(motor.pick_natural_weapon(fm_de(BICHO))[0] for _ in range(200))
+    obs(f"sorteio da parte em 200 golpes: {dict(saidas)}")
+    if len(saidas) > 1:
+        achado("confirmacao",
+               "o golpe do corpo VARIA entre as partes armadas",
+               f"{dict(saidas)} — garras e fauces saem as duas, como o mantenedor "
+               "pediu: instintivo, não otimizado. É o que dá textura à narração, e é "
+               "impossível no modelo de bloco único no topo.")
 
     # ---- LENTE: o adversário --------------------------------------------- #
     print("\n\n--- LENTE 3: o adversário ----------------------------------------")

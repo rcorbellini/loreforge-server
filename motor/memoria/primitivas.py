@@ -1262,7 +1262,11 @@ def _record_attack(character_id: str, attacks_applied: list, rejected: list) -> 
         intens = "giant" if caiu else "large"  # ex-_RELEVANCE_BY_EVENT[defeat/attack]
         par = [character_id, alvo]
         arma = op.get("arma")
-        com = f" com {name_of(arma)}" if arma else ""
+        # spec 068: sem arma na mão, o golpe saiu de uma PARTE do corpo (as garras, a
+        # mordida). Sem dizer qual, a memória vira "Golpeei Fulano." e some o COMO —
+        # e é a memória que A Mente relê depois para narrar o que aconteceu.
+        com = (f" com {name_of(arma)}" if arma
+               else f" com {op['parte']}" if op.get("parte") else "")
         _rec(created, character_id,
              f"Golpeei {_char_name(alvo)}{com}." + (" Caiu." if caiu else ""), ev, par,
              intensity=intens)

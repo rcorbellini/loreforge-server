@@ -451,6 +451,8 @@ from .fisica import (  # noqa: F401
     item_own_weight,
     item_size,
     item_slot,
+    natural_weapons_of,
+    pick_natural_weapon,
     protection_of,
     push_capacity,
     slot_capacity,

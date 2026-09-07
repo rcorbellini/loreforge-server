@@ -153,6 +153,35 @@ def _nome_percebido(nome: str | None, grau: str) -> str | None:
     return nome.split(",")[0].strip() or nome
 
 
+def _corpo_percebido(body: dict) -> dict:
+    """O `body` que desce ao dono: a anatomia, sem os NÚMEROS de combate (spec 068).
+
+    A parte que luta declara `weapon: {damage, attribute}` e a que absorve declara
+    `armor: {protection}`. Descê-los crus entregaria à Mente o dano da própria garra
+    — pontuação de desfecho, que o Princípio IX reserva ao mundo (é a mesma razão
+    pela qual a nota de vantagem nunca desce).
+
+    O que desce no lugar é o FATO, como booleano: `weapon: true` nesta parte golpeia,
+    `armor: true` esta parte protege. É o bastante para A Mente saber o que TENTAR —
+    e é o que faltava quando a garra morava fora do corpo: a criatura não tinha como
+    saber que tinha garras a não ser pela prosa.
+
+    Slot com valor inteiro cru (o humano padrão) passa intacto.
+    """
+    saida: dict = {}
+    for slot, val in (body or {}).items():
+        if not isinstance(val, dict):
+            saida[slot] = val
+            continue
+        limpo = {k: v for k, v in val.items() if k not in ("weapon", "armor")}
+        if isinstance(val.get("weapon"), dict):
+            limpo["weapon"] = True
+        if isinstance(val.get("armor"), dict):
+            limpo["armor"] = True
+        saida[slot] = limpo
+    return saida
+
+
 def _prosa_percebida(corpo: str, grau: str) -> str | None:
     """A prosa que ESTE observador alcança, graduada em três camadas.
 
@@ -866,7 +895,13 @@ def get_context(character_id: str) -> dict:
                 "grasp_slot": _self_pega,
                 # spec 019: a anatomia dele (mapa slot->capacidade). Expô-la ao próprio
                 # dono não é metagaming, e o guard de equipar precisa dela.
-                "body": body_of(self_fm),
+                # spec 068: SANEADA. A parte que luta carrega `weapon`/`armor` com
+                # `damage`/`protection` dentro, e `body` descia CRU — o número de dano
+                # da garra chegaria à Mente, que é pontuação de desfecho e o Princípio
+                # IX proíbe. Desce o FATO (esta parte golpeia, esta parte protege),
+                # nunca o quanto: é a mesma fronteira que já nega os `attributes` de
+                # terceiros, e o que A Mente precisa para saber o que TENTAR.
+                "body": _corpo_percebido(body_of(self_fm)),
                 "slots_in_use": {s: ids for s, ids
                                  in slots_in_use(char_folder).items()},
             },

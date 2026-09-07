@@ -813,10 +813,10 @@ def weapon_of(item_fm: dict | None) -> tuple[int, str]:
     """(dano-base, atributo) da arma. Sem bloco `weapon` — ou mão vazia — é
     improvisado: o golpe vale o mínimo e sai da força.
 
-    A FONTE pode ser um ITEM (a espada na mão) ou o CORPO de quem golpeia (spec 068:
-    a garra do dragão, `character.weapon`). Esta primitiva não sabe nem precisa saber
-    qual dos dois recebeu — lê o bloco de qualquer frontmatter. QUEM é entregue a ela
-    é regra de combate, e mora no executor (`_apply_attack_ops`).
+    A FONTE pode ser um ITEM (a espada na mão) ou uma PARTE DO CORPO (spec 068: a
+    garra do dragão, `body.garras`). Esta primitiva não sabe nem precisa saber qual
+    dos dois recebeu — lê o bloco `weapon` de qualquer mapa. QUEM é entregue a ela é
+    regra de combate, e mora no executor (`_apply_attack_ops`).
     """
     weapon = (item_fm or {}).get("weapon")
     if not isinstance(weapon, dict):
@@ -831,30 +831,85 @@ def weapon_of(item_fm: dict | None) -> tuple[int, str]:
     return max(1, damage), attribute
 
 
+def natural_weapons_of(char_fm: dict) -> list[tuple[str, int, str]]:
+    """As PARTES ARMADAS do corpo: [(slot, dano-base, atributo)] (spec 068).
+
+    A garra do dragão, a mordida do lobo, a cauda que chicoteia — cada uma é uma
+    parte do `body` (spec 019) carregando um bloco `weapon`, e não um campo solto no
+    topo do personagem: `body` já é o sistema que diz o que o corpo TEM, e descrever
+    a mesma coisa por duas vias é o que o Princípio I proíbe.
+
+    Ordem estável (a de declaração), para que o sorteio de `pick_natural_weapon` seja
+    reprodutível quando o dado é forçado. Parte com bloco torto é IGNORADA em
+    silêncio aqui — o validador é quem recusa o arquivo; a leitura nunca estoura.
+    """
+    armadas: list[tuple[str, int, str]] = []
+    for slot, val in body_of(char_fm).items():
+        if not isinstance(val, dict) or not isinstance(val.get("weapon"), dict):
+            continue
+        bloco = val["weapon"]
+        if "damage" not in bloco or "attribute" not in bloco:
+            continue      # declaração parcial: o validador recusa o arquivo
+        dano, atributo = weapon_of(val)
+        armadas.append((slot, dano, atributo))
+    return armadas
+
+
+def pick_natural_weapon(char_fm: dict) -> tuple[str, int, str] | None:
+    """UMA parte armada, sorteada — ou None se o corpo não tem nenhuma.
+
+    Por que SORTEIO e não "a mais forte": golpear com o corpo é INSTINTIVO, não
+    deliberado. Quem tem garra e mordida não pesa qual rende mais dano antes de dar
+    o bote — reage com o que vier primeiro. Escolher sempre a melhor faria o Motor
+    otimizar no lugar do bicho, e apagaria a variedade que é justamente o que a
+    narração aproveita: às vezes as garras, às vezes os dentes.
+
+    A escolha DELIBERADA continua existindo e continua sendo d'A Mente: passar
+    `arma` no `attack` nomeia o item na mão. O sorteio só decide o que é reflexo.
+
+    `_escolher_parte` é indireção de propósito — é o ponto que os testes fixam para
+    tornar o sorteio determinístico, como `_roll_d20` já é para o dado.
+    """
+    armadas = natural_weapons_of(char_fm)
+    if not armadas:
+        return None
+    return _escolher_parte(armadas)
+
+
+def _escolher_parte(armadas: list[tuple[str, int, str]]) -> tuple[str, int, str]:
+    """O sorteio da parte que golpeia. Injetável nos testes (ver `pick_natural_weapon`)."""
+    return random.choice(armadas)
+
+
 def protection_of(char_folder: Path) -> int:
-    """Absorção do personagem: a PELE mais a soma do que está VESTIDO.
+    """Absorção do personagem: as PARTES que absorvem mais o que está VESTIDO.
 
     Só peças acopladas ao corpo em slot que não seja a mão contam — armadura
     guardada num contêiner ou segurada na mão não protege ninguém.
 
-    A COURAÇA NATURAL (spec 068, `character.armor`) entra como mais uma parcela: as
-    escamas do dragão, o casco, o couro grosso. SOMA, nunca substitui — vestir um
-    peitoral sobre escamas protege mais que só as escamas, pela mesma razão que duas
-    peças vestidas já somam entre si. E ela não exige `wearable`, ao contrário da
-    peça de item: a pele não se veste.
+    A COURAÇA NATURAL (spec 068) é a parte do corpo que já é armadura: as escamas do
+    dorso, o casco, o couro grosso — `body.dorso.armor`, no mesmo lugar em que o
+    corpo é descrito, e não num campo solto no topo. SOMA com as peças vestidas,
+    nunca substitui: vestir um peitoral sobre escamas protege mais que só as
+    escamas, pela mesma razão que duas peças vestidas já somam entre si. E a parte
+    não exige `wearable`, ao contrário da peça de item — a pele não se veste.
 
-    Sem o bloco, um corpo sem nada vestido devolve 0, como sempre devolveu — era o
-    que fazia uma criatura de escamas cair para a adaga de qualquer camponês.
+    Sem parte armada, um corpo sem nada vestido devolve 0, como sempre devolveu — era
+    o que fazia uma criatura de escamas cair para a adaga de qualquer camponês.
     """
     char_fm = _char_fm(char_folder)
     body, pega = body_of(char_fm), grasp_slot_of(char_fm)
     total = 0
-    natural = char_fm.get("armor")
-    if isinstance(natural, dict):
+    for _slot, val in body.items():
+        if not isinstance(val, dict):
+            continue
+        couraca = val.get("armor")
+        if not isinstance(couraca, dict):
+            continue
         try:
-            total += max(0, int(natural["protection"]))
+            total += max(0, int(couraca["protection"]))
         except (KeyError, TypeError, ValueError):
-            pass          # mesma disciplina do laço: bloco torto contribui 0
+            continue      # mesma disciplina do laço das peças: bloco torto vale 0
     for _, fm in _direct_items(char_folder):
         slot = item_slot(fm)
         if slot not in body or slot == pega:  # spec 019: vestido no corpo, salvo o de pega

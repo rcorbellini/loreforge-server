@@ -97,7 +97,10 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
         # defender É o ato deliberado — a morte nunca sai da sorte (FR-009).
         if is_down(alvo_fm):
             _set_condition(alvo_folder, DEAD)
-            applied.append({"alvo": alvo, "arma": arma_id, "dano": 0,
+            golpe = fisica.pick_natural_weapon(
+                read_doc(actor_folder / "character.md")[0]) if not arma_id else None
+            applied.append({"alvo": alvo, "arma": arma_id,
+                            "parte": golpe[0] if golpe else None, "dano": 0,
                             "derrota": DEAD, "deliberado": True})
             fisica.spend_fatigue(character_id, "alto")  # spec 030: golpear cansa
             continue
@@ -108,11 +111,25 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
             found = find_entity(arma_id)
             if found is not None:
                 _, arma_fm, _ = found
-        # spec 068: a FONTE da arma. Item na mão quando a Mente escolheu um; o CORPO
-        # de quem golpeia quando não — é a garra do dragão, que antes valia 1 de dano
-        # como um soco. A escolha EXPLÍCITA sempre vence: um item sem bloco `weapon`
-        # (uma pedra) segue valendo improvisado, nunca a garra — ela escolheu a pedra.
-        damage, attribute = weapon_of(arma_fm if arma_id else actor_fm)
+        # spec 068: a FONTE da arma. Item na mão quando a Mente escolheu um; uma
+        # PARTE ARMADA do corpo quando não — a garra do dragão, que antes valia 1 de
+        # dano como um soco. A escolha EXPLÍCITA sempre vence: um item sem bloco
+        # `weapon` (uma pedra) segue valendo improvisado, nunca a garra — ela escolheu
+        # a pedra. Sem parte armada e sem item, o improvisado de sempre.
+        #
+        # A parte é SORTEADA porque golpear com o corpo é instintivo, não deliberado
+        # (ver `pick_natural_weapon`) — e por isso ela precisa ser RELATADA: sem saber
+        # se foram as garras ou os dentes, A Mente não tem como narrar o golpe que o
+        # mundo resolveu.
+        parte = None
+        if arma_id:
+            damage, attribute = weapon_of(arma_fm)
+        else:
+            natural = fisica.pick_natural_weapon(actor_fm)
+            if natural is None:
+                damage, attribute = weapon_of(None)      # improvisado
+            else:
+                parte, damage, attribute = natural
 
         try:
             vantagem = int(op.get("vantagem"))
@@ -122,8 +139,11 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
 
         rej, info = roll_attack_check(actor_fm, alvo_fm, character_id, alvo,
                                       arma_id, damage, attribute, vantagem)
-        if info is not None and rolls is not None:
-            rolls.append(info)
+        if info is not None:
+            if parte:
+                info["parte"] = parte     # com que PARTE do corpo se golpeou
+            if rolls is not None:
+                rolls.append(info)
         if rej:
             rejected.append(_rejection(base, rej))
             # spec 043: o golpe que ERRA também cansa — menos que o que acerta.
@@ -140,13 +160,14 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
             # o golpe conectou e o aço segurou: não é o mesmo que errar
             rejected.append(_rejection(base, _fail(
                 "golpe_absorvido", alvo=alvo, personagem=character_id,
-                arma=arma_id, protecao=protecao, rolagem=info["rolagem"])))
+                arma=arma_id, parte=parte, protecao=protecao,
+                rolagem=info["rolagem"])))
             # spec 043: conectar na armadura cansa o braço igual — o esforço houve.
             fisica.spend_fatigue(character_id, fisica.custo_da_falha("alto"))
             continue
 
         novo_hp, derrota = fisica.apply_damage(alvo_folder, dano)  # spec 038: estado vira primitiva
-        applied.append({"alvo": alvo, "arma": arma_id, "dano": dano,
+        applied.append({"alvo": alvo, "arma": arma_id, "parte": parte, "dano": dano,
                         "hp_restante": novo_hp, "derrota": derrota})
         fisica.spend_fatigue(character_id, "alto")  # spec 030: golpear cansa
     return applied, rejected

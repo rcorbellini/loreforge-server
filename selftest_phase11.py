@@ -432,12 +432,24 @@ try:
     check("guarda: alvo == ator é recusado (nada enfileirado)",
           not (r_self.get("attack_ops") or []))
 
+    # spec 043: a nota vem do mundo, e fora de 0-10 é grampeada. O INVARIANTE não
+    # mudou; o FORMATO da resposta mudou na spec 069, quando `attack` passou a colher
+    # DUAS notas (vantagem + revide) numa chamada só, via `juizo.julgamento` — que fala
+    # JSON, não número solto. O stub acompanha; a prova é a mesma.
     r_clamp = selftest_helpers.resolve_scripted(
         {"action": "ataca com vantagem absurda"}, ctx,
         [("attack", {"alvo": ELGA, "arma": ESPADA})],
-        ask=lambda _s, _u: "99")   # spec 043: a nota vem do mundo; 99 grampeia em 10
-    check("juizo.nota grampeia a nota fora de 0-10 (spec 043)",
+        ask=lambda _s, _u: '{"vantagem": 99, "revide": 0}')
+    check("juizo grampeia a nota fora de 0-10 (spec 043)",
           r_clamp["attack_ops"][0]["vantagem"] == 10)
+
+    # e a resposta ILEGÍVEL cai no default da capacidade, sem derrubar o turno
+    r_mudo = selftest_helpers.resolve_scripted(
+        {"action": "ataca com juízo indisponível"}, ctx,
+        [("attack", {"alvo": ELGA, "arma": ESPADA})],
+        ask=lambda _s, _u: "")
+    check("juízo ilegível cai no default (vantagem 5, combate limpo)",
+          r_mudo["attack_ops"][0]["vantagem"] == 5)
 
     # --- preservação do mundo (SC-005) ---------------------------------------- #
     check("SC-005: nenhum arquivo do mundo foi removido em todo o combate",

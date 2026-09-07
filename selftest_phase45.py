@@ -54,7 +54,23 @@ def check(name, cond, detail=""):
 
 
 def _um_personagem() -> str:
-    return sorted(c["id"] for c in motor.list_characters())[0]
+    """O personagem cuja FACE é a mais cheia — não o primeiro em ordem alfabética.
+
+    spec 069: a segunda inércia desta fase. Ela pegava `sorted(...)[0]`, e no fixture
+    esse é alguém dormindo, com UMA capacidade na face (`wake_up`). Todas as guardas
+    daqui varriam essa face de uma capacidade só — inclusive a de vazamento de juízo,
+    que assim nunca teria o que encontrar mesmo depois de consertada. Guarda que varre
+    o vazio não guarda nada.
+    """
+    melhor, tamanho = None, -1
+    for c in motor.list_characters():
+        try:
+            n = len(face.build(motor.get_context(c["id"])))
+        except Exception:
+            continue
+        if n > tamanho:
+            melhor, tamanho = c["id"], n
+    return melhor or sorted(c["id"] for c in motor.list_characters())[0]
 
 
 def run() -> int:
@@ -73,8 +89,15 @@ def run() -> int:
         if id(spec) in vistos:
             continue
         vistos.add(id(spec))
-        if spec.juizo:
-            juizo_params.add(spec.juizo[0])
+        # spec 069: guarda o NOME de cada par, de TODOS os pares. Antes guardava
+        # `spec.juizo[0]` — o PAR `("vantagem", "Régua…")` —, e comparava a TUPLA
+        # contra `cap["alvos"]` (dict de chaves string) e `cap["exige"]` (lista de
+        # strings): uma tupla nunca pertence a nenhum dos dois, então `vazando` era
+        # SEMPRE vazio e este teste nunca soube reprovar. E lia só o primeiro par,
+        # ignorando os seguintes — o caso de `butcher` (4 pares) e, agora, de
+        # `attack` (vantagem + revide), que é justamente o que ele mais precisa ver.
+        for p, _regua in spec.juizo:
+            juizo_params.add(p)
     vazando = []
     for cap in f:
         for p in juizo_params:

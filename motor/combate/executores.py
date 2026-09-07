@@ -57,8 +57,8 @@ from .primitivas import (  # noqa: F401
 )
 
 def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
-                      rolls: list | None = None) -> tuple[list, list]:
-    """Golpear outro personagem presente (`attack_ops`, spec 008).
+                      rolls: list | None = None) -> tuple[list, list, list]:
+    """Golpear outro personagem presente (`attack_ops`, spec 008 + 069).
 
     Ponto autoritativo do teste oposto: a guarda do Árbitro valida só o
     determinístico — e nem poderia fazer mais, porque o contexto não expõe os
@@ -67,14 +67,73 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
     golpe deliberado o MATA sem dado; alvo morto nega sem dado. A vantagem
     (0–10, do Árbitro pela régua canônica) é efêmera e secreta: clampada, usada e
     descartada. Assume o WRITE_LOCK já em mãos.
+
+    Spec 069: cada golpe pode provocar um REVIDE do alvo — ver `_talvez_revidar`. O
+    terceiro elemento do retorno são as memórias que o contra-golpe criou (as do ator
+    deste golpe seguem vindo do barramento, `react_actor_memory`).
     """
-    applied, rejected = [], []
+    applied, rejected, criadas = [], [], []
     if not resolution.get("attack_ops"):
-        return applied, rejected
+        return applied, rejected, criadas
+
+    def _talvez_revidar(op: dict, alvo: str, alvo_folder: Path,
+                        caiu: bool = False) -> None:
+        """O REVIDE (spec 069): o corpo de quem apanhou responde, sem ninguém decidir.
+
+        Reentra pela PORTA ÚNICA (`turno.apply_op`) em nome do REVIDANTE — e é isso
+        que faz a atribuição sair certa. `_publish_facts` monta todo fato com
+        `actor=character_id`, o dono do turno; um contra-golpe empilhado no `applied`
+        daqui gravaria "Golpeei o dragão" na conta de quem APANHOU, e o leque de
+        testemunha veria o agressor errado. Reentrando, `fato.actor` é o revidante, e
+        memória, testemunha, fadiga e interrupção-de-viagem saem corretas sem uma
+        linha nova.
+
+        `revide: True` na op faz DOIS trabalhos: é a TRAVA da recursão (sem ela o
+        contra-golpe dispara o contra-golpe do agressor, e como o WRITE_LOCK é RLock
+        ele NÃO protegeria — recursionaria até estourar a pilha, dentro do lock, com
+        o mundo meio escrito em disco), e é o sinal de que este golpe é DEFESA, que
+        `_record_attack`/`_witness_facts` leem para não condenar quem se defendeu.
+
+        Dispara também quando o golpe original ERRA ou é ABSORVIDO: a lâmina passou
+        perto, e isso é provocação consumada — sem isso o agressor teria tentativas
+        de graça, o mesmo buraco que a spec 043 fechou cobrando fadiga do erro.
+        """
+        if op.get("revide"):
+            return                       # A TRAVA: profundidade máxima 1
+        try:
+            nota = int(op.get("revide_nota") or 0)
+        except (TypeError, ValueError):
+            return
+        if nota <= 0 or caiu:            # nota 0, ou quem apanhou já caiu
+            return
+        alvo_fm_agora, _ = read_doc(alvo_folder / "character.md")
+        if is_dead(alvo_fm_agora) or is_down(alvo_fm_agora):
+            return
+        if fisica.is_resting(alvo_fm_agora) or trabalho.is_busy(alvo_folder):
+            return
+        # import LOCAL de propósito: `turno` importa `combate` no topo (motor/turno.py
+        # linha 18), então importá-lo aqui em cima seria ciclo.
+        from .. import turno
+        eco = turno.apply_op(alvo, "attack_ops", {
+            "alvo": character_id, "arma": None,
+            "vantagem": max(0, min(10, nota)), "revide": True,
+        }, rolls=rolls)
+        # O contra-golpe precisa SUBIR — revide que não chega ao chamador é dano
+        # invisível, e o Princípio X proíbe efeito que não se relata. Mas ele JÁ FOI
+        # publicado pela reentrada, com o ator certo: subir a entrada crua fazia o
+        # `_publish_facts` do turno EXTERNO publicá-la de novo, agora com o ator
+        # errado. Medido antes da marca: "Golpeei Torvin, o Ferreiro" gravado na pasta
+        # do próprio Torvin, e "Vi Torvin golpear Torvin" na plateia. `ja_publicado`
+        # é o que faz o barramento ignorá-las na segunda passagem.
+        applied.extend({**a, "ja_publicado": True}
+                       for a in (eco.get("applied") or []) if isinstance(a, dict))
+        rejected.extend({**r, "ja_publicado": True}
+                        for r in (eco.get("rejected") or []) if isinstance(r, dict))
+        criadas.extend(eco.get("created") or [])
     actor_fm_sono, _ = read_doc(actor_folder / "character.md")
     if fisica.is_resting(actor_fm_sono) or trabalho.is_busy(actor_folder):  # spec 031/048/052: auto-suficiência, nível 0
         rejected.append(_fail("descansando"))
-        return applied, rejected
+        return applied, rejected, criadas
     present_chars, _, _ = io._scene_entities(actor_folder.parent)  # cena fresca (025)
     for op in resolution.get("attack_ops") or []:
         alvo = op.get("alvo") or op.get("personagem")
@@ -101,7 +160,8 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
                 read_doc(actor_folder / "character.md")[0]) if not arma_id else None
             applied.append({"alvo": alvo, "arma": arma_id,
                             "parte": golpe[0] if golpe else None, "dano": 0,
-                            "derrota": DEAD, "deliberado": True})
+                            "derrota": DEAD, "deliberado": True,
+                            "revide": bool(op.get("revide"))})
             fisica.spend_fatigue(character_id, "alto")  # spec 030: golpear cansa
             continue
 
@@ -149,6 +209,7 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
             # spec 043: o golpe que ERRA também cansa — menos que o que acerta.
             # Sem isto, repetir o ataque na mesma cena era de graça.
             fisica.spend_fatigue(character_id, fisica.custo_da_falha("alto"))
+            _talvez_revidar(op, alvo, alvo_folder)   # errar também provoca
             continue
 
         mod = attr_modifier((actor_fm.get("attributes") or {}).get(attribute, 10))
@@ -164,16 +225,25 @@ def _apply_attack_ops(character_id: str, actor_folder: Path, resolution: dict,
                 rolagem=info["rolagem"])))
             # spec 043: conectar na armadura cansa o braço igual — o esforço houve.
             fisica.spend_fatigue(character_id, fisica.custo_da_falha("alto"))
+            _talvez_revidar(op, alvo, alvo_folder)   # absorvido também provoca
             continue
 
         novo_hp, derrota = fisica.apply_damage(alvo_folder, dano)  # spec 038: estado vira primitiva
         applied.append({"alvo": alvo, "arma": arma_id, "parte": parte, "dano": dano,
-                        "hp_restante": novo_hp, "derrota": derrota})
+                        "hp_restante": novo_hp, "derrota": derrota,
+                        # spec 069: a marca viaja no APLICADO, não só na op de entrada
+                        # — é o applied que a memória e o leque leem para saber que
+                        # este golpe foi DEFESA e não condenar quem se defendeu.
+                        "revide": bool(op.get("revide"))})
         fisica.spend_fatigue(character_id, "alto")  # spec 030: golpear cansa
-    return applied, rejected
+        _talvez_revidar(op, alvo, alvo_folder, caiu=bool(derrota))
+    return applied, rejected, criadas
 
 
 @registro.handler("attack_ops")
 def _h_attack(cid, af, res, rolls):
-    applied, rejected = _apply_attack_ops(cid, af, res, rolls)
-    return applied, rejected, []  # memória do ator (e arma que errou) via react_actor_memory (spec 038)
+    # `criadas` são as memórias do REVIDE (spec 069), que nasceram na reentrada por
+    # `apply_op` em nome do revidante. A memória do ATOR deste golpe continua vindo do
+    # barramento (`react_actor_memory`, spec 038) — não é gravada aqui.
+    applied, rejected, criadas = _apply_attack_ops(cid, af, res, rolls)
+    return applied, rejected, criadas

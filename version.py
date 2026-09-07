@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.5.1"
+__version__ = "3.6.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,34 @@ __version__ = "3.5.1"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.6.0": "spec 069 — O REVIDE INVOLUNTARIO. Quem apanha devolve o golpe no mesmo "
+            "turno, sem ninguem decidir por ele: o Arbitro gradua a PRONTIDAO do alvo "
+            "lendo a prosa dele e a cena, e a nota e gate e vantagem ao mesmo tempo (0 "
+            "= nao revidou; 1-10 = revidou com aquela vantagem). A disposicao sai da "
+            "PROSA, nao de um campo `temperamento` — a fera que FOGE quando ferida "
+            "pediria outro enum, e outro. O contra-golpe REENTRA pela porta unica "
+            "(`turno.apply_op`) em nome do revidante, e e isso que faz a atribuicao "
+            "sair certa: `_publish_facts` monta todo fato com o ator do TURNO, entao um "
+            "revide empilhado no applied gravaria 'Golpeei o dragao' na conta de quem "
+            "APANHOU — medido, saiu 'Vi Torvin golpear Torvin' na plateia. A marca "
+            "`revide` faz tres trabalhos: trava a recursao (profundidade 1; sem ela o "
+            "RLock NAO protegeria, recursionaria ate estourar a pilha dentro do lock), "
+            "sinaliza DEFESA a memoria e ao leque, e `ja_publicado` impede a segunda "
+            "publicacao. DEFENDER-SE NAO E AGREDIR: o agressor nao guarda rancor de "
+            "quem se defendeu, e a plateia julga por valencia RELATIVA AO OBSERVADOR "
+            "(`depende_observador`, o mecanismo da spec 041) com o agressor como "
+            "referente — sem isso o revide permitia LAVAGEM DE CULPA: atacar em praca "
+            "publica, apanhar de volta, e sair com a multidao condenando os dois. "
+            "A FORMA da regua-mae foi MEDIDA, nao intuida (lab_regua_golpe.py, n=30 por "
+            "variante): as duas reguas coladas davam revide SEMPRE 0; o que consertou "
+            "foi por o eixo do ALVO primeiro, marcar de quem e cada eixo e dar uma "
+            "pergunta explicita so ao revide. TRADE-OFF ACEITO pelo mantenedor: a "
+            "vantagem deriva de 6.63 para 8.00 (~+7% de acerto em todo golpe) — o preco "
+            "de manter UMA chamada. Duas chamadas e a unica forma medida de ter os dois "
+            "eixos limpos, e fica registrada como a volta se a deriva incomodar. "
+            "De quebra, DUAS guardas inertes consertadas em `selftest_phase45`: ela "
+            "comparava tuplas contra strings (nunca reprovava) e varria a face de um "
+            "personagem DORMINDO, com uma capacidade so.",
     "3.5.0": "spec 068 REFEITA — A PARTE QUE LUTA, e a segunda via que nao devia ter "
             "nascido. A 3.4.0 pos `weapon`/`armor` no TOPO do personagem; o mantenedor "
             "apontou o erro: o `body` (spec 019) JA e o sistema que descreve o que o "

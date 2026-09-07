@@ -100,6 +100,12 @@ def _publish_facts(character_id: str, canal: str, actor_folder: Path,
         for op in ops or []:
             if not isinstance(op, dict):
                 continue
+            # spec 069: a op que uma REENTRADA já publicou (o revide, aplicado em nome
+            # de outro personagem por `apply_op` aninhado) sobe até aqui só para ser
+            # RELATADA ao chamador. Republicá-la faria o fato nascer com o ator deste
+            # turno, e não com o de quem agiu — memória e testemunha na conta errada.
+            if op.get("ja_publicado"):
+                continue
             fato = fatos.Fato(kind=canal, actor=character_id, canal=canal,
                               status=status, payload=op)
             for efeito in fatos.publish(fato, actor_folder, present):

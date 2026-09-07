@@ -1270,8 +1270,20 @@ def _record_attack(character_id: str, attacks_applied: list, rejected: list) -> 
         _rec(created, character_id,
              f"Golpeei {_char_name(alvo)}{com}." + (" Caiu." if caiu else ""), ev, par,
              intensity=intens)
+        # spec 069 — DEFENDER-SE NÃO É AGREDIR. O golpe é condenado sem exceção desde a
+        # spec 016 (`valence={autor: NEGATIVA}`), e isso está certo para quem ataca.
+        # Aplicado ao REVIDE, faria o AGRESSOR guardar rancor de quem se defendeu —
+        # e, com o leque de testemunha (`_witness_facts`), a plateia condenaria o
+        # defensor junto. O efeito não é só injusto: é LAVAGEM DE CULPA — atacar em
+        # praça pública, apanhar de volta, e sair com a multidão condenando os dois.
+        # A causa raiz é que o mundo não sabe QUEM COMEÇOU; a marca `revide` na op é o
+        # único lugar onde essa informação existe.
+        #
+        # `lugar_sinal` PERMANECE negativo: o lugar onde se apanhou fica ruim, e isso
+        # independe de quem teve razão.
         _rec(created, alvo, f"{eu} me golpeou." + (" Caí." if caiu else ""), ev, par,
-             valence={character_id: NEGATIVA}, lugar_sinal=NEGATIVA, intensity=intens)
+             valence=None if op.get("revide") else {character_id: NEGATIVA},
+             lugar_sinal=NEGATIVA, intensity=intens)
         if arma:
             _record_arma(created, character_id, arma, acertou=True)
     # o ERRO não é op aplicada — é REJEIÇÃO; lê-la grava a (des)confiança pela arma
@@ -1672,12 +1684,23 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
         # DERRUBAR é momentoso: memória de impacto (large → portão de trauma na
         # testemunha). Só ferir marca medium. Ataque não tem stealth: ruído público,
         # todos os presentes veem (não passa despercebido — refino 2026-07-23).
+        # spec 069 — o REVIDE é julgado por QUEM COMEÇOU, não por quem golpeou.
+        # `val_ator: NEGATIVA` fixo condenaria quem se defendeu, e `_tier_da_testemunha`
+        # ainda ESCALARIA a intensidade para quem preza o agressor — a plateia levaria
+        # a defesa a mal com mais força. Reusa o mecanismo da expulsão (spec 041):
+        # `referente` é o `alvo` DESTA op, que num revide É o agressor original, e
+        # `_derive_observer_valence` resolve por testemunha — quem prezava o agressor
+        # reprova, quem o detestava aprova, e a banda neutra não muda afeto nenhum.
+        # É essa banda neutra que faz um estranho registrar a cena sem condenar ninguém.
+        revide = bool(op.get("revide"))
         fatos.append({"envolvidos": [character_id, alvo], "vitima": alvo,
                       "texto": (f"Vi {ator} derrubar {_char_name(alvo)}." if caiu
                                 else f"Vi {ator} golpear {_char_name(alvo)}."),
                       "base": "large" if caiu else "medium",
-                      "val_ator": NEGATIVA, "ruido": _PUBLICO,
-                      "evento": "witness_attack"})
+                      "val_ator": None if revide else NEGATIVA,
+                      **({"depende_observador": True, "referente": alvo}
+                         if revide else {}),
+                      "ruido": _PUBLICO, "evento": "witness_attack"})
     # P2 — SOCORRO (spec 032): só as bandas que CURAM viram fato
     # testemunhável — a banda baixa não deixou nada além de esforço, que
     # é fadiga do socorrista, não memória de terceiros. Público (curar

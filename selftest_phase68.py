@@ -354,6 +354,26 @@ try:
                                "weapon": {"damage": 5, "attribute": "CON"}}})))
     check("parte com `armor` e SEM `wearable` é ACEITA (a pele não se veste)",
           com(body={"dorso": {"capacidade": 1, "armor": {"protection": 8}}}) == [])
+    # `capacidade` conta PEÇAS VESTÍVEIS, não anatomia: uma parte que só golpeia não
+    # veste nada, e exigir o campo dela era ruído puro.
+    check("parte SEM `capacidade` é ACEITA (o campo é opcional, ausente vale 0)",
+          com(body={"garras": {"weapon": {"damage": 9, "attribute": "STR"}}}) == [],
+          f"{com(body={'garras': {'weapon': {'damage': 9, 'attribute': 'STR'}}})}")
+    check("`capacidade` ausente vale 0 na leitura, e a parte não segura nada",
+          motor.fisica.slot_capacity(
+              {"body": {"garras": {"weapon": {"damage": 9, "attribute": "STR"}}}},
+              "garras") == 0)
+    check("`capacidade` TORTA continua recusada quando presente",
+          any("capacidade" in e for e in com(
+              body={"garras": {"capacidade": -1,
+                               "weapon": {"damage": 9, "attribute": "STR"}}})))
+    # membro que se conta vai SEPARADO — não há campo de quantidade, e não precisa
+    dois = {"garra_esquerda": {"weapon": {"damage": 9, "attribute": "STR"}},
+            "garra_direita": {"weapon": {"damage": 9, "attribute": "STR"}}}
+    check("duas garras SEPARADAS são duas partes armadas (o sorteio ganha saídas)",
+          com(body=dois) == []
+          and [s for s, _d, _a in motor.natural_weapons_of({"body": dois})]
+              == ["garra_esquerda", "garra_direita"])
     check("parte com `armor.protection` negativa é recusada",
           any("body.dorso.armor.protection" in e for e in com(
               body={"dorso": {"capacidade": 1, "armor": {"protection": -1}}})))

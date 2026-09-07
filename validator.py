@@ -252,8 +252,14 @@ def _validate_character(fm: dict) -> list[str]:
                 # rica {capacidade: n>=0, pega: bool} — pega marca o slot onde os
                 # itens pegos vão (a mão do humano, a boca do cão).
                 if isinstance(val, dict):
+                    # spec 068: `capacidade` é OPCIONAL na forma rica, e ausente vale
+                    # 0 (`_slot_cap` já devolvia isso). Ela conta PEÇAS VESTÍVEIS, não
+                    # anatomia — e exigi-la obrigava uma parte que só golpeia a
+                    # declarar quantas roupas veste (`garras: {capacidade: 0, weapon:
+                    # ...}`), ruído puro. Quem veste algo continua declarando.
                     cap = val.get("capacidade")
-                    if isinstance(cap, bool) or not isinstance(cap, int) or cap < 0:
+                    if cap is not None and (isinstance(cap, bool)
+                                            or not isinstance(cap, int) or cap < 0):
                         errors.append(f"character: 'body.{slot}.capacidade' deve ser "
                                       f"inteiro >= 0.")
                     if "pega" in val and not isinstance(val.get("pega"), bool):

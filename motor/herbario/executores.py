@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro, trabalho
+from .. import fisica, io, memoria, prazo, registro, trabalho
 from ..io import _fail, _rejection, name_of, read_doc, write_doc
 
 from .primitivas import porcoes_de_erva, rebrota_s, roll_colher_check
@@ -145,6 +145,10 @@ def _apply_forage_ops(character_id: str, actor_folder: Path, resolution: dict,
                 "type": "item", "id": item_id, "name": nome,
                 "weight_kg": peso, "origin": "emergente",
             }, descricao)
+            # spec 070: o que se colhe MURCHA. Cada porção nasce com a própria janela —
+            # elas são itens independentes, e uma pode ser usada antes da outra.
+            # `_DURA_COLHIDO_S` é calibragem, e vive junto das outras deste módulo.
+            prazo.carimbar_se_houver(actor_folder.parent / item_id, op, _DURA_COLHIDO_S)
             criados.append(item_id)
 
         # FR-013a — só quando o alvo É um `object`; `location` (alvo_folder None)
@@ -186,6 +190,12 @@ def _apply_forage_ops(character_id: str, actor_folder: Path, resolution: dict,
                                 "forage_mato" if ruim else "forage_util",
                        "domain": "herbalismo"}})
     return applied, rejected
+
+
+# Quanto o colhido dura antes de murchar. Doze horas: o bastante para atravessar uma
+# sessão e voltar, curto o bastante para estocar erva fresca não ser de graça.
+# CALIBRAGEM — o número certo se descobre jogando.
+_DURA_COLHIDO_S = 12 * 3600
 
 
 @registro.handler("forage_ops")

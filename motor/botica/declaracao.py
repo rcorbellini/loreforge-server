@@ -98,6 +98,7 @@ def _brew(name: str, args: dict, ctx) -> tuple[dict, bool]:
         campos={"recipiente_adequado": 5, "preparabilidade": 5, "favorabilidade": 5,
                 "duracao": 5},
         texto_campos={"nome": "", "descricao_ruim": "", "descricao_media": "",
+                     "urgencia": "", "descricao_vencida": "",
                       "descricao_otima": ""})
     ctx.brewed_asked.add(chave)
     base = {"ingredientes": ingredientes, "recipiente": recipiente}
@@ -121,6 +122,8 @@ def _brew(name: str, args: dict, ctx) -> tuple[dict, bool]:
         "favorabilidade": julgado["favorabilidade"], "duracao": julgado["duracao"],
         "nome": julgado["nome"], "descricao_ruim": julgado["descricao_ruim"],
         "descricao_media": julgado["descricao_media"],
+        "urgencia": julgado.get("urgencia") or "",
+        "descricao_vencida": julgado.get("descricao_vencida") or "",
         "descricao_otima": julgado["descricao_otima"]})
     if rej:
         return ctx.arb_deny(rolled, ("brew", tuple(ingredientes), recipiente), base, rej)
@@ -152,6 +155,7 @@ recipiente_adequado ou preparabilidade sejam 0):
 "nome": "<nome curto do preparo>", \
 "descricao_ruim": "<texto factual, resultado malfeito>", \
 "descricao_media": "<texto factual, resultado comum>", \
+"urgencia": "<uma frase>", "descricao_vencida": "<texto factual>", \
 "descricao_otima": "<texto factual, resultado excelente>"}}"""
 
 

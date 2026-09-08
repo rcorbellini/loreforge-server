@@ -89,7 +89,13 @@ Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de explicação
 EXATAMENTE com estas quatro chaves (todas OBRIGATÓRIAS, mesmo que
 esquartejabilidade ou rendimento sejam 0):
 
-{{"esquartejabilidade": <inteiro 0-10>, "rendimento": <inteiro 0-10>, "nome": "<nome curto do corte de carne>", "descricao": "<texto factual da carne resultante, nunca sabor ou apetite>"}}"""
+
+
+Escreva também dois textos sobre o TEMPO (spec 070). "urgencia": o que está
+em jogo enquanto a carne ainda presta — uma frase curta, in-world, sobre a
+CARNE. "descricao_vencida": como ela fica depois de estragar — factual, e
+ainda É carne, nunca sumida.
+{{"esquartejabilidade": <inteiro 0-10>, "rendimento": <inteiro 0-10>, "nome": "<nome curto do corte de carne>", "descricao": "<texto factual da carne resultante, nunca sabor ou apetite>", "urgencia": "<uma frase>", "descricao_vencida": "<texto factual>"}}"""
 
 _STR = {"type": "string"}
 
@@ -115,7 +121,7 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
            "alvo": ctx.describe(alvo),
         }, ensure_ascii=False, indent=2)),
         campos={"esquartejabilidade": 5, "rendimento": 5},
-        texto_campos={"nome": "", "descricao": ""})
+        texto_campos={"nome": "", "descricao": "", "urgencia": "", "descricao_vencida": ""})
     ctx.butchered_asked.add(alvo)
     base = {"alvo": alvo}
     esquartejabilidade = julgado["esquartejabilidade"]
@@ -134,7 +140,9 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
     rej, rolled = ctx.apply_arbitrated("esquartejar_ops", {
         **base, "esquartejabilidade": esquartejabilidade, "rendimento": rendimento,
-       "nome": julgado["nome"], "descricao": julgado["descricao"]})
+       "nome": julgado["nome"], "descricao": julgado["descricao"],
+       "urgencia": julgado.get("urgencia") or "",
+       "descricao_vencida": julgado.get("descricao_vencida") or ""})
     if rej:
         return ctx.arb_deny(rolled, ("butcher", alvo), base, rej)
     return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False

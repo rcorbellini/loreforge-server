@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import estado, fisica, io, memoria, registro, trabalho
+from .. import estado, fisica, io, memoria, prazo, registro, trabalho
 from ..estado import _set_field
 from ..io import _fail, _rejection, name_of, read_doc
 
@@ -136,10 +136,18 @@ def _apply_cozinha_ops(character_id: str, actor_folder: Path, resolution: dict,
         _peca_id, panela = trabalho.criar_peca(
             actor_folder.parent, corpo_panela,
             {"tool": "cook", "ator": character_id,
-             "pronto_ts": time.time() + duracao_segundos(duracao_nota),
+             # spec 070 (FR-015): o relógio que corre sozinho tem um nome só no mundo.
+             "vence_em": time.time() + duracao_segundos(duracao_nota),
              # spec 053: `prato` era o nome específico de cook dentro de um bloco
              # genérico. Virou `resultado`, que qualquer domínio de prazo usa.
-             "resultado": {"nome": nome, "description": descricao}},
+             # spec 070: a VALIDADE do prato viaja no `resultado` e é carimbada na
+             # materialização (`trabalho.resolver_prazos`), que é o ponto único por onde
+             # cook e brew terminam. `dura_s` deriva da mesma nota de duração do preparo:
+             # comida que leva muito para ficar pronta costuma durar mais.
+             "resultado": {"nome": nome, "description": descricao,
+                           "urgencia": (op.get("urgencia") or "").strip(),
+                           "descricao_vencida": (op.get("descricao_vencida") or "").strip(),
+                           "dura_s": duracao_segundos(duracao_nota) * prazo.JANELA_POR_ESFORCO}},
             name=f"{nome} (no fogo)", weight_kg=round(peso_kg, 3) or 0.3)
 
         extremo_bom = banda == "otima"

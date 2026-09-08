@@ -251,14 +251,8 @@ def _abrir(character_id, actor_folder, actor_fm, op, present_items, pendente,
     #
     # Só carimba se o Árbitro tiver escrito a descrição pós-vencimento: sem ela não há o
     # que a peça VIRA, e um prazo que vence sem consequência é pior que prazo nenhum.
-    _vencida = (op.get("descricao_vencida") or "").strip()
-    if _vencida:
-        prazo.carimbar(
-            pasta, duracao_s * _JANELA_POR_ESFORCO,
-            {"verbo": "virar"},
-            urgencia=(op.get("urgencia") or "").strip(),
-            descricao_vencida=_vencida,
-            filename=filename)
+    prazo.carimbar_se_houver(pasta, op, duracao_s * prazo.JANELA_POR_ESFORCO,
+                             filename=filename)
 
     return True, {
         "peca": peca_id, "tipo": tipo, "materiais": materiais,
@@ -266,14 +260,6 @@ def _abrir(character_id, actor_folder, actor_fm, op, present_items, pendente,
         "dominio": "nenhuma",  # abrir não é prática concluída (mesma regra de forge)
         "memory": _memoria_ator(peca_id, f"Comecei a fazer {nome}.",
                                 "craft_start", None)}
-
-
-# QUANTO A JANELA É MAIOR QUE O TRABALHO. Três vezes o esforço necessário: quem larga uma
-# obra de trinta minutos tem uma hora e meia para voltar. É calibragem, não desenho — o
-# número certo se descobre jogando, e este é conservador de propósito (uma janela curta
-# demais vira armadilha, e a spec avisa que punir por algo que a Mente não alcança é o
-# modo de falha a evitar).
-_JANELA_POR_ESFORCO = 3.0
 
 
 def _retomar(character_id, actor_folder, op, present_pecas, pendente):

@@ -200,11 +200,16 @@ nelas.
 
 {REGUA_DURACAO}
 
-{_INSTRUCAO_TEXTOS}{extra_nota}
+{_INSTRUCAO_TEXTOS}
+
+Escreva também dois textos sobre o TEMPO passando por cima disso (spec 070).
+"urgencia": o que está em jogo enquanto o prazo corre — uma frase curta, in-world,
+sobre a COISA. "descricao_vencida": como a coisa fica depois que o prazo passa —
+factual, e ela AINDA É a coisa, nunca sumida. Nunca sobre quem a fez ou a carrega.{extra_nota}
 
 {_SCHEMA_COMUM}
 
-{{"forjabilidade": <inteiro 0-10>, "qualidade_material": <inteiro 0-10>, "fogo_de_forja": <inteiro 0-10>, "ferramental": <inteiro 0-10>, "duracao": <inteiro 0-10>, "nome": "<nome curto da peça>", "descricao_alta": "<texto factual da peça bem executada>", "descricao_baixa": "<texto factual da MESMA peça, comprometida — ainda É a peça, nunca sumida>"{extra_chave}}}"""
+{{"forjabilidade": <inteiro 0-10>, "qualidade_material": <inteiro 0-10>, "fogo_de_forja": <inteiro 0-10>, "ferramental": <inteiro 0-10>, "duracao": <inteiro 0-10>, "nome": "<nome curto da peça>", "descricao_alta": "<texto factual da peça bem executada>", "descricao_baixa": "<texto factual da MESMA peça, comprometida — ainda É a peça, nunca sumida>", "urgencia": "<uma frase>", "descricao_vencida": "<texto factual>"{extra_chave}}}"""
 
 
 REGUA_FORJAR_ARMA = _regua_combinada("arma")
@@ -284,7 +289,10 @@ def _forjar(tipo: str, regua: str, name: str, args: dict, ctx) -> tuple[dict, bo
     # CONTRATO DE ANÁLISE (spec 052, R3): as três entradas chegam de origens
     # diferentes de propósito. `lugar` NÃO é opcional — numa oficina escrita no
     # idioma deste projeto, é ali que a bigorna está.
-    campos_texto = {"nome": "", "descricao_alta": "", "descricao_baixa": ""}
+    campos_texto = {"nome": "", "descricao_alta": "", "descricao_baixa": "",
+                    # spec 070: default vazio — sem eles a peça nasce sem prazo, que é
+                    # o comportamento de antes desta spec (FR-010).
+                    "urgencia": "", "descricao_vencida": ""}
     if tipo == "armadura":
         campos_texto["slot"] = "torso"
     julgado = juizo.julgamento(
@@ -311,6 +319,8 @@ def _forjar(tipo: str, regua: str, name: str, args: dict, ctx) -> tuple[dict, bo
                 return ctx.arb_deny(rolled, ("forge", tipo, fonte_calor), base, rej)
             return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
     op.update({"duracao": julgado["duracao"], "nome": julgado["nome"],
+               "urgencia": julgado.get("urgencia") or "",
+               "descricao_vencida": julgado.get("descricao_vencida") or "",
                "descricao_alta": julgado["descricao_alta"],
                "descricao_baixa": julgado["descricao_baixa"]})
     if tipo == "armadura":
@@ -351,6 +361,7 @@ _PARAMS_COMUNS = {
     "forjabilidade": _NOTA, "qualidade_material": _NOTA, "fogo_de_forja": _NOTA,
     "ferramental": _NOTA, "duracao": _NOTA,
     "nome": _STR, "descricao_alta": _STR, "descricao_baixa": _STR,
+    "urgencia": _STR, "descricao_vencida": _STR,
 }
 
 _JUIZO_COMUM = ("forjabilidade", "qualidade_material", "fogo_de_forja", "ferramental",

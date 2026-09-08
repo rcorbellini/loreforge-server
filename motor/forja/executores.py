@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro, trabalho
+from .. import fisica, io, memoria, prazo, registro, trabalho
 from ..io import _fail, _rejection, name_of, read_doc
 
 from .primitivas import (
@@ -170,6 +170,11 @@ def _abrir(character_id, actor_folder, actor_fm, op, tipo, present_objects,
                                          name=f"{nome} (em trabalho)",
                                          weight_kg=peso_kg or 0.3)
     trabalho.abrir_sessao(pasta, character_id)
+    # A JANELA DE RETOMADA (spec 070). Mesmo molde do `craft`: o metal esfria, a têmpera
+    # passa do ponto. Nada acontece se o Árbitro não tiver escrito a descrição
+    # pós-vencimento — a peça nasce sem prazo, como antes.
+    prazo.carimbar_se_houver(pasta, op,
+                             bloco["tempo_necessario_s"] * prazo.JANELA_POR_ESFORCO)
     _memoria_peca(pasta, f"{name_of(character_id)} começou esta peça.",
                   "forge_start", character_id)
 

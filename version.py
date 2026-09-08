@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.6.0"
+__version__ = "3.7.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,22 @@ __version__ = "3.6.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.7.0": "spec 070 — O PRAZO COMO PRIMITIVA. O relogio que corre sozinho deixou de "
+            "viver dentro do bloco `trabalho` (como `pronto_ts`) e virou um bloco "
+            "`prazo` que QUALQUER entidade carrega. Vencer e avaliado na LEITURA, na "
+            "montagem da cena, sem processo de fundo e SEM CHAMAR MODELO: o que vencer "
+            "significa vem da prosa, lido UMA vez pelo Arbitro na criacao (`urgencia` e "
+            "`descricao_vencida`) e carimbado — entao uma cena com dez coisas vencidas "
+            "custa dez trocas de string, nunca dez chamadas de Arbitro. Vocabulario "
+            "FECHADO de quatro verbos (condicao/campo/extinguir/virar), todos compondo "
+            "primitivas que ja existiam. Seis capacidades passam a criar coisa com "
+            "prazo: craft e forge_* ganham janela de retomada; forage murcha; butcher "
+            "apodrece; cook e brew carimbam a validade na materializacao (ponto unico, "
+            "em `trabalho`). `promise` aceita `ate_quando` opcional, e o prazo mora na "
+            "intencao de quem prometeu — cumprir extingue. E o contrato passou a expor "
+            "`started_by` na peca em processo: MEDIDO, dizer a Mente que o trabalho e "
+            "dela leva a retomada de 6/10 para 10/10 por 38 tokens. `consultar_momento` "
+            "devolve o instante ao lado da prosa (FR-021).",
     "3.6.0": "spec 069 — O REVIDE INVOLUNTARIO. Quem apanha devolve o golpe no mesmo "
             "turno, sem ninguem decidir por ele: o Arbitro gradua a PRONTIDAO do alvo "
             "lendo a prosa dele e a cena, e a nota e gate e vantagem ao mesmo tempo (0 "

@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro, trabalho
+from .. import fisica, io, memoria, prazo, registro, trabalho
 from ..io import _fail, _rejection, read_doc
 
 from .primitivas import duracao_segundos_preparo, roll_preparar_check
@@ -139,7 +139,11 @@ def _apply_botica_ops(character_id: str, actor_folder: Path, resolution: dict,
              # mundo inteiro. `pronto_ts` continua sendo LIDO para mundos antigos, e
              # ninguém mais o escreve.
              "vence_em": time.time() + duracao_segundos_preparo(duracao_nota),
-             "resultado": {"nome": nome, "description": descricao}},
+             # spec 070: a validade do preparo, carimbada na materialização.
+             "resultado": {"nome": nome, "description": descricao,
+                           "urgencia": (op.get("urgencia") or "").strip(),
+                           "descricao_vencida": (op.get("descricao_vencida") or "").strip(),
+                           "dura_s": duracao_segundos_preparo(duracao_nota) * prazo.JANELA_POR_ESFORCO}},
             name=f"{nome} (preparando)", weight_kg=round(peso_kg, 3) or 0.3)
 
         extremo_bom = banda == "otima"

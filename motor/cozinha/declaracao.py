@@ -135,7 +135,14 @@ Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de
 explicação, EXATAMENTE com estas oito chaves (todas OBRIGATÓRIAS, mesmo que
 fonte_de_calor ou cozinhabilidade sejam 0):
 
-{{"fonte_de_calor": <inteiro 0-10>, "cozinhabilidade": <inteiro 0-10>, "favorabilidade": <inteiro 0-10>, "duracao": <inteiro 0-10>, "nome": "<nome curto do prato>", "descricao_ruim": "<texto factual do prato malfeito/comprometido — ainda É o prato tentado, nunca sumido>", "descricao_media": "<texto factual do prato comum, bem cozido>", "descricao_otima": "<texto factual do prato bem executado>"}}"""
+
+
+Escreva também dois textos sobre o TEMPO passando por cima disso (spec 070).
+"urgencia": o que está em jogo enquanto ainda dá para aproveitar — uma frase
+curta, in-world, sobre a COISA. "descricao_vencida": como ela fica depois de
+passar do ponto — factual, e ainda É a coisa, nunca sumida.
+
+{{"fonte_de_calor": <inteiro 0-10>, "cozinhabilidade": <inteiro 0-10>, "favorabilidade": <inteiro 0-10>, "duracao": <inteiro 0-10>, "nome": "<nome curto do prato>", "descricao_ruim": "<texto factual do prato malfeito/comprometido — ainda É o prato tentado, nunca sumido>", "descricao_media": "<texto factual do prato comum, bem cozido>", "descricao_otima": "<texto factual do prato bem executado>", "urgencia": "<uma frase>", "descricao_vencida": "<texto factual>"}}"""
 
 _STR = {"type": "string"}
 
@@ -180,6 +187,7 @@ def _cook(name: str, args: dict, ctx) -> tuple[dict, bool]:
         campos={"fonte_de_calor": 5, "cozinhabilidade": 5, "favorabilidade": 5,
                 "duracao": 5},
         texto_campos={"nome": "", "descricao_ruim": "", "descricao_media": "",
+                     "urgencia": "", "descricao_vencida": "",
                       "descricao_otima": ""})
     ctx.cooked_asked.add(chave)
     base = {"ingredientes": ingredientes, "fonte_calor": fonte_calor}
@@ -201,7 +209,11 @@ def _cook(name: str, args: dict, ctx) -> tuple[dict, bool]:
         "favorabilidade": julgado["favorabilidade"], "duracao": julgado["duracao"],
         "nome": julgado["nome"], "descricao_ruim": julgado["descricao_ruim"],
         "descricao_media": julgado["descricao_media"],
-        "descricao_otima": julgado["descricao_otima"]})
+        "descricao_otima": julgado["descricao_otima"],
+        # spec 070: seguem para o `resultado` da panela e viram a validade do prato
+        # quando ele materializa.
+        "urgencia": julgado.get("urgencia") or "",
+        "descricao_vencida": julgado.get("descricao_vencida") or ""})
     if rej:
         return ctx.arb_deny(rolled, ("cook", tuple(ingredientes), fonte_calor), base, rej)
     return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False

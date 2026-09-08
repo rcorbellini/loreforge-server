@@ -176,15 +176,40 @@ def main() -> int:
         # inerte, e nenhum teste percebeu, porque todos exercitavam a primitiva de
         # dentro. Este checa a ponta que faltava: uma capacidade real cria a coisa com
         # prazo.
-        import motor as _motor
-        origem = "\n".join(l for l in
-                           (Path(__file__).parent / "motor" / "craft" / "executores.py")
-                           .read_text(encoding="utf-8").splitlines()
-                           if not l.strip().startswith("#"))
-        check("7a: `craft` chama `prazo.carimbar` ao abrir um trabalho",
-              "prazo.carimbar(" in origem)
-        check("7b: e só carimba quando há descrição pós-vencimento",
-              "descricao_vencida" in origem and "_vencida" in origem)
+        # TODA capacidade que cria coisa perecível precisa carimbar. Listar as seis aqui
+        # é o que impede a feature de existir só para uma delas — que foi o furo da
+        # primeira entrega, e depois o de a segunda cobrir só `craft`.
+        # DOIS CAMINHOS, e a distinção é real — não é frouxidão do teste:
+        #
+        #  DIRETO   a capacidade cria a coisa e carimba ali mesmo (peça na bigorna,
+        #           erva colhida, porção de carne).
+        #  RESULTADO a capacidade cria uma PEÇA que termina sozinha, e a coisa só passa
+        #           a existir na materialização. Quem carimba é `trabalho.resolver_prazos`,
+        #           o ponto ÚNICO por onde cook e brew terminam — escrever a mesma regra
+        #           dentro das duas seria a segunda via que o Princípio I proíbe.
+        CRIADORAS = {
+            "craft":    ("direto",    "peça em processo — janela de retomada"),
+            "forja":    ("direto",    "peça na bigorna — janela de retomada"),
+            "herbario": ("direto",    "o que se colhe — murcha"),
+            "acougue":  ("direto",    "a carne crua — apodrece"),
+            "cozinha":  ("resultado", "o prato feito — validade"),
+            "botica":   ("resultado", "o preparo — validade"),
+        }
+        base = Path(__file__).parent / "motor"
+        sem_comentario = lambda p: "\n".join(
+            l for l in p.read_text(encoding="utf-8").splitlines()
+            if not l.strip().startswith("#")) if p.exists() else ""
+        for modulo, (via, oquee) in CRIADORAS.items():
+            origem = sem_comentario(base / modulo / "executores.py")
+            if via == "direto":
+                ok = "prazo.carimbar" in origem
+            else:
+                ok = ("descricao_vencida" in origem and "dura_s" in origem)
+            check(f"7-{modulo}: cria com prazo, via {via} ({oquee})", ok,
+                  "não carimba nem alimenta o `resultado`")
+        # e a ponta que materializa precisa mesmo carimbar
+        check("7-materializacao: `trabalho` carimba a validade do que fica pronto",
+              "prazo.carimbar" in sem_comentario(base / "trabalho.py"))
 
         # e o ciclo, de ponta a ponta, com o carimbo de verdade
         alvo = tmp / "peca-viva"

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import fisica, io, memoria, registro, trabalho
+from .. import fisica, io, memoria, prazo, registro, trabalho
 from ..estado import _set_field
 from ..io import _fail, _rejection, name_of, read_doc
 
@@ -97,6 +97,10 @@ def _apply_esquartejar_ops(character_id: str, actor_folder: Path, resolution: di
                 "type": "item", "id": item_id, "name": nome,
                 "weight_kg": peso, "origin": "emergente",
             }, descricao)
+            # spec 070: CARNE CRUA APODRECE — é o caso mais evidente da mecânica, e o
+            # que dá sentido a cozinhar logo o que se abateu. Cada porção tem a própria
+            # janela: são itens independentes.
+            prazo.carimbar_se_houver(actor_folder.parent / item_id, op, _DURA_CARNE_S)
             criados.append(item_id)
 
         _set_field(alvo_folder, "status.esquartejado", True)
@@ -117,6 +121,12 @@ def _apply_esquartejar_ops(character_id: str, actor_folder: Path, resolution: di
                                 "butcher_fraco" if ruim else "butcher_medio",
                        "domain": "acougue"}})
     return applied, rejected
+
+
+# Quanto a carne crua dura. Seis horas: menos que a erva, porque carne estraga mais
+# rápido, e curto o bastante para o abate pedir uma decisão (cozinhar, salgar, vender).
+# CALIBRAGEM — descobre-se jogando.
+_DURA_CARNE_S = 6 * 3600
 
 
 @registro.handler("esquartejar_ops")

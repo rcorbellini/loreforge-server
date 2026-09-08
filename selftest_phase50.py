@@ -155,8 +155,10 @@ motor._roll_d20 = force
 check("US1: ingredientes REMOVIDOS imediatamente (consumo no ATO, não na materialização)",
       not (coz_folder / "peixe-p50").exists() and not (coz_folder / "batata-p50").exists())
 pendente = cooking_de(COZ)
-check("US1: panela no fogo gravada com pronto_ts FUTURO (spec 052)",
-      isinstance(pendente, dict) and pendente.get("pronto_ts", 0) > time.time(),
+check("US1: panela no fogo gravada com prazo FUTURO (spec 052)",
+      isinstance(pendente, dict) and # spec 070 (FR-015): o relógio que corre sozinho passou a se chamar
+      # `vence_em`. `pronto_ts` segue LIDO para mundos de outra gente.
+      (pendente.get("vence_em") or pendente.get("pronto_ts", 0)) > time.time(),
       str(pendente))
 # MUDANÇA DELIBERADA da spec 052 (FR-046/SC-013): antes NADA existia no mundo até o
 # prato ficar pronto. Agora existe uma PANELA NO FOGO — visível na cena, que

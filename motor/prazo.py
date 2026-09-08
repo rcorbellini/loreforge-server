@@ -150,6 +150,42 @@ def carimbar(pasta: Path, dura_s: float, ao_vencer: dict,
     io.write_doc(pasta / filename, fm, corpo)
 
 
+# --------------------------------------------------------------------------- #
+# O ATALHO QUE TODA CAPACIDADE QUE CRIA COISA USA
+# --------------------------------------------------------------------------- #
+
+# Quanto a JANELA DE RETOMADA é maior que o esforço que a peça exige. Quem larga uma obra
+# de trinta minutos tem uma hora e meia para voltar.
+#
+# CALIBRAGEM, não desenho — o número certo se descobre jogando, e este é conservador de
+# propósito: janela curta demais vira armadilha, e a spec 070 avisa que punir por algo que
+# a Mente não alcança é o modo de falha a evitar. Vive aqui, num lugar só, para não virar
+# cinco constantes divergentes espalhadas pelas capacidades.
+JANELA_POR_ESFORCO = 3.0
+
+
+def carimbar_se_houver(pasta: Path, dados: dict, dura_s: float,
+                       verbo: dict | None = None, filename: str = "item.md") -> bool:
+    """Carimba o prazo SE o Árbitro tiver escrito a descrição pós-vencimento.
+
+    O ponto único que todas as capacidades criadoras chamam — `craft`, `forja`, `cozinha`,
+    `botica`, `forage`, `butcher`. Sem ele, cada uma repetiria as mesmas quatro linhas e
+    elas divergiriam no dia em que uma fosse calibrada (Princípio I).
+
+    **Sem `descricao_vencida`, não carimba** — e isso não é defensividade, é a regra: sem
+    ela não há o que a coisa VIRA, e um prazo que vence sem consequência é pior que prazo
+    nenhum. Um modelo que não devolver o campo faz a coisa nascer sem prazo, que é o
+    comportamento de antes desta spec, preservado (FR-010).
+    """
+    vencida = (dados.get("descricao_vencida") or "").strip()
+    if not vencida or dura_s <= 0:
+        return False
+    carimbar(pasta, dura_s, verbo or {"verbo": "virar"},
+             urgencia=(dados.get("urgencia") or "").strip(),
+             descricao_vencida=vencida, filename=filename)
+    return True
+
+
 def vencer_se_for_hora(pasta: Path, fm: dict, filename: str = "item.md",
                        agora: float | None = None) -> dict | None:
     """O GANCHO DO CAMINHO DE LEITURA. Recebe o `fm` que o chamador já leu, para não

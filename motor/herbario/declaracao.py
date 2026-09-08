@@ -87,6 +87,7 @@ def _forage(name: str, args: dict, ctx) -> tuple[dict, bool]:
         }, ensure_ascii=False, indent=2)),
         campos={"herbabilidade": 5, "riqueza": 5},
         texto_campos={"nome_mato": "", "descricao_mato": "",
+                      "urgencia": "", "descricao_vencida": "",
                       "nome_util": "", "descricao_util": "",
                       "nome_seleta": "", "descricao_seleta": "",
                       "descricao_colhida": ""})
@@ -109,6 +110,8 @@ def _forage(name: str, args: dict, ctx) -> tuple[dict, bool]:
         **base, "herbabilidade": herbabilidade, "riqueza": riqueza,
         "nome_mato": julgado["nome_mato"], "descricao_mato": julgado["descricao_mato"],
         "nome_util": julgado["nome_util"], "descricao_util": julgado["descricao_util"],
+        "urgencia": julgado.get("urgencia") or "",
+        "descricao_vencida": julgado.get("descricao_vencida") or "",
         "nome_seleta": julgado["nome_seleta"],
         "descricao_seleta": julgado["descricao_seleta"],
         "descricao_colhida": julgado["descricao_colhida"]})
@@ -157,6 +160,8 @@ ou riqueza sejam 0):
 {{"herbabilidade": <inteiro 0-10>, "riqueza": <inteiro 0-10>, \
 "nome_mato": "<nome curto>", "descricao_mato": "<texto factual>", \
 "nome_util": "<nome curto>", "descricao_util": "<texto factual>", \
+"urgencia": "<uma frase sobre o que está em jogo enquanto o colhido ainda presta>", \
+"descricao_vencida": "<texto factual do MESMO colhido, murcho — ainda É ele>", \
 "nome_seleta": "<nome curto>", "descricao_seleta": "<texto factual>", \
 "descricao_colhida": "<texto factual do alvo depois de colhido>"}}"""
 

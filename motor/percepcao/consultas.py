@@ -845,6 +845,13 @@ def get_context(character_id: str) -> dict:
                 # O GATE (research.md R5): o dado desce a quem tem memória do começo.
                 # Quem chega depois vê a peça e não sabe de quem é — o mesmo regime do
                 # rastro. `witness_craft` (spec 034) é o que grava essa memória.
+                # spec 070: a URGÊNCIA desce enquanto o prazo corre — é o que está em
+                # jogo, e isso é matéria de ESCOLHA. A `descricao_vencida` NÃO desce
+                # (FR-022): ela é o futuro, e o futuro não é vista de ninguém. Quando
+                # vencer, ela vira a `prose` do item e chega por ali, como presente.
+                _urg = ((item_fm.get(prazo.BLOCO) or {}).get("urgencia") or "").strip()
+                if _urg:
+                    entry["urgency"] = _urg
                 _quem_comecou = _bloco_trab.get("ator")
                 entry["started_by"] = (
                     _quem_comecou if _sabe_do_comeco(character_id, _quem_comecou, child)

@@ -169,6 +169,37 @@ def main() -> int:
         check("6c: dez vencimentos numa cena são dez trocas de string",
               all(a is not None for a in aplicados) and dt < 1.0,
               f"{dt:.3f}s")
+        print("\n--- 7. O CICLO INTEIRO: alguém CARIMBA um prazo -------------------")
+        # O FURO QUE ESTE BLOCO EXISTE PARA IMPEDIR. Na primeira entrega, `motor/prazo.py`
+        # estava completo, o validator validava, o vencimento aplicava e o gancho
+        # preguiçoso disparava — e NADA no jogo chamava `carimbar`. A feature inteira era
+        # inerte, e nenhum teste percebeu, porque todos exercitavam a primitiva de
+        # dentro. Este checa a ponta que faltava: uma capacidade real cria a coisa com
+        # prazo.
+        import motor as _motor
+        origem = "\n".join(l for l in
+                           (Path(__file__).parent / "motor" / "craft" / "executores.py")
+                           .read_text(encoding="utf-8").splitlines()
+                           if not l.strip().startswith("#"))
+        check("7a: `craft` chama `prazo.carimbar` ao abrir um trabalho",
+              "prazo.carimbar(" in origem)
+        check("7b: e só carimba quando há descrição pós-vencimento",
+              "descricao_vencida" in origem and "_vencida" in origem)
+
+        # e o ciclo, de ponta a ponta, com o carimbo de verdade
+        alvo = tmp / "peca-viva"
+        alvo.mkdir(parents=True, exist_ok=True)
+        io.write_doc(alvo / "item.md",
+                     {"type": "item", "id": "peca-viva", "name": "Alaúde (em processo)",
+                      "weight_kg": 1.0}, "Alaúde ainda em processo.")
+        prazo.carimbar(alvo, -1, {"verbo": "virar"},
+                       urgencia="a cola ainda está fresca",
+                       descricao_vencida="alaúde colado de forma indevida, de som torto")
+        fm_v, _ = io.read_doc(alvo / "item.md")
+        feito = prazo.vencer_se_for_hora(alvo, fm_v)
+        _, corpo_v = io.read_doc(alvo / "item.md")
+        check("7c: carimbado, vencido e a prosa virou a pós-vencimento",
+              feito is not None and "som torto" in corpo_v, corpo_v[:50])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

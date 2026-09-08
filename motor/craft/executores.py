@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import fisica, io, registro, trabalho
+from .. import fisica, io, prazo, registro, trabalho
 from ..io import _fail, _rejection, read_doc
 
 from .primitivas import (
@@ -239,12 +239,41 @@ def _abrir(character_id, actor_folder, actor_fm, op, present_items, pendente,
         actor_folder.parent, corpo, bloco, name=f"{nome} (em processo)",
         weight_kg=peso_kg, filename=filename, extra_fm=extra_fm)
     trabalho.abrir_sessao(pasta, character_id)
+
+    # A JANELA DE RETOMADA (spec 070). É AQUI que o prazo nasce — e sem esta chamada a
+    # primitiva inteira fica inerte, que foi exatamente o furo da primeira entrega: o
+    # `motor/prazo.py` existia, o validator validava, o vencimento aplicava, e nada no
+    # jogo carimbava um prazo.
+    #
+    # A janela é proporcional ao trabalho: quem começa uma obra de trinta minutos tem
+    # mais folga que quem começa uma de três. `_JANELA_POR_ESFORCO` é a única constante
+    # de calibragem da feature, e está aqui em cima para ser achada.
+    #
+    # Só carimba se o Árbitro tiver escrito a descrição pós-vencimento: sem ela não há o
+    # que a peça VIRA, e um prazo que vence sem consequência é pior que prazo nenhum.
+    _vencida = (op.get("descricao_vencida") or "").strip()
+    if _vencida:
+        prazo.carimbar(
+            pasta, duracao_s * _JANELA_POR_ESFORCO,
+            {"verbo": "virar"},
+            urgencia=(op.get("urgencia") or "").strip(),
+            descricao_vencida=_vencida,
+            filename=filename)
+
     return True, {
         "peca": peca_id, "tipo": tipo, "materiais": materiais,
         "retomada": False, "concluido": False, "fase": "abertura",
         "dominio": "nenhuma",  # abrir não é prática concluída (mesma regra de forge)
         "memory": _memoria_ator(peca_id, f"Comecei a fazer {nome}.",
                                 "craft_start", None)}
+
+
+# QUANTO A JANELA É MAIOR QUE O TRABALHO. Três vezes o esforço necessário: quem larga uma
+# obra de trinta minutos tem uma hora e meia para voltar. É calibragem, não desenho — o
+# número certo se descobre jogando, e este é conservador de propósito (uma janela curta
+# demais vira armadilha, e a spec avisa que punir por algo que a Mente não alcança é o
+# modo de falha a evitar).
+_JANELA_POR_ESFORCO = 3.0
 
 
 def _retomar(character_id, actor_folder, op, present_pecas, pendente):

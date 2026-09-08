@@ -111,6 +111,14 @@ def close_intention(folder: Path, intention_id: str,
     fm, body = read_doc(path)
     if fm.get("status") != "ativa":
         return False
+    # CUMPRIR EXTINGUE O PRAZO (spec 070, FR-016 / T026). Uma promessa cumprida antes da
+    # hora não pode vencer depois — seria o mundo cobrando algo que já foi feito.
+    #
+    # A limpeza é aqui, no fecho, e não em cada tool que cumpre: `give` e `trade` já
+    # chamam esta função, e escrever a mesma regra nas duas seria a segunda via que o
+    # Princípio I proíbe.
+    if fm.pop("ate_quando", None) is not None:
+        write_doc(path, fm, body)
     return update_intention(folder, intention_id, body, status=status)
 
 

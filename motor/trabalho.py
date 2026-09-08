@@ -29,7 +29,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from . import io, registro
+from . import io, prazo, registro
 from .io import read_doc, write_doc, arquivos_em, arquivos_no_mundo
 
 BLOCO = "trabalho"
@@ -338,6 +338,21 @@ def resolver_vencidas() -> None:
                      r.get("description") or "Algo que ficou pronto.")
             if r.get("extinto"):
                 io.marcar_extinto(pasta)
+            # A VALIDADE DO QUE ACABOU DE FICAR PRONTO (spec 070, US3).
+            #
+            # AQUI, no ponto ÚNICO de materialização, e não dentro de `cozinha` ou
+            # `botica`: as duas terminam por este mesmo caminho, e escrever a mesma coisa
+            # nas duas seria a duplicação que o Princípio I proíbe. Quem sabe que a coisa
+            # ficou pronta é este laço; quem sabe se ela estraga é o `resultado` que o
+            # Árbitro escreveu lá atrás.
+            #
+            # Sem `descricao_vencida` no resultado, nada acontece — o prato não estraga,
+            # e é exatamente o comportamento de hoje, preservado (FR-010).
+            _venc = (r.get("descricao_vencida") or "").strip()
+            if _venc and r.get("dura_s"):
+                prazo.carimbar(pasta, float(r["dura_s"]), {"verbo": "virar"},
+                               urgencia=(r.get("urgencia") or "").strip(),
+                               descricao_vencida=_venc)
             _notificar(bloco, pasta, r)
             _testemunhar_conclusao_prazo(bloco, pasta)
 

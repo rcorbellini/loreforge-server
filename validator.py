@@ -594,7 +594,63 @@ def _validate_item(fm: dict) -> list[str]:
     errors.extend(_validate_item_physics(fm))
     errors.extend(_validate_locks(fm))
     errors.extend(_validate_item_trabalho(fm))
+    errors.extend(_validate_prazo(fm, "item"))
     return errors
+
+
+def _validate_prazo(fm: dict, kind: str) -> list[str]:
+    """O bloco `prazo` (spec 070) — e por que ele é validado com tanto rigor.
+
+    Um prazo mal formado VENCE E NÃO FAZ NADA. Isso é falha silenciosa, e é a família de
+    defeito que mais custou a este projeto: a spec 067 sozinha rendeu três (o `_self` fora
+    de escopo, a HUD lendo memória da raiz e a guarda de sono profundo lendo o nome
+    antigo) — todas iguais, todas invisíveis, todas descobertas por alguém jogando.
+
+    Aqui não: verbo fora do vocabulário, alvo faltando ou `virar` sem descrição são
+    RECUSADOS na leitura do mundo, com o motivo escrito.
+
+    `vencido_em` preenchido em arquivo é caso à parte: legítimo depois que o Motor
+    carimbou, mas o autor de um mundo NUNCA o digita. Não dá para distinguir os dois pelo
+    arquivo, então isto não vira erro — o `dura_s` é que não pode existir gravado, porque
+    a duração é relativa e o que fica é o instante (FR-005).
+    """
+    bloco = fm.get("prazo")
+    if bloco is None:
+        return []
+    motivo = _prazo_motivo(bloco)
+    if motivo:
+        return [f"{kind}: 'prazo' inválido — {motivo}."]
+    if "dura_s" in bloco:
+        return [f"{kind}: 'prazo.dura_s' não se grava — o autor escreve a duração na "
+                "PROSA, e o Motor carimba 'vence_em' quando a coisa entra em jogo."]
+    return []
+
+
+def _prazo_motivo(bloco) -> str | None:
+    """A forma do bloco, sem importar o Motor.
+
+    O `validator` é nível 0 e não pode depender de `motor` (a dependência é ao contrário:
+    o Motor valida na leitura). Por isso a regra é declarada aqui e o `motor/prazo.py`
+    tem a sua — as duas SÃO a mesma, e o selftest da fase 70 é quem prova que não
+    divergiram.
+    """
+    if not isinstance(bloco, dict):
+        return "não é um mapa"
+    if not isinstance(bloco.get("vence_em"), (int, float)):
+        return "'vence_em' ausente ou não numérico"
+    ao = bloco.get("ao_vencer")
+    if not isinstance(ao, dict):
+        return "'ao_vencer' ausente ou não é um mapa"
+    verbo = ao.get("verbo")
+    if verbo not in ("condicao", "campo", "extinguir", "virar"):
+        return f"verbo '{verbo}' fora do vocabulário"
+    if verbo == "condicao" and not ao.get("valor"):
+        return "verbo 'condicao' exige 'valor'"
+    if verbo == "campo" and (not ao.get("campo") or "valor" not in ao):
+        return "verbo 'campo' exige 'campo' e 'valor'"
+    if verbo == "virar" and not (bloco.get("descricao_vencida") or "").strip():
+        return "verbo 'virar' exige 'descricao_vencida'"
+    return None
 
 
 def _validate_trabalho(fm: dict, kind: str) -> list[str]:
@@ -614,14 +670,14 @@ def _validate_trabalho(fm: dict, kind: str) -> list[str]:
     if not isinstance(bloco.get("tool"), str) or not bloco.get("tool"):
         errors.append(f"{kind}: 'trabalho.tool' ausente (qual capacidade criou a peça).")
 
-    por_prazo = "pronto_ts" in bloco
+    por_prazo = "pronto_ts" in bloco or "vence_em" in bloco
     por_esforco = "tempo_necessario_s" in bloco
     if por_prazo == por_esforco:
         # O CAMPO PRESENTE é o que diz qual relógio vale — sem enum de modo e sem
         # máquina de estados. Ter os dois (ou nenhum) é peça sem relógio nenhum.
         errors.append(f"{kind}: 'trabalho' precisa de EXATAMENTE um relógio — "
-                      "'pronto_ts' (prazo) ou 'tempo_necessario_s' (esforço).")
-    for campo in ("pronto_ts", "tempo_necessario_s", "tempo_trabalhado_s",
+                      "'vence_em' (prazo) ou 'tempo_necessario_s' (esforço).")
+    for campo in ("pronto_ts", "vence_em", "tempo_necessario_s", "tempo_trabalhado_s",
                   "trabalhando_desde"):
         valor = bloco.get(campo)
         if valor is not None and (isinstance(valor, bool)

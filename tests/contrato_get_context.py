@@ -150,6 +150,31 @@ check("0: a raiz de get_context tem EXATAMENTE `self` e `scene` (a face é da ca
       set(CTX.keys()) == _RAIZ,
       f"raiz veio {sorted(CTX.keys())}, esperado {sorted(_RAIZ)}")
 
+# --------------------------------------------------------------------------- #
+# 0b. O TRABALHO PARADO (spec 070)
+# --------------------------------------------------------------------------- #
+#
+# `started_by` diz de quem é a peça em processo — e foi a informação de maior retorno
+# medido no projeto: retomada de trabalho 6/10 -> 10/10 por 38 tokens (2026-09-08).
+#
+# `descricao_vencida` é o oposto: existe gravada na entidade desde a criação (para o
+# vencimento custar uma troca de string em vez de uma chamada de Árbitro), mas NÃO PODE
+# descer. Ela é o FUTURO, e o futuro não é vista de ninguém — se descesse, a Mente saberia
+# como a coisa vai ficar antes de ficar, o mesmo vazamento de juízo que fez esta spec
+# decidir não expor `descricao_alta`/`descricao_baixa`.
+_pecas = [e for _, e in chaves(CTX)
+          if isinstance(e, dict) and e.get("work_in_progress")]
+check("0b-1: `started_by` é id ou None, nunca outro tipo",
+      all(e.get("started_by") is None or isinstance(e.get("started_by"), str)
+          for e in _pecas),
+      f"{[e.get('started_by') for e in _pecas]}")
+
+_proibidas = {"descricao_vencida", "descricao_alta", "descricao_baixa",
+              "tempo_trabalhado_s", "tempo_necessario_s", "pronto_ts", "vence_em"}
+_vazadas = sorted({k for k, _ in chaves(CTX)} & _proibidas)
+check("0b-2: nem o futuro nem os números do relógio descem ao contexto",
+      not _vazadas, f"vazaram: {_vazadas}")
+
 import re
 _SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 # Os SEIS ATRIBUTOS são acrônimos maiúsculos por convenção de domínio (STR/DEX/CON/

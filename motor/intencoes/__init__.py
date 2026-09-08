@@ -7,6 +7,7 @@ from .primitivas import (  # noqa: F401
     _INTENTION_STATUSES,
     close_intention,
     create_intention,
+    marcar_prazo,
     get_active_intentions,
     update_intention,
 )

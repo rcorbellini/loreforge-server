@@ -53,6 +53,30 @@ def create_intention(folder: Path, content: str, status: str = "ativa",
     return iid
 
 
+def marcar_prazo(folder: Path, intention_id: str, ate_quando: str) -> bool:
+    """A intenção ganha HORA (spec 070, FR-016) — em PROSA, como quem promete fala.
+
+    Guarda o texto ("antes do anoitecer", "na próxima vez que nos virmos"), não um
+    instante: converter prosa em relógio é decisão do mundo, e ela precisa da mesma
+    leitura que carimba os prazos de item. Enquanto essa conversão não existe, o texto
+    é o que há — e é o que a Mente lê quando a intenção desce ao contexto.
+
+    Por que aqui e não numa entidade nova: a expectativa de cobrar é um PLANO, e plano é
+    intenção. É o raciocínio da tríade temporal que dissolveu a "classe de compromisso"
+    antes de ela nascer, na spec 027.
+    """
+    path = folder / "intentions" / f"{intention_id}.md"
+    if not path.exists():
+        return False
+    fm, body = read_doc(path)
+    if fm.get("status") != "ativa":
+        return False
+    fm["ate_quando"] = ate_quando
+    fm["updated_ts"] = int(time.time())
+    write_doc(path, fm, body)
+    return True
+
+
 def update_intention(folder: Path, intention_id: str, content: str,
                      status: str = "ativa") -> bool:
     """Reescreve uma intenção EXISTENTE no lugar (mesmo arquivo, mesmo id).
@@ -102,8 +126,13 @@ def get_active_intentions(folder: Path) -> list[dict]:
         fm, body = read_doc(path)
         if fm.get("status") != "ativa":
             continue
-        out.append({"id": fm.get("id"), "status": fm.get("status"),
-                    "content": body.strip()})
+        entrada = {"id": fm.get("id"), "status": fm.get("status"),
+                   "content": body.strip()}
+        # spec 070: a hora da promessa desce junto — é o que dá SENTIDO à pressa, e é
+        # texto, nunca instante (o número é medida interna, Princípio V).
+        if fm.get("ate_quando"):
+            entrada["ate_quando"] = fm["ate_quando"]
+        out.append(entrada)
     if len(out) > _INTENTION_CONTEXT_CAP:
         out = out[-_INTENTION_CONTEXT_CAP:]  # as mais RECENTES ficam
     return out

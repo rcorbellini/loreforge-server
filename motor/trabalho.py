@@ -101,8 +101,22 @@ def por_esforco(bloco: dict) -> bool:
 
 
 def por_prazo(bloco: dict) -> bool:
-    """Relógio de PRAZO? (corre sozinho)"""
-    return "pronto_ts" in bloco
+    """Relógio de PRAZO? (corre sozinho)
+
+    MIGRADO na spec 070 (FR-015). O relógio que corre sozinho tinha DUAS moradas: aqui,
+    como `trabalho.pronto_ts`, e no bloco `prazo` que a 070 criou para o mundo inteiro.
+    Duas vias para o mesmo efeito é o que o Princípio I proíbe — e elas divergiriam no
+    dia em que uma fosse calibrada.
+
+    Ficou o bloco geral. O `pronto_ts` continua LIDO (nenhuma peça viva o tinha quando a
+    migração foi feita — verificado: zero no `loreforge-world` — mas um mundo de outra
+    pessoa pode ter), e ninguém mais o ESCREVE.
+
+    O relógio de ESFORÇO (`tempo_necessario_s`) não migrou, e isso é o ponto: os dois são
+    coisas diferentes, e a distinção entre eles é o coração da feature — um só anda com
+    alguém presente, o outro anda sozinho.
+    """
+    return "pronto_ts" in bloco or "vence_em" in bloco
 
 
 def sessao_aberta(bloco: dict) -> bool:
@@ -116,14 +130,15 @@ def sessao_aberta(bloco: dict) -> bool:
 def concluido(bloco: dict) -> bool:
     """O trabalho se cumpriu? (não materializa nada — só responde)"""
     if por_prazo(bloco):
-        return time.time() >= (bloco.get("pronto_ts") or 0)
+        return time.time() >= (bloco.get("pronto_ts") or bloco.get("vence_em") or 0)
     return (bloco.get("tempo_trabalhado_s") or 0) >= (bloco.get("tempo_necessario_s") or 0)
 
 
 def restante_s(bloco: dict) -> float:
     """Quanto de trabalho ainda falta, em segundos. Nunca negativo."""
     if por_prazo(bloco):
-        return max(0.0, (bloco.get("pronto_ts") or 0) - time.time())
+        return max(0.0, (bloco.get("pronto_ts") or bloco.get("vence_em") or 0)
+                   - time.time())
     return max(0.0, (bloco.get("tempo_necessario_s") or 0)
                - (bloco.get("tempo_trabalhado_s") or 0))
 

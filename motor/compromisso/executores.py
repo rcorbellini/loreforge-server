@@ -57,10 +57,24 @@ def _apply_promise(character_id: str, actor_folder: Path, res: dict,
 
         intention_id = intencoes.create_intention(
             actor_folder, expectativa, status="ativa", memoria_id=mem_id_ator)
+
+        # A PROMESSA GANHA HORA (spec 070, FR-016). O prazo mora na INTENÇÃO de quem
+        # prometeu, e não numa entidade nova — a tríade temporal já resolvia isto: a
+        # expectativa de cobrar é um PLANO, e plano é intenção (foi o raciocínio que
+        # dissolveu a "classe de compromisso" na spec 027).
+        #
+        # Só de quem PROMETE. Quem recebeu a promessa guarda a memória do que ouviu, e
+        # nada mais: pôr prazo na conta do outro seria escrever vontade alheia, que é o
+        # que o `server-never-owns-character-agency` proíbe.
+        ate_quando = (op.get("ate_quando") or "").strip()
+        if ate_quando:
+            intencoes.marcar_prazo(actor_folder, intention_id, ate_quando)
+
         # `expectativa` viaja no applied porque é ela que a frase in-world diz —
         # "prometeu a X" sem o QUE foi prometido não é fato narrável.
         applied.append({"para": para, "intention_id": intention_id,
-                        "expectativa": expectativa})
+                        "expectativa": expectativa,
+                        **({"ate_quando": ate_quando} if ate_quando else {})})
     return applied, rejected, created
 
 

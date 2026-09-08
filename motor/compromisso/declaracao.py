@@ -20,7 +20,14 @@ def _promise(name: str, args: dict, ctx) -> tuple[dict, bool]:
     expectativa = (args.get("expectativa") or "").strip()
     if not expectativa:
         return ctx.err("informe 'expectativa'"), False
-    rej = ctx.apply_op_now("promise_ops", {"para": para, "expectativa": expectativa})
+    # O PRAZO É OPCIONAL, e a ausência dele preserva o comportamento de hoje (FR-016):
+    # promessa sem hora não vence nunca, que é como o item 22 vivia desde a spec 027.
+    # Em PROSA, e não em segundos: quem promete fala "antes do anoitecer", não "em 21600
+    # segundos" — e converter prosa em instante é trabalho do Motor, não de quem promete.
+    ate_quando = (args.get("ate_quando") or "").strip()
+    rej = ctx.apply_op_now("promise_ops", {"para": para, "expectativa": expectativa,
+                                           **({"ate_quando": ate_quando}
+                                              if ate_quando else {})})
     if rej:
         if "regra" in rej:
             return ctx.err(motor._WHY_BY_REGRA.get(rej["regra"], rej["regra"]), rej=rej), False
@@ -40,9 +47,13 @@ PROMISE = tool_spec(ToolSpec(
         "escrever o que se espera — 'que ele devolva na próxima vez que "
         "nos virmos', 'que ela nunca conte o que viu'. Reforça (não "
         "substitui) um empréstimo mecânico: dá pra prometer devolver algo "
-        "que acabou de ser emprestado via give."
+        "que acabou de ser emprestado via give. Se a expectativa tem HORA "
+        "para acontecer, diga em `ate_quando` — em prosa, do jeito que se "
+        "fala: 'antes do anoitecer', 'na próxima vez que nos virmos', 'até "
+        "o fim da semana'. Sem isso, a promessa não vence nunca."
     ),
-    params={"para": {"type": "string"}, "expectativa": {"type": "string"}},
+    params={"para": {"type": "string"}, "expectativa": {"type": "string"},
+            "ate_quando": {"type": "string"}},
     required=("para", "expectativa"),
     enum_sources={"para": "give_to"},
     apply=_promise,

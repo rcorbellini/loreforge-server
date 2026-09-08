@@ -7,7 +7,8 @@ forçado) para o comportamento da GUARDA (curto-circuito, dedup, exclusividade
 
   - US1: combinação válida + recipiente válido -> ingredientes removidos no ato; a
     peça em processo existe na cena (molde EXATO da panela no fogo); o remédio só
-    materializa depois de `pronto_ts`, via `get_context`; o RECIPIENTE nunca é tocado
+    materializa depois de `vence_em` (era `pronto_ts` até a spec 070 unificar o relógio
+    que corre sozinho num bloco só), via `get_context`; o RECIPIENTE nunca é tocado
   - US2: recipiente/preparabilidade 0 -> recusa determinística, com memória
     RENOVADA por `about`; erro corrigível (id/alcance) -> sem memória; `ja_preparando`
     bloqueia 2ª tentativa enquanto uma peça pende
@@ -158,8 +159,12 @@ check("US1: o RECIPIENTE não foi tocado — hash idêntico",
       _hash(recipiente_arquivo) == hash_antes)
 
 pendente = preparando_de(BOT)
-check("US1: peça em processo gravada com pronto_ts FUTURO e `ator`",
-      isinstance(pendente, dict) and pendente.get("pronto_ts", 0) > time.time()
+check("US1: peça em processo gravada com prazo FUTURO e `ator`",
+      isinstance(pendente, dict)
+      # spec 070 (FR-015): o relógio que corre sozinho passou a se chamar `vence_em`.
+      # O `pronto_ts` continua sendo LIDO para mundos de outra gente, e é por isso que
+      # a asserção aceita os dois — mas quem ESCREVE hoje escreve o nome novo.
+      and (pendente.get("vence_em") or pendente.get("pronto_ts", 0)) > time.time()
       and pendente.get("ator") == BOT, str(pendente))
 peca_folder = peca_de(BOT)
 check("US1: a peça em processo EXISTE na cena e ainda não é o remédio",

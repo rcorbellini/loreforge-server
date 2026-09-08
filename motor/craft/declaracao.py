@@ -90,12 +90,23 @@ CONCRETO e visível — torta, rachada, mal encaixada, incompleta, instável, co
 uma junta solta, algo que falha ou range. Descreva SEMPRE A COISA — nunca a
 experiência de quem a fez.
 
+Escreva também dois textos sobre o TEMPO passando por cima disso (spec 070):
+"urgencia" é o que está em jogo enquanto o trabalho fica parado — uma frase
+curta, in-world, sobre a COISA ("a cola ainda está fresca; secando, a junta não
+pega mais"). "descricao_vencida" é como a coisa fica se o tempo passar sem que
+se volte a ela — factual, e ela AINDA É a coisa, nunca sumida ("alaúde colado de
+forma indevida, que produz sons estranhos"). Nunca sobre quem trabalha nela.
+
 Responda SOMENTE com um objeto JSON, nada antes nem depois, EXATAMENTE com
 estas chaves (todas obrigatórias):
-{"viabilidade": <inteiro 0-10>, "duracao": <inteiro 0-10>, "tipo": "<item|object|location>", "tamanho": "<PP|P|M|G|XG|XXG|XXXG|XXXXG|XXXXXG>", "nome": "<nome curto>", "descricao_alta": "<texto factual do resultado bem executado>", "descricao_baixa": "<texto factual do MESMO resultado, comprometido — ainda É a coisa, nunca sumida>"}"""
+{"viabilidade": <inteiro 0-10>, "duracao": <inteiro 0-10>, "tipo": "<item|object|location>", "tamanho": "<PP|P|M|G|XG|XXG|XXXG|XXXXG|XXXXXG>", "nome": "<nome curto>", "descricao_alta": "<texto factual do resultado bem executado>", "descricao_baixa": "<texto factual do MESMO resultado, comprometido — ainda É a coisa, nunca sumida>", "urgencia": "<uma frase>", "descricao_vencida": "<texto factual>"}"""
 
 _JUIZO_CAMPOS = ("viabilidade", "duracao", "tipo", "tamanho",
-                 "nome", "descricao_alta", "descricao_baixa")
+                 "nome", "descricao_alta", "descricao_baixa",
+                 # spec 070 — nascem na criação para que VENCER seja uma troca de
+                 # string. Sem eles, uma cena com N coisas vencidas custaria N chamadas
+                 # de Árbitro numa LEITURA, e a avaliação preguiçosa se autodestruiria.
+                 "urgencia", "descricao_vencida")
 
 
 @inworld("craft_ops_applied")
@@ -160,7 +171,12 @@ def _craft(name: str, args: dict, ctx) -> tuple[dict, bool]:
         }, ensure_ascii=False, indent=2)),
         campos={"viabilidade": 5, "duracao": 5},
         texto_campos={"tipo": "item", "tamanho": "P", "nome": "",
-                     "descricao_alta": "", "descricao_baixa": ""})
+                     "descricao_alta": "", "descricao_baixa": "",
+                     # spec 070: default VAZIO de propósito. Campo ausente cai aqui e a
+                     # peça nasce sem prazo — que é o comportamento de hoje, preservado
+                     # (FR-010). Um modelo que não devolver os dois textos não quebra
+                     # nada; só não cria pressão.
+                     "urgencia": "", "descricao_vencida": ""})
     ctx.craft_asked.add(chave)
 
     base = {"materiais": materiais, "narracao": narracao}
@@ -177,6 +193,8 @@ def _craft(name: str, args: dict, ctx) -> tuple[dict, bool]:
         "tamanho": sanear_tamanho(julgado["tamanho"]),
         "nome": julgado["nome"], "descricao_alta": julgado["descricao_alta"],
         "descricao_baixa": julgado["descricao_baixa"],
+        "urgencia": julgado.get("urgencia") or "",
+        "descricao_vencida": julgado.get("descricao_vencida") or "",
     })
     rej, rolled = ctx.apply_arbitrated("craft_ops", op)
     if rej:

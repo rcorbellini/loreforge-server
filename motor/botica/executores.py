@@ -135,7 +135,10 @@ def _apply_botica_ops(character_id: str, actor_folder: Path, resolution: dict,
         _peca_id, peca = trabalho.criar_peca(
             actor_folder.parent, corpo_peca,
             {"tool": "brew", "ator": character_id,
-             "pronto_ts": time.time() + duracao_segundos_preparo(duracao_nota),
+             # spec 070 (FR-015): o relógio que corre sozinho passou a ter um nome só no
+             # mundo inteiro. `pronto_ts` continua sendo LIDO para mundos antigos, e
+             # ninguém mais o escreve.
+             "vence_em": time.time() + duracao_segundos_preparo(duracao_nota),
              "resultado": {"nome": nome, "description": descricao}},
             name=f"{nome} (preparando)", weight_kg=round(peso_kg, 3) or 0.3)
 

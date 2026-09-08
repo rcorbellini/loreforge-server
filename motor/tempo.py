@@ -1,9 +1,20 @@
 """O Motor / tempo (spec 040) — a consulta de MOMENTO do dia.
 
 Deriva a faixa do dia do RELÓGIO REAL do servidor (`time.localtime`), avaliada no
-instante da consulta (Princípio VII, preguiçoso — sem processo de fundo). Devolve
-PROSA de período; NUNCA a hora numérica nem o timestamp (Princípios V/IX). Read-only:
+instante da consulta (Princípio VII, preguiçoso — sem processo de fundo). Read-only:
 consultar não é executar. Lane de consulta paralela — não toca o caminho de mutação.
+
+A PROSA É A RESPOSTA; o instante acompanha (spec 070, FR-021). Até 2026-09-08 este
+módulo dizia "NUNCA a hora numérica nem o timestamp (Princípios V/IX)", e a decisão
+mudou — por isso o comentário mudou junto: comentário que mente é pior que comentário
+ausente.
+
+O que MEDIU essa decisão, e vale contra quem for tentado a tirar ou a expandir:
+devolver a hora — e até a conta pronta de quanto falta para algo vencer — NÃO muda o
+comportamento da Mente (0/10 em três formatos, N=10, com a cena já contendo urgência).
+O instante entra por ser praticamente de graça e possivelmente útil em teste, não
+porque ajuda. Nenhuma régua e nenhum texto player-facing pode passar a depender dele:
+quem decide continua lendo a prosa.
 
 NÍVEL 0: importa só `registro` (a lane) e a stdlib. Importar este módulo popula o
 registro de consulta (igual ao `tool_spec`).
@@ -35,8 +46,9 @@ def _periodo(hora: int) -> str:
 def current_moment(character_id: str | None = None, args: dict | None = None) -> dict:
     """Que momento do dia é agora, em prosa. `character_id`/`args` ignorados (a hora
     é do mundo, não de quem pergunta) — a assinatura casa com o despacho genérico."""
-    hora = time.localtime(time.time()).tm_hour
-    return {"momento": _periodo(hora)}
+    agora = time.time()
+    hora = time.localtime(agora).tm_hour
+    return {"momento": _periodo(hora), "instante": int(agora)}
 
 
 registro.consult_spec(registro.ConsultSpec(

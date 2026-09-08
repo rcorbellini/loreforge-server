@@ -16,7 +16,7 @@ from pathlib import Path
 import frontmatter
 import validator
 
-from .. import (deslocamento, fisica, intencoes, io, memoria, registro,
+from .. import (deslocamento, fisica, intencoes, io, memoria, prazo, registro,
                 rotas, trabalho, vinculos)
 from ..deslocamento import (
     lazy_evaluate,
@@ -121,6 +121,28 @@ _SECOES_POR_GRAU = {
     "ausente": ("aparência",),
     "vago": ("aparência", "voz e sotaque"),
 }
+
+
+def _sabe_do_comeco(observador: str, ator: str | None, pasta_peca) -> bool:
+    """Este personagem pode saber QUEM começou esta peça? (spec 070, R5)
+
+    De si mesmo se sabe sempre. De outro, só quem VIU começar — e ver começar já grava
+    memória: `witness_craft` (spec 034) põe a peça no `involved` de quem estava lá. É o
+    mesmo regime do rastro: a peça fica, mas quem chega depois vê um objeto, não uma
+    autoria.
+
+    Sem este portão, um estranho que entra na taverna passaria a saber que o alaúde é do
+    Draven só por olhar — informação que ninguém lhe deu.
+    """
+    if not ator:
+        return False
+    if observador == ator:
+        return True
+    try:
+        peca_id = pasta_peca.name
+    except AttributeError:
+        return False
+    return bool(remembered_about(observador, peca_id))
 
 
 def _grau_de_conhecimento(self_id: str, alvo_id: str) -> str:
@@ -756,6 +778,21 @@ def get_context(character_id: str) -> dict:
             })
         elif (child / "item.md").exists():
             item_fm, item_body = read_doc(child / "item.md")
+            # O RELÓGIO PREGUIÇOSO (spec 070). Aqui, e não no `read_doc`: aquele roda
+            # 200 mil vezes numa montagem de cena (spec 063), e escrita ali seria
+            # catastrófica. Este ponto é O(cena) — uma vez por entidade presente.
+            # `vencer_se_for_hora` só toca disco quando de fato há o que vencer, e nunca
+            # chama modelo: é a restrição dura da spec.
+            _venceu = prazo.vencer_se_for_hora(child, item_fm)
+            if _venceu:
+                item_fm, item_body = read_doc(child / "item.md")
+                # Quem é AFETADO e está presente forma memória (Princípio X). Aqui isso
+                # é quem começou o trabalho — o dono da perda. Quem só passa e vê já
+                # recebe a mudança pela prosa do item, que o verbo `virar` trocou.
+                _dono = ((item_fm.get(trabalho.BLOCO) or {}).get("ator")
+                         if isinstance(item_fm.get(trabalho.BLOCO), dict) else None)
+                if _dono == character_id:
+                    prazo.lembrar(char_folder, _venceu)
             if not _is_valid(item_fm):
                 continue
             entry = {
@@ -777,12 +814,41 @@ def get_context(character_id: str) -> dict:
             # que permite ao manifesto oferecer a retomada; o CONTEÚDO do bloco
             # (banda, tetos, tempos) fica fora, porque é segredo do mundo.
             _bloco_trab = item_fm.get(trabalho.BLOCO)
+            # A JANELA DE RETOMADA VENCIDA TIRA A PEÇA DE CIRCULAÇÃO (spec 070, FR-017),
+            # e a forma é a que o jogo já usa em tudo: a face só oferece o que a cena
+            # admite. Sem `work_in_progress`, `craft` não lista a peça, o manifesto não
+            # propõe a retomada, e ninguém precisa de mensagem de erro.
+            #
+            # O que o jogador vê no lugar é melhor que uma recusa: a PROSA do item já
+            # mudou — o verbo `virar` a trocou pela `descricao_vencida` que o Árbitro
+            # escreveu quando a peça nasceu. "O alaúde está colado de forma indevida e
+            # produz sons estranhos" conta a história sozinho.
+            if isinstance(_bloco_trab, dict) and (item_fm.get(prazo.BLOCO) or {}).get("vencido_em"):
+                _bloco_trab = None
             if isinstance(_bloco_trab, dict):
                 # a CAPACIDADE que criou a peça, não um booleano: é o que permite ao
                 # manifesto oferecer a retomada só à tool certa. Não é segredo — é
                 # visível que uma lâmina meio batida é uma lâmina. O CONTEÚDO do
                 # bloco (banda, tetos, tempos) continua fora.
                 entry["work_in_progress"] = _bloco_trab.get("tool") or True
+                # DE QUEM É O TRABALHO (spec 070, FR-020). Sem isto a peça chega como
+                # um nome numa lista e a Mente não sabe que a deixou pela metade —
+                # MEDIDO em 2026-09-08: dizer que o trabalho é dela leva a retomada de
+                # 6/10 para 10/10, ao custo de 38 tokens. Foi a melhor razão
+                # custo-benefício encontrada no projeto.
+                #
+                # Vai o ID, não um booleano `started_by_me`: quem compara com a vez é
+                # o CONECTOR (a spec 067 põe a redação do lado dele), e o id ainda
+                # abre de graça o caso do trabalho ALHEIO — "a peça da Elga está no
+                # meio" é cena; um `false` não conta nada.
+                #
+                # O GATE (research.md R5): o dado desce a quem tem memória do começo.
+                # Quem chega depois vê a peça e não sabe de quem é — o mesmo regime do
+                # rastro. `witness_craft` (spec 034) é o que grava essa memória.
+                _quem_comecou = _bloco_trab.get("ator")
+                entry["started_by"] = (
+                    _quem_comecou if _sabe_do_comeco(character_id, _quem_comecou, child)
+                    else None)
             # contêiner ABERTO no chão expõe o que tem (spec 005); fechado, nada
             if isinstance(item_fm.get("container"), dict):
                 entry["contains"] = ([] if is_closed(item_fm)

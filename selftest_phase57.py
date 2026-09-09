@@ -667,14 +667,18 @@ motor.memoria._write_memory(motor.find_character_folder(TESTCOL),
                             "Já cruzei com este coletor por aqui antes.",
                             intensity="small", involved=[COL], evento="hearsay",
                             domain="nenhuma")
-res_forage = motor.apply_resolution(COL, {"forage_ops": [{
-    "onde": col_folder.parent.name, "herbabilidade": 7, "riqueza": 6,
-    "nome_util": "Ervas Colhidas", "descricao_util": "um punhado de ervas úteis",
+# spec 071: `forage` é uma das TRÊS capacidades de extração; canal e chaves do op
+# mudaram de nome, o COMPORTAMENTO testado aqui (leque de testemunha, posse não
+# conferida) é o mesmo.
+res_forage = motor.apply_resolution(COL, {"extracao_ops": [{
+    "onde": col_folder.parent.name, "capacidade": "forage",
+    "alvo": 7, "rendimento": 6, "renovacao": 9, "tamanho": "P",
+    "nome_comum": "Ervas Colhidas", "descricao_comum": "um punhado de ervas úteis",
 }]})
 mem_testcol = memorias_evento(TESTCOL, "witness_forage")
 check("US4 (forage): ato único gera witness_forage",
       len(mem_testcol) == 1, str(res_forage))
-itens_colhidos = (res_forage.get("forage_ops_applied") or [{}])[0].get("itens") or []
+itens_colhidos = (res_forage.get("extracao_ops_applied") or [{}])[0].get("itens") or []
 check("US4 (forage): dono() NÃO resolve (colher não confere posse — FR-020/021)",
       bool(itens_colhidos)
       and motor.memoria.dono(itens_colhidos[0], TESTCOL) is None,

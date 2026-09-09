@@ -726,6 +726,14 @@ def get_context(character_id: str) -> dict:
     for child in sorted(place_folder.iterdir()):
         if not child.is_dir():
             continue
+        # LOCATION FILHA (spec 071, US4): um lugar criado por `craft` nasce como
+        # subpasta desta, e pode carregar prazo. Ele não entra em lista nenhuma da
+        # cena — topologia não é presença (spec 035) —, por isso fica FORA da cadeia
+        # de `elif` abaixo: aqui só se cumpre o relógio, e o laço segue. Sem isto o
+        # prazo de uma obra-lugar era carimbado e nunca vencia.
+        if (child / "location.md").exists():
+            loc_fm, _ = read_doc(child / "location.md")
+            prazo.vencer_se_for_hora(child, loc_fm, filename="location.md")
         if (child / "character.md").exists():
             fm_c, _ = read_doc(child / "character.md")
             if not _is_valid(fm_c):  # inválido: fora do mundo jogável (FR-010)
@@ -733,6 +741,15 @@ def get_context(character_id: str) -> dict:
             characters_present.append(_character_summary(child, character_id))
         elif (child / "object.md").exists():
             obj_fm, _ = read_doc(child / "object.md")
+            # O RELÓGIO PREGUIÇOSO TAMBÉM VALE PARA OBJECT (spec 071, US4). Até aqui
+            # o gancho existia SÓ no ramo do `item.md` — então um prazo carimbado num
+            # object ou numa location nunca vencia, embora `prazo.carimbar_se_houver`
+            # aceite `filename` justamente para carimbá-los. Era feature morta: o
+            # `craft` de um object/location instalava um prazo que ninguém resolvia.
+            # Mesmo custo do ramo de item: O(cena), e só toca disco quando há o que
+            # vencer.
+            if prazo.vencer_se_for_hora(child, obj_fm, filename="object.md"):
+                obj_fm, _ = read_doc(child / "object.md")
             if not _is_valid(obj_fm):
                 continue
             if io.esta_extinto(obj_fm):   # spec 053, ponto 3 de 3: o bundle da Mente

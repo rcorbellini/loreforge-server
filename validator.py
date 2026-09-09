@@ -47,9 +47,13 @@ MEMORY_STATES = {"active", "expired", "esquecida"}
 # Raiz Torta), não da narração. `oficio` fica como resíduo histórico (nenhum
 # emissor novo usa), mantido só porque memórias antigas já gravadas com esse
 # domain continuam válidas.
+# spec 071: `mineracao` e `lenha` — as irmãs de `herbalismo`. TRÊS domínios, não um
+# de "extração": praticar mineração não pode fazer herbalismo crescer, pelo mesmo
+# motivo que a 052 separou ferraria de armaria. É a única mudança de schema da spec
+# — e é valor num enum existente, não campo novo (Princípio XI intacto).
 DOMAINS = {"combate", "crime", "comercio", "social", "deslocamento", "cura", "cozinha",
           "acougue", "ferraria", "armaria", "fogo", "herbalismo", "botica", "oficio",
-          "construtor", "musica", "investigar", "nenhuma"}
+          "construtor", "musica", "investigar", "mineracao", "lenha", "nenhuma"}
 # "investigar" (spec 065): a leitura de rastro (item 14-gama) alimenta este dominio pelo
 # mesmo mecanismo dinamico que os outros 16 ja usam - proficiencies_for(), sem campo
 # estatico. Um valor a mais no conjunto fechado, no molde de botica/herbalismo/construtor.

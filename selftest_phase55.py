@@ -77,11 +77,20 @@ def forage_op(onde, herbabilidade=7, riqueza=7,
              nome_util="Ervas", descricao_util="um molho de ervas comuns",
              nome_seleta="Raiz-torta", descricao_seleta="raízes separadas com cuidado",
              descricao_colhida="revirado e sem nada mais à vista"):
-    return {"onde": onde, "herbabilidade": herbabilidade, "riqueza": riqueza,
-            "nome_mato": nome_mato, "descricao_mato": descricao_mato,
-            "nome_util": nome_util, "descricao_util": descricao_util,
-            "nome_seleta": nome_seleta, "descricao_seleta": descricao_seleta,
-            "descricao_colhida": descricao_colhida}
+    """spec 071: `forage` virou uma das TRÊS capacidades de extração, e o op mudou
+    de nome junto com o canal (`forage_ops` -> `extracao_ops`). A ASSINATURA desta
+    fixture ficou igual de propósito — as chamadas e as asserções de COMPORTAMENTO
+    do teste não mudam uma linha, e é isso que prova que a migração de pacote não
+    mexeu no que a colheita faz.
+
+    `renovacao=9` reproduz exatamente o `_REBROTA_S` de 3 h que a 054 usava fixo."""
+    return {"onde": onde, "capacidade": "forage",
+            "alvo": herbabilidade, "rendimento": riqueza, "renovacao": 9,
+            "tamanho": "P",
+            "nome_pobre": nome_mato, "descricao_pobre": descricao_mato,
+            "nome_comum": nome_util, "descricao_comum": descricao_util,
+            "nome_rica": nome_seleta, "descricao_rica": descricao_seleta,
+            "descricao_extraida": descricao_colhida}
 
 
 def memorias_evento(cid: str, evento: str) -> list:
@@ -113,7 +122,7 @@ loc_file = taverna_folder / "location.md"
 loc_hash_antes = _hash(loc_file)
 
 motor._roll_d20 = lambda: 20  # banda seleta garantida (riqueza=7, dc baixa)
-motor.apply_resolution(HERB, {"forage_ops": [forage_op(TAVERNA)]})
+motor.apply_resolution(HERB, {"extracao_ops": [forage_op(TAVERNA)]})
 motor._roll_d20 = force
 
 check("US1 (location): colher do LUGAR não toca location.md — hash idêntico",
@@ -142,7 +151,7 @@ canteiro_arquivo = canteiro_folder / "object.md"
 fm_antes, corpo_antes = motor.read_doc(canteiro_arquivo)
 
 motor._roll_d20 = lambda: 20
-motor.apply_resolution(HERB, {"forage_ops": [forage_op("canteiro-p55", riqueza=5)]})
+motor.apply_resolution(HERB, {"extracao_ops": [forage_op("canteiro-p55", riqueza=5)]})
 motor._roll_d20 = force
 
 fm_depois, corpo_depois = motor.read_doc(canteiro_arquivo)
@@ -185,22 +194,22 @@ REC = "recusado-p55"
 rec_folder = motor.find_character_folder(REC)
 rec_taverna = rec_folder.parent
 
-motor.apply_resolution(REC, {"forage_ops": [forage_op(TAVERNA, herbabilidade=0)]})
-mem_sem_veg = memorias_evento(REC, "forage_refused_herbabilidade")
+motor.apply_resolution(REC, {"extracao_ops": [forage_op(TAVERNA, herbabilidade=0)]})
+mem_sem_veg = memorias_evento(REC, "extracao_refused_sem_materia")
 check("US2: HERBABILIDADE 0 -> recusa de mérito, memória small negativa",
       len(mem_sem_veg) == 1 and mem_sem_veg[0].get("intensity") == "small",
       str(mem_sem_veg))
 check("US2: recusa de mérito NÃO carimba domain (fica 'nenhuma')",
       mem_sem_veg[0].get("domain") in (None, "nenhuma"), str(mem_sem_veg[0].get("domain")))
 
-motor.apply_resolution(REC, {"forage_ops": [forage_op(TAVERNA, riqueza=0)]})
-mem_nada = memorias_evento(REC, "forage_refused_riqueza")
+motor.apply_resolution(REC, {"extracao_ops": [forage_op(TAVERNA, riqueza=0)]})
+mem_nada = memorias_evento(REC, "extracao_refused_nada_a_extrair")
 check("US2: RIQUEZA 0 -> recusa de mérito, memória small negativa", len(mem_nada) == 1)
 
-motor.apply_resolution(REC, {"forage_ops": [forage_op("id-que-nao-existe-p55")]})
+motor.apply_resolution(REC, {"extracao_ops": [forage_op("id-que-nao-existe-p55")]})
 check("US2: id inexistente -> recusa corrigível, ZERO memória nova",
-      len(memorias_evento(REC, "forage_refused_herbabilidade")) == 1
-      and len(memorias_evento(REC, "forage_refused_riqueza")) == 1)
+      len(memorias_evento(REC, "extracao_refused_sem_materia")) == 1
+      and len(memorias_evento(REC, "extracao_refused_nada_a_extrair")) == 1)
 
 _mk_object(rec_taverna, "canteiro-colhido-p55", "Canteiro Colhido",
           "Um canteiro colhido, revirado.")
@@ -233,10 +242,14 @@ _mk_char("dedup-p55", "Dedup de Teste")
 DED = "dedup-p55"
 ctx_dedup = arbiter.build_ctx(
     motor.get_context(DED),
-    ask=lambda _s, _u: ('{"herbabilidade": 0, "riqueza": 5, "nome_mato": "", '
-                        '"descricao_mato": "", "nome_util": "", "descricao_util": "", '
-                        '"nome_seleta": "", "descricao_seleta": "", '
-                        '"descricao_colhida": ""}'),
+    # spec 071: o contrato de juízo mudou de nomes junto com a generalização —
+    # `materia_no_alvo` no lugar de `herbabilidade` (a nota não pode se chamar como
+    # um PARÂMETRO de outra tool, senão a guarda da fase 45 acusa vazamento).
+    ask=lambda _s, _u: ('{"materia_no_alvo": 0, "rendimento": 5, "renovacao": 9, '
+                        '"tamanho": "P", "nome_pobre": "", '
+                        '"descricao_pobre": "", "nome_comum": "", "descricao_comum": "", '
+                        '"nome_rica": "", "descricao_rica": "", '
+                        '"descricao_extraida": ""}'),
     prosa={"acao": "colher na cena"})
 res_dedup_1 = ctx_dedup.execute("forage", {"onde": TAVERNA})
 res_dedup_2 = ctx_dedup.execute("forage", {"onde": TAVERNA})
@@ -252,7 +265,7 @@ import types as _types_mod
 import arbiter_tools.base as _face_mod
 face_forage = _face_mod.build_face(motor.registro.get_spec("forage"), "forage",
                                    _types_mod.SimpleNamespace(
-                                       cand={"forage_onde": []}, actor_id=DED))
+                                       cand={"extracao_onde": []}, actor_id=DED))
 props_forage = (face_forage or {}).get("parameters", {}).get("properties", {})
 check("US2: nenhuma das duas notas (nem os pares nome/description) aparece na FACE",
       not ({"herbabilidade", "riqueza", "nome_mato", "descricao_mato", "nome_util",
@@ -277,12 +290,12 @@ check("US2: nenhuma das duas notas (nem os pares nome/description) aparece na FA
 _mk_char("nomeador-p55", "Nomeador de Teste")
 NOM = "nomeador-p55"
 
-motor.apply_resolution(NOM, {"forage_ops": [
+motor.apply_resolution(NOM, {"extracao_ops": [
     forage_op(TAVERNA, nome_seleta="Taverna do Gancho")]})
 check("US2/spec062: nome_seleta IGUAL à fonte -> recusa determinística",
       len(memorias_evento(NOM, "forage_seleta")) == 0)
 
-motor.apply_resolution(NOM, {"forage_ops": [
+motor.apply_resolution(NOM, {"extracao_ops": [
     forage_op(TAVERNA, nome_mato="Taverna")]})
 check("US2/spec062: nome_mato é PREFIXO da fonte ('Taverna' em 'Taverna do "
      "Gancho') -> recusa determinística (igualdade exata teria deixado passar)",
@@ -290,14 +303,14 @@ check("US2/spec062: nome_mato é PREFIXO da fonte ('Taverna' em 'Taverna do "
       and len(memorias_evento(NOM, "forage_util")) == 0
       and len(memorias_evento(NOM, "forage_seleta")) == 0)
 
-motor.apply_resolution(NOM, {"forage_ops": [forage_op(TAVERNA, nome_seleta="Gancho")]})
+motor.apply_resolution(NOM, {"extracao_ops": [forage_op(TAVERNA, nome_seleta="Gancho")]})
 check("US2/spec062: SUFIXO da fonte ('Gancho' em 'Taverna do Gancho') NÃO "
      "colide — é o padrão 'recipiente-de-produto' (mesmo caso de 'Canteiro "
      "de Ervas' -> 'Ervas'), colheita legítima",
       len(memorias_evento(NOM, "forage_mato") + memorias_evento(NOM, "forage_util")
           + memorias_evento(NOM, "forage_seleta")) >= 1)
 
-motor.apply_resolution(NOM, {"forage_ops": [forage_op(TAVERNA)]})
+motor.apply_resolution(NOM, {"extracao_ops": [forage_op(TAVERNA)]})
 check("US2/spec062: nomes que NÃO colidem (default do helper) seguem criando "
      "itens normalmente — o guarda não pune colheita legítima",
       len(memorias_evento(NOM, "forage_mato") + memorias_evento(NOM, "forage_util")
@@ -314,8 +327,8 @@ NOV, MES = "novato-p55", "mestre-p55"
 _planta_memoria_herbalismo(MES, intensity="giant")
 
 motor._roll_d20 = lambda: 10  # d20 FIXO idêntico para os dois; dc(riqueza=6) = 8
-motor.apply_resolution(NOV, {"forage_ops": [forage_op(TAVERNA, riqueza=6)]})
-motor.apply_resolution(MES, {"forage_ops": [forage_op(TAVERNA, riqueza=6)]})
+motor.apply_resolution(NOV, {"extracao_ops": [forage_op(TAVERNA, riqueza=6)]})
+motor.apply_resolution(MES, {"extracao_ops": [forage_op(TAVERNA, riqueza=6)]})
 motor._roll_d20 = force
 
 banda_nov = (memorias_evento(NOV, "forage_mato") or memorias_evento(NOV, "forage_util")

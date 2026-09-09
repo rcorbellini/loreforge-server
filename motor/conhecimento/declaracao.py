@@ -676,7 +676,7 @@ def _write(name: str, args: dict, ctx) -> tuple[dict, bool]:
         return ctx.err(f"'{alvo}' não é algo em que se possa escrever agora",
                        "alvo", ctx.validos({i: ctx.items[i] for i in alvos})), False
 
-    instrumentos = ctx.cand.get("write_instrumento") or []
+    instrumentos = ctx.cand.get("empunhavel") or []
     instrumento = args.get("instrumento")
     if instrumento not in instrumentos:
         return ctx.err(f"'{instrumento}' não está na sua mão", "instrumento",
@@ -721,7 +721,7 @@ WRITE = tool_spec(ToolSpec(
     required=("alvo", "instrumento"),
     enum_sources={
         "alvo": "write_alvo",
-        "instrumento": "write_instrumento",
+        "instrumento": "empunhavel",
         "memoria_id": lambda s: sorted(s.cand.get("write_memorias") or {}),
     },
     omit_if_empty=("memoria_id",),

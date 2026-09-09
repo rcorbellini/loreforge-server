@@ -55,8 +55,8 @@ def _apply_esquartejar_ops(character_id: str, actor_folder: Path, resolution: di
             rejected.append(_rejection(base, _fail("ja_esquartejado", alvo=alvo)))
             continue
 
-        esquartejabilidade = int(op.get("esquartejabilidade") or 0)
-        if esquartejabilidade <= 0:
+        aproveitamento = int(op.get("esquartejabilidade") or 0)
+        if aproveitamento <= 0:
             _set_field(alvo_folder, "status.esquartejado", True)
             rejected.append({
                 **base, "regra": "sem_carne", "valores": {"alvo": alvo},
@@ -85,8 +85,17 @@ def _apply_esquartejar_ops(character_id: str, actor_folder: Path, resolution: di
         nivel_acougue = memoria.proficiencies_for(character_id).get("acougue", 0.0)
         banda, roll_info = roll_esquartejar_check(actor_fm, rendimento, nivel_acougue,
                                                    rolls)
-        nome = (op.get("nome") or "").strip() or "Carne"
-        descricao = (op.get("descricao") or "").strip() or "Um corte de carne crua."
+        # spec 071: a banda passou a decidir O QUE saiu, não só quanto. Enquanto a
+        # única matéria era carne, uma descrição só bastava (spec 050, Eixo 2);
+        # com couro, osso e tendão no jogo, um esfolamento desastrado rende
+        # retalhos e um cuidadoso rende a pele inteira — molde de `forage`.
+        par = {
+            "fraco": (op.get("nome_fraco"), op.get("descricao_fraco")),
+            "medio": (op.get("nome_medio"), op.get("descricao_medio")),
+            "farto": (op.get("nome_farto"), op.get("descricao_farto")),
+        }[banda]
+        nome = (par[0] or "").strip() or "Carne"
+        descricao = (par[1] or "").strip() or "Um corte de carne crua."
 
         peso_alvo = float(alvo_fm.get("weight_kg") or 0)
         pesos = porcoes_de_carne(peso_alvo, banda)

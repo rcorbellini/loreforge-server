@@ -252,7 +252,13 @@ motor._write_memory(pasta(A), f"Eu vi. {EPISODIO}.", intensity="large",
 # padrão do `loop_fn`, que também é um dublê. Sem injetar, `ask` devolve "" e o
 # `ask_about` recusa, que é a degradação honesta (e ALTA, via `juizo_indisponivel`).
 def _ask_z(_system, _user):
-    return '{"conta": "Contei o que sei dele, do jeito que me lembro."}'
+    # spec 071: o dublê precisa satisfazer AS DUAS formas de juízo que `ask_about`
+    # pede — a nota (`juizo.nota`, que procura um número) e o texto
+    # (`juizo.julgamento`). O stub antigo só tinha texto, e a nota caía no default
+    # EM SILÊNCIO; agora ausência de juízo é falha, e o silêncio virou recusa. O
+    # dublê incompleto era o defeito, não o contrato novo.
+    return ('{"disposicao": 8, '
+            '"conta": "Contei o que sei dele, do jeito que me lembro."}')
 
 _visto_lista = []
 

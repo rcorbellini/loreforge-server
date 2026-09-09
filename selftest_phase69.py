@@ -170,10 +170,18 @@ try:
     j = motor.juizo.julgamento('{"vantagem": 7, "revide": 3}',
                                {"vantagem": 5, "revide": 0})
     check("as duas notas saem de UMA resposta", j == {"vantagem": 7, "revide": 3})
-    check("resposta ilegível cai no default POR CAMPO (revide 0 nunca inventa "
-          "violência)",
-          motor.juizo.julgamento("blá", {"vantagem": 5, "revide": 0})
-          == {"vantagem": 5, "revide": 0})
+    # SUPERSEDIDO PELA SPEC 071, e o INTENTO fica mais forte, não mais fraco: a
+    # preocupação aqui era "revide 0 nunca inventa violência" numa resposta
+    # ilegível. Agora não há resposta nenhuma a interpretar — a capacidade RECUSA,
+    # e o revide involuntário simplesmente não acontece. Zero violência inventada
+    # continua garantido, por um caminho mais curto.
+    try:
+        motor.juizo.julgamento("blá", {"vantagem": 5, "revide": 0})
+        check("resposta ilegível é FALHA — nenhum revide é sequer avaliado "
+              "(spec 071)", False, "não levantou")
+    except motor.juizo.NaoJulgado:
+        check("resposta ilegível é FALHA — nenhum revide é sequer avaliado "
+              "(spec 071)", True)
 
     print("\n--- US1: quem está pronto devolve o golpe ------------------------")
 

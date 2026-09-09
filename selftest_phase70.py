@@ -190,7 +190,7 @@ def main() -> int:
         CRIADORAS = {
             "craft":    ("direto",    "peça em processo — janela de retomada"),
             "forja":    ("direto",    "peça na bigorna — janela de retomada"),
-            "herbario": ("direto",    "o que se colhe — murcha"),
+            "extracao": ("direto",    "o que se extrai — murcha"),   # renomeado na 071
             "acougue":  ("direto",    "a carne crua — apodrece"),
             "cozinha":  ("resultado", "o prato feito — validade"),
             "botica":   ("resultado", "o preparo — validade"),

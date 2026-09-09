@@ -114,10 +114,18 @@ check("julgamento: as cinco chaves do formato validado saem todas certas",
             "descricao": "restos da maçã, com uma pequena parte mordida"},
       str(j1))
 
-j2 = motor.juizo.julgamento("blablabla, sem json nenhum aqui",
-                            campos=CAMPOS_EAT, texto_campos={"descricao": ""})
-check("julgamento: resposta ilegível cai TODA nos defaults, sem estourar",
-      j2 == {**CAMPOS_EAT, "descricao": ""}, str(j2))
+# SUPERSEDIDO PELA SPEC 071. Este check afirmava "resposta ilegível cai TODA nos
+# defaults, sem estourar" — e era exatamente o defeito: com todo gate do projeto em
+# `nota == 0` e defaults tipicamente 5, uma resposta ilegível fazia a ação ACONTECER
+# com nota média, sem ninguém ter julgado. Medido em campo: ~7% das chamadas.
+# Agora ausência de juízo levanta e vira RECUSA no despacho único.
+try:
+    motor.juizo.julgamento("blablabla, sem json nenhum aqui",
+                           campos=CAMPOS_EAT, texto_campos={"descricao": ""})
+    check("julgamento: resposta ilegível é FALHA, não default (spec 071)", False,
+          "não levantou")
+except motor.juizo.NaoJulgado:
+    check("julgamento: resposta ilegível é FALHA, não default (spec 071)", True)
 
 j3 = motor.juizo.julgamento('{"comestibilidade": 15, "saciedade": -3}',
                             campos=CAMPOS_EAT, texto_campos={"descricao": ""})

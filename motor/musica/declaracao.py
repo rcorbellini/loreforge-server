@@ -140,7 +140,7 @@ def _sing(name: str, args: dict, ctx) -> tuple[dict, bool]:
                        [{"id": mid, "nome": info["resumo"]}
                         for mid, info in sorted(memorias.items())]), False
 
-    instrumentos = ctx.cand.get("sing_instrumento") or []
+    instrumentos = ctx.cand.get("empunhavel") or []
     instrumento = args.get("instrumento")
     if instrumento is not None and instrumento not in instrumentos:
         return ctx.err(f"'{instrumento}' não está na sua mão", "instrumento",
@@ -199,7 +199,7 @@ SING = tool_spec(ToolSpec(
                                                 "maximum": 10}},
     required=("memoria_id",),
     enum_sources={"memoria_id": lambda s: sorted(s.cand.get("sing_memorias") or {}),
-                 "instrumento": "sing_instrumento"},
+                 "instrumento": "empunhavel"},
     omit_if_empty=("instrumento",),
     apply=_sing,
 ))

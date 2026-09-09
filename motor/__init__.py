@@ -352,13 +352,16 @@ from .acougue import (  # noqa: F401
 )
 
 
-# --- motor/herbario (spec 054) ---
-from .herbario import (  # noqa: F401
-    _apply_forage_ops,
-    _h_forage,
+# --- motor/extracao (specs 054/071) ---
+from .extracao import (  # noqa: F401
+    MATERIAS,
+    _apply_extracao_ops,
+    _h_extracao,
+    peso_da_porcao,
     porcoes_de_erva,
-    rebrota_s,
+    renovacao_s,
     roll_colher_check,
+    sanear_tamanho,
 )
 
 
@@ -464,7 +467,7 @@ from .fisica import (  # noqa: F401
     weapon_of,
 )
 
-from . import acougue, ativacao, botica, cozinha, fatos, fogo, herbario, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
+from . import acougue, ativacao, botica, cozinha, extracao, fatos, fogo, io, memoria, registro, rolagem, tempo  # noqa: F401  (handles de módulo p/ o seam de injeção; tempo=spec 040 registra consultar_momento)
 from .registro import ConsultSpec, consult_spec, consult_specs  # noqa: F401  (spec 040: lane de consulta)
 from .tempo import current_moment  # noqa: F401  (spec 040)
 from .percepcao import recall  # noqa: F401  (spec 040: consultar_memoria; reúso pelo Árbitro em US3)

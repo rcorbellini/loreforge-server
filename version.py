@@ -21,7 +21,7 @@ de contrato do mundo ou do runtime.
 
 from __future__ import annotations
 
-__version__ = "3.7.0"
+__version__ = "3.8.0"
 
 # Marco de cada MINOR/MAJOR, para quem for ler um log antigo saber o que existia.
 # PATCHes (correções sem superfície nova) não ganham linha; ficam no git.
@@ -170,6 +170,42 @@ __version__ = "3.7.0"
 #  continuam sem dado, fora do alcance da perícia. Quarto consumidor real da spec 029,
 #  zero arquivo novo.)
 HISTORY = {
+    "3.8.0": "spec 071 — EXTRAIR MATERIA-PRIMA, e o JUIZO QUE NAO VEIO. Duas entregas "
+            "independentes. (1) Resposta do Arbitro SEM juizo legivel — recusa do "
+            "modelo, desistencia, transporte vazio — deixou de cair no default da "
+            "capacidade e passou a ser FALHA: `juizo.NaoJulgado` sobe e `arbiter."
+            "_execute` (o despacho unico) a converte na recusa `juizo_ausente`. Antes "
+            "disso, com todo gate em `nota == 0` e defaults tipicamente 5, uma recusa "
+            "virava 'prossiga com nota media' — o mundo agia sem ninguem ter decidido, "
+            "e em silencio (recusa e 200 sem JSON, entao o JUIZO FALHOU nunca "
+            "disparava). Medido: 8 em 108 chamadas ao modelo real (~7%). UMA edicao "
+            "cobre as 19 chamadas de juizo do projeto, e a 20a nasce coberta. A "
+            "fronteira e estreita: juizo PARCIAL (chave faltando) segue caindo no "
+            "default por campo. `juizo.SEM_MODELO` separa o terceiro estado (arnes sem "
+            "modelo) do segundo (modelo que nao julgou) — antes eram a mesma string "
+            "vazia, e metade da suite exercitava capacidade julgada com nota de "
+            "default sem ninguem perceber. (2) `mine` e `chop` nascem, `forage` migra: "
+            "TRES faces sobre UM executor e UMA regua, em `motor/extracao/` (era "
+            "`motor/herbario/`). A MATERIA desce como DADO no payload, nunca como "
+            "proibicao em prosa — cinco rodadas e 138 chamadas mostraram que a "
+            "restricao escrita em prosa vaza (uma moita de amora pontua 10 para "
+            "minerio, e o modelo INVENTA o produto) e, escrita forte o bastante para "
+            "nao vazar, faz o modelo RECUSAR o ato legitimo 3/3. Como dado: 5/5 cenas, "
+            "zero recusa. Duas notas de admissao independentes (materia no alvo x "
+            "serventia da ferramenta, gate no min) porque uma nota composta nao segura "
+            "dois pisos. `ferramenta` obrigatoria faz `mine`/`chop` SUMIREM do manifest "
+            "de maos vazias. Nota nova de RENOVACAO, com 0 = esgotado PARA SEMPRE (e a "
+            "ausencia de promessa de volta que o diz, nunca um campo) — reverte a "
+            "decisao R5 da 054. Porte julgado no lugar dos 0,2 kg fixos: um tronco XG "
+            "nasce no chao e exige `shove`, fechando arvore -> abrigo sem verbo novo. "
+            "Perecibilidade virou prosa: pedra e madeira ESTOCAM sem uma linha de "
+            "codigo. `butcher` alargada de 'isto e carne?' para 'o que se aproveita "
+            "deste corpo?' (couro, osso, tendao), com tres pares por banda. Dois "
+            "consertos do relogio da 070: prazo em object/location vencia nunca (o "
+            "gancho so existia no ramo do item.md), e `trabalho.encerrar` deixava o "
+            "prazo vivo — toda criacao assincrona concluida apodrecia depois. Dominios "
+            "novos: `mineracao` e `lenha`. E `sing_instrumento`/`write_instrumento`, "
+            "duplicatas byte-a-byte, viraram `empunhavel`.",
     "3.7.0": "spec 070 — O PRAZO COMO PRIMITIVA. O relogio que corre sozinho deixou de "
             "viver dentro do bloco `trabalho` (como `pronto_ts`) e virou um bloco "
             "`prazo` que QUALQUER entidade carrega. Vencer e avaliado na LEITURA, na "

@@ -146,10 +146,20 @@ _r4 = motor.juizo.julgamento('{"letra": "com \\n escapado de verdade"}',
 check("2d. \\n JÁ escapado (de verdade) segue idêntico",
       _r4["letra"] == "com \n escapado de verdade", repr(_r4))
 
-_r5 = motor.juizo.julgamento('{"letra": "Refrao: \n incompleta e trunca',
-                             {}, {"letra": "default"})
-check("2e. resposta TRUNCADA (nunca fecha) cai no default — nada a recuperar",
-      _r5["letra"] == "default", repr(_r5))
+# SUPERSEDIDO PELA SPEC 071. A 058 decidiu (FR-015) que resposta TRUNCADA cai no
+# default, com o argumento de que "não há o que salvar aí" — verdade, mas a
+# conclusão mudou: não havendo o que salvar, NÃO HOUVE JUÍZO, e prosseguir com o
+# default é justamente o que fazia o mundo agir sem ninguém ter decidido. O
+# raciocínio da 058 continua válido (não se inventa conteúdo); o que muda é o
+# desfecho: recusa em vez de nota média.
+try:
+    motor.juizo.julgamento('{"letra": "Refrao: \n incompleta e trunca',
+                           {}, {"letra": "default"})
+    check("2e. resposta TRUNCADA é FALHA, não default (spec 071 supera 058/FR-015)",
+          False, "não levantou")
+except motor.juizo.NaoJulgado:
+    check("2e. resposta TRUNCADA é FALHA, não default (spec 071 supera 058/FR-015)",
+          True)
 
 print("\n--- 3/9/11/12. desfecho ÓTIMO: teto, réplica, segredo, narração --------")
 

@@ -71,8 +71,16 @@ def memorias_evento(cid: str, evento: str) -> list:
 
 def esquartejar_op(alvo, esquartejabilidade=7, rendimento=7,
                    nome="Carne de Teste", descricao="pedaços de carne crua"):
+    """spec 071: `butcher` passou a escrever TRÊS pares nome/descrição (um por
+    banda), porque a matéria deixou de ser só carne — a banda agora decide O QUE
+    saiu, não só quanto. A assinatura desta fixture ficou igual de propósito: as
+    chamadas do teste não mudam, e o mesmo par vai para as três bandas, que é o
+    que preserva a asserção original ("iguais em todas as porções")."""
     return {"alvo": alvo, "esquartejabilidade": esquartejabilidade,
-            "rendimento": rendimento, "nome": nome, "descricao": descricao}
+            "rendimento": rendimento,
+            "nome_fraco": nome, "descricao_fraco": descricao,
+            "nome_medio": nome, "descricao_medio": descricao,
+            "nome_farto": nome, "descricao_farto": descricao}
 
 
 def _planta_memoria_acougue(cid: str, intensity: str = "giant"):

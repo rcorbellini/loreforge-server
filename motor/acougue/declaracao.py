@@ -25,32 +25,32 @@ from ..registro import ToolSpec, inworld, tool_spec
 # (fonte_de_calor/cozinhabilidade): um erro de calibração ambíguo (2 em vez de 0
 # num golem) nunca pode deixar a rolagem prosseguir — research R1.
 
-REGUA_ESQUARTEJABILIDADE = """\
-Régua da ESQUARTEJABILIDADE (o quanto, PELA DESCRIÇÃO, este corpo é feito de
-matéria que vira carne de verdade — carne, gordura, sangue — não o quanto seria
-bom açougueiro, e não se É um animal em tese):
-  0  categoricamente não é carne — pedra, metal, osso puro, energia, construto,
-     morto-vivo ósseo (sem teste)
-  1  quase certamente não — quase nada na descrição sugere carne
+REGUA_APROVEITAMENTO = """\
+Régua do APROVEITAMENTO (o quanto, PELA DESCRIÇÃO, há neste corpo matéria que se
+possa aproveitar — carne, gordura, couro, pele, osso, tendão, chifre, sebo — não
+o quanto quem esquarteja seria bom nisso, e não se É um animal em tese):
+  0  categoricamente não há nada a aproveitar — pedra, metal, energia, construto,
+     névoa (sem teste)
+  1  quase certamente não — quase nada na descrição sugere matéria aproveitável
   2  muito improvável — indícios fracos demais
   3  duvidoso — a descrição não convence
   4  incerto — poderia ser, poderia não ser
   5  ambíguo — a descrição não decide
   6  provável — indícios razoáveis de matéria orgânica
-  7  bastante provável — claramente algo com carne/sangue
-  8  carne evidente — corpo orgânico comum, sem dúvida
-  9  carne muito evidente — descrição rica em detalhes de carne/sangue
-  10 claramente carne — qualquer criatura orgânica comum, sem ambiguidade nenhuma
-     (sem teste)
-Um corpo CLARAMENTE de pedra, metal ou osso puro (um golem, um esqueleto, um
-construto) é 0, não 1 ou 2 — não hesite no extremo quando a descrição já diz que
-não há carne nenhuma ali. A nota é segredo do mundo: nunca o número na
-narrativa; nota 0 faz a tentativa ser recusada, SEM perguntar rendimento."""
+  7  bastante provável — claramente um corpo com o que tirar
+  8  aproveitamento evidente — corpo orgânico comum, sem dúvida
+  9  muito evidente — descrição rica em carne, couro ou osso
+  10 evidente e farto — criatura grande e íntegra, sem ambiguidade (sem teste)
+Um corpo CLARAMENTE de pedra, metal ou energia (um golem, um elemental) é 0, não
+1 ou 2 — não hesite no extremo quando a descrição já diz que não há matéria
+nenhuma ali. **Um esqueleto NÃO é 0**: osso é matéria aproveitável, e o que sai
+dele é osso, não carne. A nota é segredo do mundo: nunca o número na narrativa;
+nota 0 faz a tentativa ser recusada, SEM perguntar rendimento."""
 
 REGUA_RENDIMENTO = """\
-Régua do RENDIMENTO (só importa se esquartejabilidade > 0 — o quanto, PELO PORTE
-e ESTADO DE CONSERVAÇÃO deste corpo específico, há carne aproveitável AGORA — não
-o quanto ele É carne):
+Régua do RENDIMENTO (só importa se aproveitamento > 0 — o quanto, PELO PORTE e
+ESTADO DE CONSERVAÇÃO deste corpo específico, há matéria aproveitável AGORA — não
+o quanto ele É aproveitável):
   0  nada sobrou — carbonizado, mutilado além do reconhecível, podre a ponto de
      não sobrar nada (sem teste)
   1  quase nada — só resquícios
@@ -67,35 +67,51 @@ o quanto ele É carne):
 A nota é segredo do mundo: nunca o número na narrativa. Entre 1 e 9 há um teste
 resolvido na aplicação — não narre o resultado como certo."""
 
-# spec 050 — UMA chamada combinada (mesmo custo/latência que `cook` já fixou, com
-# metade das chaves): as duas notas + nome + UMA description saem da MESMA
-# resposta. Diferente de `cook`, não há três candidatas — a banda decide
-# quantidade/peso (física do Motor), não o texto (research R1/Eixo 2 da spec).
+# spec 050/071 — UMA chamada combinada: as duas notas + TRÊS pares nome/descrição
+# saem da MESMA resposta.
+#
+# A spec 050 usava UMA descrição só, com o argumento de que "a banda decide
+# quantidade/peso (física do Motor), não o texto". Isso valia enquanto a única
+# matéria era CARNE. Alargada a régua para couro, osso e tendão (spec 071), a banda
+# passa a decidir também O QUE se conseguiu tirar — um esfolamento desastrado rende
+# retalhos, um cuidadoso rende a pele inteira — e aí o molde certo é o de `forage`:
+# três pares, um por banda.
 REGUA_ESQUARTEJAR = f"""\
 Você vai julgar UMA tentativa de esquartejar um corpo que já está morto. Leia a
 descrição REAL fornecida com cuidado antes de responder — nunca invente detalhes
 que não estejam nela.
 
-{REGUA_ESQUARTEJABILIDADE}
+{REGUA_APROVEITAMENTO}
 
 {REGUA_RENDIMENTO}
 
 A rolagem que decide a banda final (fraco/médio/farto) só acontece DEPOIS desta
-resposta, no Motor — você não sabe qual banda vai sair, e não precisa saber: a
-description que você escrever serve às três bandas igualmente (só a quantidade de
-carne muda, decidida pelo Motor, nunca por você).
+resposta, no Motor — você não sabe qual vai sair. Por isso escreva TRÊS pares de
+nome+descrição, o que se conseguiu tirar em cada uma:
+  fraco:  o que mãos desastradas trariam deste corpo
+  medio:  o que um trabalho comum rende
+  farto:  o que alguém que conhece o ofício tiraria daqui
+Os três saem do MESMO corpo — não invente uma criatura que a descrição não
+sustenta. E saem da matéria que ELE tem: de um corpo de couro grosso sai couro,
+de um esqueleto sai osso, de um bicho gordo sai carne e sebo. Nunca escreva sabor
+nem apetite; descreva a COISA.
+
+Escreva também dois textos sobre o TEMPO. "urgencia": o que está em jogo enquanto
+o que se tirou ainda presta — uma frase curta, in-world, sobre a MATÉRIA.
+"descricao_vencida": como ela fica depois de estragar — factual, e ainda É ela,
+nunca sumida. **Só escreva os dois se a matéria de fato se deteriorar sozinha**:
+carne e vísceras estragam; osso e chifre curado, não — para esses, devolva as duas
+chaves VAZIAS.
 
 Responda SOMENTE com um objeto JSON, nada antes nem depois, nada de explicação,
-EXATAMENTE com estas quatro chaves (todas OBRIGATÓRIAS, mesmo que
-esquartejabilidade ou rendimento sejam 0):
+EXATAMENTE com estas chaves (todas OBRIGATÓRIAS, mesmo que aproveitamento ou
+rendimento sejam 0):
 
-
-
-Escreva também dois textos sobre o TEMPO (spec 070). "urgencia": o que está
-em jogo enquanto a carne ainda presta — uma frase curta, in-world, sobre a
-CARNE. "descricao_vencida": como ela fica depois de estragar — factual, e
-ainda É carne, nunca sumida.
-{{"esquartejabilidade": <inteiro 0-10>, "rendimento": <inteiro 0-10>, "nome": "<nome curto do corte de carne>", "descricao": "<texto factual da carne resultante, nunca sabor ou apetite>", "urgencia": "<uma frase>", "descricao_vencida": "<texto factual>"}}"""
+{{"aproveitamento": <inteiro 0-10>, "rendimento": <inteiro 0-10>, \
+"nome_fraco": "<nome curto>", "descricao_fraco": "<texto factual>", \
+"nome_medio": "<nome curto>", "descricao_medio": "<texto factual>", \
+"nome_farto": "<nome curto>", "descricao_farto": "<texto factual>", \
+"urgencia": "<uma frase, ou vazio>", "descricao_vencida": "<texto factual, ou vazio>"}}"""
 
 _STR = {"type": "string"}
 
@@ -120,12 +136,15 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
         ctx.ask(REGUA_ESQUARTEJAR, json.dumps({
            "alvo": ctx.describe(alvo),
         }, ensure_ascii=False, indent=2)),
-        campos={"esquartejabilidade": 5, "rendimento": 5},
-        texto_campos={"nome": "", "descricao": "", "urgencia": "", "descricao_vencida": ""})
+        campos={"aproveitamento": 5, "rendimento": 5},
+        texto_campos={"nome_fraco": "", "descricao_fraco": "",
+                      "nome_medio": "", "descricao_medio": "",
+                      "nome_farto": "", "descricao_farto": "",
+                      "urgencia": "", "descricao_vencida": ""})
     ctx.butchered_asked.add(alvo)
     base = {"alvo": alvo}
-    esquartejabilidade = julgado["esquartejabilidade"]
-    if esquartejabilidade == 0:
+    aproveitamento = julgado["aproveitamento"]
+    if aproveitamento == 0:
         rej, rolled = ctx.apply_arbitrated("esquartejar_ops", {
             **base, "esquartejabilidade": 0})
         if rej:
@@ -134,13 +153,15 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
     rendimento = julgado["rendimento"]
     if rendimento == 0:
         rej, rolled = ctx.apply_arbitrated("esquartejar_ops", {
-            **base, "esquartejabilidade": esquartejabilidade, "rendimento": 0})
+            **base, "esquartejabilidade": aproveitamento, "rendimento": 0})
         if rej:
             return ctx.arb_deny(rolled, ("butcher", alvo), base, rej)
         return {"ok": True, "aplicado": {"nota": "o desfecho sai na aplicação"}}, False
     rej, rolled = ctx.apply_arbitrated("esquartejar_ops", {
-        **base, "esquartejabilidade": esquartejabilidade, "rendimento": rendimento,
-       "nome": julgado["nome"], "descricao": julgado["descricao"],
+        **base, "esquartejabilidade": aproveitamento, "rendimento": rendimento,
+       "nome_fraco": julgado["nome_fraco"], "descricao_fraco": julgado["descricao_fraco"],
+       "nome_medio": julgado["nome_medio"], "descricao_medio": julgado["descricao_medio"],
+       "nome_farto": julgado["nome_farto"], "descricao_farto": julgado["descricao_farto"],
        "urgencia": julgado.get("urgencia") or "",
        "descricao_vencida": julgado.get("descricao_vencida") or ""})
     if rej:
@@ -151,17 +172,22 @@ def _butcher(name: str, args: dict, ctx) -> tuple[dict, bool]:
 BUTCHER = tool_spec(ToolSpec(
     names=("butcher",),
     juizo=(
-        ("esquartejabilidade", REGUA_ESQUARTEJAR),
+        ("aproveitamento", REGUA_ESQUARTEJAR),
         ("rendimento", REGUA_ESQUARTEJAR),
-        ("nome", REGUA_ESQUARTEJAR),
-        ("descricao", REGUA_ESQUARTEJAR),
+        ("nome_fraco", REGUA_ESQUARTEJAR), ("descricao_fraco", REGUA_ESQUARTEJAR),
+        ("nome_medio", REGUA_ESQUARTEJAR), ("descricao_medio", REGUA_ESQUARTEJAR),
+        ("nome_farto", REGUA_ESQUARTEJAR), ("descricao_farto", REGUA_ESQUARTEJAR),
     ),
     description=("Esquarteja um corpo que já está morto, extraindo carne crua. Um corpo sem matéria orgânica (pedra, osso, " "construto) não rende nada, e um corpo já esquartejado não pode ser " "esquartejado de novo. Nunca causa a morte de ninguém — só age sobre quem já " "está morto."),
     params={"alvo": _STR,
-           "esquartejabilidade": {"type": "integer", "minimum": 0, "maximum": 10},
+           "aproveitamento": {"type": "integer", "minimum": 0, "maximum": 10},
            "rendimento": {"type": "integer", "minimum": 0, "maximum": 10},
-           "nome": _STR, "descricao": _STR},
-    required=("alvo", "esquartejabilidade", "rendimento", "nome", "descricao"),
+           "nome_fraco": _STR, "descricao_fraco": _STR,
+            "nome_medio": _STR, "descricao_medio": _STR,
+            "nome_farto": _STR, "descricao_farto": _STR},
+    required=("alvo", "aproveitamento", "rendimento",
+              "nome_fraco", "descricao_fraco", "nome_medio", "descricao_medio",
+              "nome_farto", "descricao_farto"),
     enum_sources={"alvo": "butcher_alvo"},
     apply=_butcher,
 ))

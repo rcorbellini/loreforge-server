@@ -532,17 +532,18 @@ def _verb_candidates(idx: dict) -> dict:
         # onde a descrição vem, nunca como ela é julgada.
         "cook_fonte": sorted(idx["objects"])
                       + ([idx["place_id"]] if idx["place_id"] else []),
-        # spec 054 — colher. Cópia LITERAL de `cook_fonte`: objects presentes + o
-        # LUGAR, mesmo argumento (a mata de uma encosta costuma estar escrita na
-        # prosa do AMBIENTE, não instanciada). Um object com `em_trabalho` (um
-        # canteiro já colhido, ainda não rebrotado; a panela; a fonte de fogo) sai
-        # do enum — é o que dá FR-003 (recusa por cooldown) SEM chamada ao Árbitro,
-        # sem precisar de um filtro estrutural à parte (molde de
-        # `kindle_materiais`/`forge_materiais`, que já excluem `em_trabalho`). O
-        # LUGAR nunca é filtrado: `location` não tem bloco `trabalho` (FR-013).
-        "forage_onde": sorted(o for o in idx["objects"]
-                              if not idx["objects_info"].get(o, {}).get("work_in_progress"))
-                       + ([idx["place_id"]] if idx["place_id"] else []),
+        # O ALVO DE EXTRAÇÃO (spec 054, generalizado na 071). Objects presentes +
+        # o próprio LUGAR — cópia literal de `cook_fonte`. UMA chave para as TRÊS
+        # capacidades (`mine`/`chop`/`forage`): a pergunta "de onde se tira" é a
+        # mesma, e é a matéria pedida que muda, como DADO no payload (research
+        # R10). Foi assim que a 071 acrescentou duas capacidades sem acrescentar
+        # nenhuma chave aqui.
+        #
+        # `work_in_progress` sai fora: alvo já trabalhado e ainda não renovado nem
+        # chega a régua nenhuma — recusa de custo zero, sem chamar o Árbitro.
+        "extracao_onde": sorted(o for o in idx["objects"]
+                                if not idx["objects_info"].get(o, {}).get("work_in_progress"))
+                         + ([idx["place_id"]] if idx["place_id"] else []),
         # spec 055 — preparar. Cópias LITERAIS de `cook_ingredientes`/`cook_fonte`,
         # não a MESMA chave: um enum compartilhado entre duas tools impediria dar a
         # uma delas um filtro próprio no futuro sem afetar a outra em silêncio (research
@@ -651,27 +652,30 @@ def _verb_candidates(idx: dict) -> dict:
         "pedir": [],
         "attack_with": sorted(i for i, e in items.items()
                               if e["porter"] == actor and e["slot"] == hand),
-        # spec 058: instrumento de `sing` — algo que ele CARREGUE e possa empunhar.
-        # Era estrito ("já na mão") e isso deixava o alaúde guardado na bolsa
-        # invisível para a tool; hoje o Motor o traz à mão na aplicação
-        # (`bring_to_hand`, o espelho do `_accommodate` do item 44). Vestido fica
-        # de fora: tirar armadura para tocar é `unequip`, decisão do personagem.
-        "sing_instrumento": sorted(i for i, e in items.items()
-                                   if e["porter"] == actor
-                                   and e["slot"] in (None, hand)),
+        # O EMPUNHÁVEL (spec 071): algo que ele CARREGUE e possa empunhar — não só
+        # o que já está na mão. O Motor o traz à mão na aplicação (`bring_to_hand`,
+        # o espelho do `_accommodate` do item 44). Vestido fica de fora: tirar
+        # armadura para tocar é `unequip`, decisão do personagem.
+        #
+        # UMA chave para UMA pergunta. Nasceu em `sing` (058) e foi COPIADA em
+        # `write` (059) — o comentário de lá dizia, com todas as letras, "MESMO
+        # predicado do sing_instrumento". Duas chaves para a mesma pergunta é a
+        # duplicação que o Princípio I proíbe, e a 071 ia acrescentar a terceira e
+        # a quarta (`mine`/`chop`). Unificadas aqui, e as quatro capacidades a
+        # consomem.
+        #
+        # NÃO se funde com `attack_with`, e isso é deliberado: aquele é ESTRITO
+        # (`slot == hand`) porque não se golpeia com a espada guardada na bolsa.
+        # Perguntas parecidas, respostas diferentes — fundi-las seria trocar uma
+        # duplicação por um bug.
+        "empunhavel": sorted(i for i, e in items.items()
+                             if e["porter"] == actor
+                             and e["slot"] in (None, hand)),
         # spec 059: alvo de `write` — só ITENS (não objects/chars/local, ver
         # research.md R3 da 059): `rewrite_description` precisa do nome de
         # arquivo por tipo, e nenhum caso de uso desta spec escreve em pessoa,
         # objeto de cenário ou no próprio lugar.
         "write_alvo": sorted(items),
-        # spec 059: instrumento de `write` — MESMO predicado do `sing_instrumento`
-        # (research.md R4/R6): algo que ele CARREGUE e possa empunhar, não só o
-        # que já está na mão. Obrigatório (não opcional como o de `sing`): sem
-        # NADA que sirva, `write` some da face (FR-001b — o parâmetro é
-        # `required`, `omit_if_empty` não se aplica aqui).
-        "write_instrumento": sorted(i for i, e in items.items()
-                                    if e["porter"] == actor
-                                    and e["slot"] in (None, hand)),
         # viaja-se para lugar que ele SABE alcançar (spec 012). Também não sai do
         # contexto: o mapa do que ele sabe é memória de rota, que fica no server.
         "viajar_para": [],
@@ -1302,11 +1306,40 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
             args, ruim = _tipos_ok(spec, args)
             if ruim:
                 return _err(ruim[0], ruim[1]), False
-        if spec is not None and spec.apply is not None:
-            return spec.apply(name, args, ctx)
-        h = arbiter_tools.HANDLERS.get(name)
-        if h is not None:
-            return h(name, args, ctx)
+        # spec 071 (US1): O PONTO ÚNICO onde "ninguém julgou" vira RECUSA.
+        #
+        # As 19 chamadas de juízo do projeto vivem todas em `motor/*/declaracao.py`,
+        # isto é, dentro de corpo de tool — e todo corpo passa por aqui, migrado
+        # (`spec.apply`) ou legado (`HANDLERS`). Por isso o tratamento cabe numa
+        # edição só, e a 20ª capacidade nasce coberta sem editar nada.
+        #
+        # Antes disto, uma resposta sem juízo caía no default da capacidade
+        # (tipicamente 5); como todo gate é `nota == 0`, a ação ACONTECIA com nota
+        # média. Não é exceção de runtime, então o `JUÍZO FALHOU` do `app.py` nunca
+        # acusava: o mundo mudava sem ninguém ter decidido (Princípio X).
+        #
+        # `_deny` é o canal certo, não `_err` puro: ele registra no ledger que vira
+        # `tool_rejections` (é o que chega ao relatório do turno e o que faz o hint
+        # narrativo virar "tenta, mas não consegue completar o que pretendia"), E
+        # devolve o motivo ao modelo em linguagem de mundo.
+        #
+        # NADA MUTA, e isso não precisa de guarda: a exceção sobe ANTES de
+        # `ctx.apply_arbitrated` — nenhuma op chega ao Motor, logo nenhuma entidade
+        # nasce, nenhum estado muda, e nenhuma memória/maestria é carimbada (as duas
+        # últimas só nascem de op APLICADA, no barramento de fatos).
+        try:
+            if spec is not None and spec.apply is not None:
+                return spec.apply(name, args, ctx)
+            h = arbiter_tools.HANDLERS.get(name)
+            if h is not None:
+                return h(name, args, ctx)
+        except motor.juizo.NaoJulgado:
+            # SEM o nome da capacidade na rejeição: ela desce ao client, e nome de
+            # ferramenta nunca desce (Princípio IX). Quem precisa saber QUAL
+            # capacidade ficou sem juízo é o mantenedor — e para ele o registro do
+            # turno já grava nome + outcome. O item vazio também DEDUPLICA: N
+            # capacidades sem juízo no mesmo turno viram uma entrada, não N.
+            return _deny("", None, {"regra": "juizo_ausente", "valores": {}}), False
         return _err(f"ferramenta '{name}' não existe"), False
 
     # spec 043 (Fase A): o que a CAUDA do turno (o laço do Árbitro, ou o despacho de
@@ -1366,12 +1399,18 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
 def _sem_juizo(system: str, user: str) -> str:
     """`ctx.ask` quando NÃO há modelo ligado (todo o selftest roda assim).
 
-    Devolve vazio de propósito: cada capacidade cai no PRÓPRIO default via
-    `juizo.nota(raw, default)` — o neutro do golpe não é o neutro da troca. Falhar
-    aqui derrubaria o turno inteiro por falta de um juízo que é, por desenho,
-    degradável.
+    Cada capacidade cai no PRÓPRIO default — o neutro do golpe não é o neutro da
+    troca. Falhar aqui derrubaria o turno inteiro por falta de um juízo que, neste
+    caminho, nunca foi pedido a ninguém.
+
+    **spec 071: devolve `SEM_MODELO`, não mais a string vazia.** A 071 passou a
+    tratar resposta sem juízo como FALHA, e vazio é exatamente o que o transporte
+    real devolve quando pana — logo os dois casos precisavam parar de ser a mesma
+    string. Este caminho é só do arnês: em produção `app.py` sempre injeta o
+    transporte real, e a pane dele continua caindo em vazio, que É ausência e recusa
+    com razão.
     """
-    return ""
+    return motor.juizo.SEM_MODELO
 
 
 def _tipos_ok(spec, args: dict):

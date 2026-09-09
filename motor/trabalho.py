@@ -222,13 +222,22 @@ def atualizar(item_folder: Path, **campos) -> dict:
 def encerrar(item_folder: Path, fm_novo: dict, corpo: str) -> None:
     """A peça deixa de ser peça: o bloco SAI INTEIRO e o item vira o que foi feito.
 
-    Item pronto não carrega estado de trabalho (invariante 2 do contrato)."""
+    Item pronto não carrega estado de trabalho (invariante 2 do contrato).
+
+    **spec 071 (US4): o bloco `prazo` sai JUNTO, e isto não é zelo — é conserto.**
+    A janela de retomada (`prazo.carimbar_se_houver`, chamada por `craft`/`forja` na
+    abertura) é `esforço x 3`, e o esforço nunca excede o relógio de parede: logo
+    TODA criação assíncrona concluía com o prazo ainda vivo. Numa leitura posterior
+    ele vencia e trocava a prosa da coisa PRONTA pela `descricao_vencida` — o alaúde
+    recém-terminado virava "colado de forma indevida". Não era caso de borda: era o
+    caminho comum, em toda peça que chegou ao fim."""
     arquivo = _arquivo_de(item_folder)
     if arquivo is None:
         return
     fm, _ = read_doc(arquivo)
     fm.update(fm_novo)
     fm.pop(BLOCO, None)
+    fm.pop(prazo.BLOCO, None)
     write_doc(arquivo, fm, corpo)
 
 
@@ -432,6 +441,11 @@ _FATO_POR_TOOL = {
     # alvo (sentido invertido de cook/kindle_fire, que gravam o resultado NOVO),
     # mas a frase do desfecho segue a MESMA convenção: fixa do Motor.
     "forage": "o que foi colhido aqui voltou a crescer",
+    # spec 071: as irmãs de `forage`. Só entra aqui o que RENOVA — e um alvo cuja
+    # renovação foi julgada 0 nunca chega a este mapa, porque nenhum bloco de prazo
+    # é instalado nele. É a ausência de promessa de volta que significa esgotado.
+    "chop": "a madeira que foi tirada daqui tornou a crescer",
+    "mine": "a rocha aberta aqui voltou a mostrar o que tinha dentro",
     # spec 055: a ÚNICA linha de código que `brew` acrescenta a esta primitiva
     # compartilhada — molde EXATO de `cook`, sentido DIRETO (o resultado já É o
     # remédio final, ao contrário de `forage`, que grava o resultado ANTIGO).

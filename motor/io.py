@@ -456,6 +456,13 @@ def _slugify(text) -> str:
 
 
 _WHY_BY_REGRA = {
+    # spec 071, US1: o mundo perguntou e ninguém julgou. É a ÚNICA recusa que não
+    # nasce de mérito nem de física — nasce de o juízo não ter vindo (recusa do
+    # modelo, desistência, transporte vazio). Por isso a frase é a mais vaga do
+    # dicionário, e de propósito: o jogador não pode distinguir isto de uma
+    # hesitação qualquer (Princípio IX). Nada de "erro", "modelo", "sistema".
+    # Antes desta spec, este caso não recusava — virava nota 5 e a ação acontecia.
+    "juizo_ausente": "o gesto morre no meio — não é hora, ou não é assim",
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",
     "container_lotado": "não há vaga no contêiner",
     "nao_e_container": "isso não guarda nada dentro",
@@ -465,7 +472,10 @@ _WHY_BY_REGRA = {
     # juízo do Árbitro se comportar). Frase DIEGÉTICA — se este caso chegar a
     # narrar (deveria ser raro: a régua já evita), tem de soar como desfecho de
     # cena, não como diagnóstico de sistema.
-    "colheita_nomeia_fonte": "nada ali rendeu algo diferente da própria planta",
+    # spec 062/071: o extraído não pode se chamar como a fonte. Recusa
+    # DETERMINÍSTICA no executor (nunca depende só do juízo se comportar).
+    # Generalizada na 071: vale para pedra e madeira, não só planta.
+    "extracao_nomeia_fonte": "nada ali rendeu algo diferente da própria fonte",
     # NOMEIA de quem: sem isso, "as mãos já estão ocupadas" numa entrega faz o
     # jogador entender que são as DELE, quando eram as de quem ia RECEBER.
     # Uma recusa mal rotulada é indistinguível de um bug (achado real: Nerissa
@@ -584,8 +594,13 @@ _WHY_BY_REGRA = {
     # colidente). A recusa por cooldown (alvo ainda não rebrotado) nunca chega
     # aqui — sai do enum antes, zero LLM (FR-003).
     "onde_inacessivel": "não está ao alcance para colher",
-    "sem_vegetacao": "não há nada de verde ali para colher",
-    "nada_a_colher": "há verde, mas nada que se aproveite agora",
+    # spec 071 — a família de extração (mine/chop/forage). Substituem
+    # `sem_vegetacao`/`nada_a_colher` da 054: a matéria deixou de ser só vegetal,
+    # e uma frase que fala em "verde" mentiria numa parede de mina.
+    "sem_materia": "não é disso que aquilo é feito",
+    "ferramenta_impropria": "o que está na mão não serve para isso",
+    "nada_a_extrair": "há o que procurar ali, mas nada que se aproveite agora",
+    "ferramenta_inacessivel": "isso não está na sua mão",
     # spec 055 — preparar. `ingrediente_inacessivel` é reusado de `cook` (mesmo
     # fato, mesma frase — não vale um segundo texto). `recipiente_inacessivel`
     # é chave PRÓPRIA (não `fonte_calor_inacessivel`, que já é de `cook`).

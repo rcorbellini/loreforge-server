@@ -443,13 +443,22 @@ try:
     check("juizo grampeia a nota fora de 0-10 (spec 043)",
           r_clamp["attack_ops"][0]["vantagem"] == 10)
 
-    # e a resposta ILEGÍVEL cai no default da capacidade, sem derrubar o turno
+    # SUPERSEDIDO PELA SPEC 071, e este era o caso mais grave de todos: o check
+    # antigo afirmava que juízo ilegível vira um GOLPE com vantagem 5. Ou seja, o
+    # mundo desembainhava a espada porque ninguém tinha julgado. Agora recusa —
+    # nenhuma op de ataque nasce, e o turno segue de pé.
     r_mudo = selftest_helpers.resolve_scripted(
         {"action": "ataca com juízo indisponível"}, ctx,
         [("attack", {"alvo": ELGA, "arma": ESPADA})],
         ask=lambda _s, _u: "")
-    check("juízo ilegível cai no default (vantagem 5, combate limpo)",
-          r_mudo["attack_ops"][0]["vantagem"] == 5)
+    check("juízo ausente NÃO produz golpe nenhum (spec 071)",
+          not r_mudo.get("attack_ops"), str(r_mudo.get("attack_ops")))
+    check("juízo ausente vira recusa `juizo_ausente` no turno (spec 071)",
+          any(r.get("regra") == "juizo_ausente"
+              for r in (r_mudo.get("tool_rejections") or [])),
+          str(r_mudo.get("tool_rejections")))
+    check("juízo ausente não derruba o turno — o outcome existe e é utilizável",
+          isinstance(r_mudo, dict) and "narrative_hint" in r_mudo)
 
     # --- preservação do mundo (SC-005) ---------------------------------------- #
     check("SC-005: nenhum arquivo do mundo foi removido em todo o combate",

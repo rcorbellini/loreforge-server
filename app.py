@@ -224,7 +224,14 @@ _REGRAS_DE_COMERCIO = {"nao_esta_a_venda", "nao_e_negociavel", "item_nao_e_seu",
 _REGRAS_DE_NEGOCIO = {"valor_insuficiente", "necessidade_insuficiente",
                       "sem_espaco_para_receber", "parceiro_incapaz"}
 # Recusas sem sujeito no mundo: não há item nem alvo a nomear na frase.
-_REGRAS_SEM_SUJEITO = {"atacante_caido", "sem_alvo_valido"}
+# spec 071 (US1): `juizo_ausente` entra aqui porque NÃO TEM SUJEITO — nada foi
+# movido, nada foi ferido, ninguém recusou. Sem isto, a frase cairia no fallback
+# `'{item}' não foi movido`, e o `item` seria o NOME DA CAPACIDADE: vazamento de
+# vocabulário de ferramenta para o client, que o Princípio IX proíbe. Pela mesma
+# razão o nome da capacidade nem é posto na rejeição — quem precisa saber QUAL
+# capacidade não foi julgada é o mantenedor, e para ele já existe o registro do
+# turno (`registro_turno.anotar_proposta`, que grava nome + outcome).
+_REGRAS_SEM_SUJEITO = {"atacante_caido", "sem_alvo_valido", "juizo_ausente"}
 # Jornada (spec 012): quem não sabe o caminho não teve NADA "não movido" — e
 # nomear um item aqui produzia "'isso' não foi movido — você não sabe como
 # chegar lá", que é o mesmo defeito que o comércio corrigiu na spec 011. A
@@ -1415,10 +1422,18 @@ class Handler(BaseHTTPRequestHandler):
             # é fato in-world — narrá-lo poria vocabulário de máquina na boca do
             # personagem (Princípio V). Sai por um campo próprio, que o conector
             # transforma em recado de SISTEMA e anota no registro do turno.
-            if juizo_falhas:
+            # spec 071 (US1): a RECUSA do modelo é o segundo modo de "não julgou", e
+            # até aqui era invisível — não é exceção (é 200 sem JSON), então nunca
+            # entrava em `juizo_falhas`. Agora ela chega como rejeição normal, e o
+            # relatório a conta a partir do que JÁ recebe: sem canal novo, sem
+            # parâmetro novo em `build_ctx`, sem membro novo no `ctx`.
+            mudas = [r for r in (outcome.get("tool_rejections") or [])
+                     if r.get("regra") == "juizo_ausente"]
+            if juizo_falhas or mudas:
                 outcome["juizo_indisponivel"] = {
-                    "quantas": len(juizo_falhas),
-                    "porque": juizo_falhas[0][:200],
+                    "quantas": len(juizo_falhas) + len(mudas),
+                    "porque": (juizo_falhas[0][:200] if juizo_falhas
+                               else "o modelo respondeu sem juízo (recusa ou desistência)"),
                 }
             # spec 044: o CAMINHO ÚNICO é onde o registro do turno nasce — um
             # lugar só, nunca espalhado por capacidade. Quem esquecesse sumiria

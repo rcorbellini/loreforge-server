@@ -207,6 +207,9 @@ _DOMAIN_BY_EVENT = {
     "witness_forja": "ferraria",
     "witness_cozinha": "cozinha", "witness_botica": "botica",
     "witness_forage": "herbalismo", "witness_esquartejar": "acougue",
+    # spec 071: as irmãs de `forage`, cada uma no SEU domínio — ver alguém
+    # minerar não é ver herbalismo.
+    "witness_mine": "mineracao", "witness_chop": "lenha",
     "witness_fogo": "fogo",
     # musica (spec 058) — oitavo domínio de fase 2. `sing_ruim` carimba TAMBÉM
     # (cantar mal também fica — falha não-silenciosa, ao contrário das recusas
@@ -1871,18 +1874,28 @@ def _witness_facts(character_id: str, outcome: dict) -> list[dict]:
                       "texto": f"Vi {ator} terminar de preparar {io.name_of(peca_id)}.",
                       "base": "medium", "val_ator": None, "ruido": _PUBLICO,
                       "evento": "witness_botica", "about": character_id})
-    # SÍNCRONO — ato único, sem fase. `forage` não confere posse (múltiplas
+    # SÍNCRONO — ato único, sem fase. A extração não confere posse (múltiplas
     # porções sem autor claro); `esquartejar` confere (a carne é de quem
     # esquartejou, mesmo que o corpo fosse de outro personagem).
-    for op in outcome.get("forage_ops_applied") or []:
+    #
+    # spec 071: O TEXTO E O EVENTO VARIAM POR CAPACIDADE. Quem vê alguém abrir uma
+    # parede de rocha a picareta não pode lembrar de "colher plantas" — seria o
+    # mundo relatando um efeito que não houve (Princípio X). E o evento separado é
+    # o que permite a uma régua futura ler "este aqui é minerador" sem adivinhar.
+    for op in outcome.get("extracao_ops_applied") or []:
         onde = op.get("onde")
         itens = op.get("itens") or []
         if not itens:
             continue
+        cap = op.get("capacidade") or "forage"
+        texto = {
+            "mine": f"Vi {ator} arrancar pedra em {io.name_of(onde)}.",
+            "chop": f"Vi {ator} cortar madeira em {io.name_of(onde)}.",
+        }.get(cap, f"Vi {ator} colher plantas em {io.name_of(onde)}.")
         fatos.append({"envolvidos": [character_id, *itens],
-                      "texto": f"Vi {ator} colher plantas em {io.name_of(onde)}.",
+                      "texto": texto,
                       "base": "small", "val_ator": None, "ruido": _PUBLICO,
-                      "evento": "witness_forage"})
+                      "evento": f"witness_{cap}"})
     for op in outcome.get("esquartejar_ops_applied") or []:
         alvo = op.get("alvo")
         itens = op.get("itens") or []

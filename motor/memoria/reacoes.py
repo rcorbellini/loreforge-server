@@ -56,7 +56,7 @@ _WITNESS_CANAIS = {
     "forja_ops": "forja_ops_applied",
     "cozinha_ops": "cozinha_ops_applied",
     "botica_ops": "botica_ops_applied",
-    "forage_ops": "forage_ops_applied",
+    "extracao_ops": "extracao_ops_applied",
     "esquartejar_ops": "esquartejar_ops_applied",
     "fogo_ops": "fogo_ops_applied",
     # spec 058: quem OUVE cantar ganha memória sobre o CANTOR (reputação) —

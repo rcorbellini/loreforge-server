@@ -17,6 +17,7 @@ Este módulo não sabe de HTTP nem de stdio: recebe um `mundo` com dois métodos
 from __future__ import annotations
 
 import json
+import face
 
 PROTOCOL = "2025-06-18"
 
@@ -53,6 +54,11 @@ def input_schema(cap: dict) -> dict:
     props: dict = {}
     for param, alvos in (cap.get("alvos") or {}).items():
         props[param] = {"type": "string", "enum": list(alvos)}
+    # O ALVO QUE PERDEU O ENUM (spec 060, agora na fonte — `face._ENUM_QUE_FICA`).
+    # Não é "texto livre": tem nome na cena, e a dica diz qual nome usar. Cair no
+    # ramo de baixo faria o schema convidar a Mente a INVENTAR o alvo.
+    for param in (cap.get("por_nome") or {}):
+        props.setdefault(param, {"type": "string", "description": face.DICA_DE_ALVO})
     # o que o mundo EXIGE e não tem lista de opções é texto livre que a Mente escreve
     # (o conteúdo de um plano, o teor de uma promessa, sobre o que se pergunta)
     for exigido in (cap.get("exige") or []):
@@ -97,6 +103,17 @@ class Sessao:
             tool = {"name": c["nome"],
                     "description": c.get("descricao") or "",
                     "inputSchema": input_schema(c)}
+            # QUAIS PARÂMETROS SÃO REFERÊNCIA (2026-09-11). Com o enum de entidade
+            # fora do schema, nada mais distinguia `ask_directions.quem` — que aponta
+            # para alguém da cena — de `set_intention.content`, que é prosa livre. Os
+            # dois ficavam "string sem enum", e um cliente que tentasse resolver os
+            # dois transformaria o teor de um compromisso num id.
+            #
+            # A distinção é do MUNDO (é ele quem declara o parâmetro), então desce
+            # dele, explícita. Vai em `annotations` porque é metadado da tool, não
+            # forma do argumento — o mesmo lugar de `readOnlyHint`.
+            if c.get("por_nome"):
+                tool["annotations"] = {"byName": dict(c["por_nome"])}
             if c.get("consulta"):
                 # `readOnlyHint` é o campo do PRÓPRIO MCP para "esta tool não muda
                 # nada". Marcar aqui, e não inventar chave nossa, é o que faz um host
@@ -104,14 +121,25 @@ class Sessao:
                 # combinação prévia — e é por esta marca que o conector sabe que
                 # pode consultar e CONTINUAR pensando, em vez de encerrar a vez
                 # achando que propôs algo ao mundo.
-                tool["annotations"] = {"readOnlyHint": True}
+                #
+                # MESCLA, não substitui: `byName` pode já estar aqui, e uma consulta
+                # com alvo de cena (`examine`, `recognize`) precisa das duas marcas.
+                tool.setdefault("annotations", {})["readOnlyHint"] = True
             out.append(tool)
         return out
 
     @staticmethod
     def _assinar(caps: list) -> str:
-        """O que precisa mudar para o host relistar: nomes e alvos, não a prosa."""
-        return json.dumps([[c["nome"], c.get("alvos")] for c in caps], sort_keys=True)
+        """O que precisa mudar para o host relistar: nomes e alvos, não a prosa.
+
+        `por_nome` ENTRA (2026-09-11). Quando os enums de entidade saíram do schema
+        e foram para `annotations.byName`, quem mudava com a cena passou a ser ele:
+        assinar só `alvos` faria a face parar de "mudar" quando alguém entra ou sai
+        da taverna, e o host nunca relistaria. Silencioso, e do pior tipo — a Mente
+        seguiria propondo sobre quem já foi embora.
+        """
+        return json.dumps([[c["nome"], c.get("alvos"), c.get("por_nome")]
+                           for c in caps], sort_keys=True)
 
     def mudou(self) -> bool:
         """A cena mudou desde a última listagem?

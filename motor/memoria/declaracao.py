@@ -13,6 +13,10 @@ from ..io import name_of
 from ..registro import ToolSpec, inworld, tool_spec
 from .primitivas import DOMAINS
 
+# A porta para as lembrancas, no lugar da lista inteira (ver o comentario abaixo).
+PONTE_MEMORIA = (' Para saber de que lembranças você dispõe e escolher uma, use `consultar_memoria` — ela devolve o `memoria_id` de cada uma.')
+
+
 _STR = {"type": "string"}
 
 
@@ -114,8 +118,7 @@ def _accuse_desc(s):
         "escolhida). Isso registra, na hora, que você o acusou e que "
         "ele foi acusado — quem mais estiver por perto pode perceber "
         "a cena. NÃO decide como ele reage (isso é outra ação, se "
-        "acontecer) e NÃO move nenhum item. Memórias disponíveis: "
-        f"{listagem}.")
+        "acontecer) e NÃO move nenhum item." + PONTE_MEMORIA)
 
 
 CREATE_MEMORY = tool_spec(ToolSpec(

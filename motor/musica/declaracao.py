@@ -21,6 +21,10 @@ import motor
 from .. import juizo
 from ..registro import ToolSpec, inworld, tool_spec
 
+# A porta para as lembrancas, no lugar da lista inteira (ver o comentario abaixo).
+PONTE_MEMORIA = (' Para saber de que lembranças você dispõe e escolher uma, use `consultar_memoria` — ela devolve o `memoria_id` de cada uma.')
+
+
 _STR = {"type": "string"}
 
 
@@ -128,7 +132,7 @@ def _sing_desc(scene):
             "saber do que aconteceu, mesmo sem ter estado lá. Em `memoria_id` vai a "
             "lembrança a cantar; em `instrumento`, algo que você já tenha na mão.")
     if listagem:
-        base += f" Lembranças disponíveis: {listagem}."
+        base += PONTE_MEMORIA
     return base
 
 

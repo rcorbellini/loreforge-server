@@ -26,20 +26,90 @@ import arbiter
 import motor
 
 
-def _alvos(props: dict) -> dict:
+# OS ENUMS QUE FICAM NA FACE EXPOSTA.
+#
+# O critério não é o tipo do dado, é a ORIGEM da informação:
+#   · lista da CENA (itens, pessoas, objetos, rotas) -> SAI. A Mente já vê tudo isso
+#     no contexto; o enum é a segunda cópia, e a cópia é que custa.
+#   · subconjunto CALCULADO (quem está caído, o que dá para empunhar, que trabalho
+#     está em processo) -> FICA. O contexto não diz isso de um jeito que ela use: o
+#     enum é a ÚNICA fonte, e ali ele INFORMA em vez de restringir.
+#   · vocabulário FECHADO (ativa/concluida/abandonada) -> FICA. Não é id.
+#   · lugar que ele SABE alcançar -> FICA. Deriva de memória de rota.
+#
+# ESTA LISTA VEIO DO CLIENTE (item 77, 2026-09-11). Ela morava em `mente.js`
+# (`_ENUM_QUE_FICA`): 17 pares `tool:parâmetro` DO MUNDO, mantidos à mão num
+# arquivo que não sabe quando uma tool nasce ou muda de parâmetro — acoplamento que
+# apodrecia calado, e apodreceu: `accuse:memoria_id` não estava lá, contra o que o
+# próprio comentário afirmava. Aqui ela fica ao lado de quem declara os parâmetros.
+#
+# E o enum SAIR DAQUI não enfraquece validação nenhuma: quem valida é o Motor, pelo
+# manifesto de `arbiter.build_tools`, que continua inteiro. É a separação que a
+# própria docstring de `mcp_core.input_schema` já defendia — "o que o schema NÃO
+# entrega é o CONTEÚDO do enum".
+_ENUM_QUE_FICA = frozenset({
+    "heal:alvo", "butcher:alvo",                    # subconjunto calculado
+    "write:instrumento", "sing:instrumento",        # o que dá para empunhar
+    "craft:peca", "forge_weapon:peca", "forge_armor:peca", "cook:peca",
+    "brew:peca",                                    # trabalho em processo
+    "set_intention:status", "give:intention_id", "trade:intention_id",
+    "promise:intention_id",                         # vocabulário fechado / intenção
+    "travel_to:destino", "ask_about:sobre_lugar",   # lugar que ele sabe alcançar
+    "learn_routes:rotas",                           # rotas do MUNDO, não da cena
+})
+
+# A frase que substitui o enum. Curta de propósito: responde "como eu chamo?", que é
+# a única pergunta que o enum respondia de útil, e nada além disso.
+DICA_DE_ALVO = "o NOME daquilo, como aparece na cena"
+
+
+def _alvos(props: dict, tool: str = "") -> dict:
     """Os alvos possíveis por parâmetro — só o que EXISTE na cena, agora.
 
     Vem do enum que o próprio manifesto do turno já monta: a face não recalcula
     candidatos, senão haveria duas respostas possíveis para "quem está aqui".
+
+    Lista de CENA não desce (ver `_ENUM_QUE_FICA`): ela vira `DICA_DE_ALVO` em
+    `mcp_core.input_schema`, e A Mente aponta por nome.
     """
     out = {}
     for nome, schema in (props or {}).items():
         enum = schema.get("enum")
         if enum is None and schema.get("type") == "array":
             enum = (schema.get("items") or {}).get("enum")
-        if enum:
+        if enum and f"{tool}:{nome}" in _ENUM_QUE_FICA:
             out[nome] = list(enum)
     return out
+
+
+def _sem_enum(props: dict, tool: str) -> dict:
+    """Os parâmetros que TINHAM enum de cena, com os ids que o manifesto validou.
+
+    O enum carregava DUAS coisas, e só uma prestava:
+
+      · RESTRINGIR o modelo — medido inútil (spec 060: id fora do enum saiu 4/5),
+        caro (35% do bloco) e nocivo (paralisia no ambíguo, substituição silenciosa).
+      · ALIMENTAR A RESOLUÇÃO no cliente — o que permite A Mente apontar "Nerissa,
+        a Boticária" e o conector converter para o id. Isso presta, e muito: medido
+        em 14 de 15 chamadas reais, inclusive numa em que o modelo abreviou o nome.
+
+    Então elas se separam. A lista sai do `inputSchema` (o modelo não a vê mais) e
+    desce em `annotations.byName`, que é metadado de tool: o conector lê, o runtime
+    de tool-calling não põe no prompt.
+
+    ISSO NÃO É O ENUM DE VOLTA POR OUTRA PORTA. A diferença é quem lê: antes ela ia
+    ao MODELO, competindo com a cena e custando tokens; agora vai ao CONECTOR, que é
+    quem precisava dela desde sempre. E continua sem autoridade — quem valida é o
+    Motor (Princípio III), como a docstring de `mcp_core.input_schema` já dizia.
+    """
+    fora = {}
+    for nome, schema in (props or {}).items():
+        enum = schema.get("enum")
+        if enum is None and schema.get("type") == "array":
+            enum = (schema.get("items") or {}).get("enum")
+        if enum and f"{tool}:{nome}" not in _ENUM_QUE_FICA:
+            fora[nome] = list(enum)
+    return fora
 
 
 def build(context: dict) -> list[dict]:
@@ -65,7 +135,8 @@ def build(context: dict) -> list[dict]:
         exposta.append({
             "nome": t["name"],
             "descricao": t.get("description") or "",
-            "alvos": _alvos(params),
+            "alvos": _alvos(params, t["name"]),
+            "por_nome": _sem_enum(params, t["name"]),
             "exige": list((t.get("parameters") or {}).get("required") or []),
             "consulta": False,
         })

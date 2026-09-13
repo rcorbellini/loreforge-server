@@ -19,6 +19,10 @@ import motor
 from ..io import name_of
 from ..registro import ToolSpec, inworld, tool_spec
 
+# A porta para as lembrancas, no lugar da lista inteira (ver o comentario abaixo).
+PONTE_MEMORIA = (' Para saber de que lembranças você dispõe e escolher uma, use `consultar_memoria` — ela devolve o `memoria_id` de cada uma.')
+
+
 
 # --- A RÉGUA (spec 043) — mora COM a capacidade que a lê -------------------- #
 # Saiu de `arbiter.py`, onde vivia colada num system prompt único que despejava
@@ -664,8 +668,12 @@ def _write_desc(scene):
             "para ensinar algo que você realmente sabe) ou `texto` (escreve o "
             "que quiser, livre — um recado, um pedido, um bilhete). Precisa de "
             "algo NA MÃO que sirva para escrever.")
+    # A LISTA NAO DESCE (2026-09-11). Eram 84 ids com resumo nesta description e 83
+    # na do `sing` — 28.303 chars, 42% do bloco de tools inteiro, e todos eles ids
+    # opacos que a Mente nao tem como escolher lendo. O retrieval ja existe e e a
+    # porta certa: `consultar_memoria` (spec 040) devolve o id de quem interessa.
     if listagem:
-        base += f" Lembranças disponíveis para transcrever: {listagem}."
+        base += PONTE_MEMORIA
     return base
 
 

@@ -785,6 +785,62 @@ ok(any("cobrou" in f for f in frases),
    "e o desfecho VIRA NARRACAO — cobrar em silencio seria incompleto (Principio X)")
 
 
+# --------------------------------------------------------------------------- #
+# §15 — a recusa de VOCABULARIO tem de convidar o retry
+# --------------------------------------------------------------------------- #
+#
+# Medido em jogo (medicoes.md §15): a Nerissa montou um plano BOM de oito passos e
+# mandou `pronto_quando: "odila-aguadeira"` — o id de uma PESSOA. O mundo recusou
+# com uma frase solta, apontando o campo ERRADO e engolindo a lista de criterios
+# validos. Ela nao tinha como corrigir, e nao tentou de novo: UM `set_intention` em
+# duas horas de jogo, e o ciclo inteiro da spec nunca disparou.
+#
+# Erro corrigivel NAO e recusa de merito. Quem nomeou errado um vocabulario precisa
+# receber o vocabulario de volta.
+
+print("\n--- a recusa que convida o retry (§15) ---")
+
+class _CtxFalso:
+    """So o bastante para ver o que `ctx.err` recebeu."""
+    INTENTION_STATUSES = ["ativa", "concluida", "abandonada"]
+
+    def __init__(self, needs=None, nome="Fulano"):
+        self.context = {"self": {"name": nome, "needs": needs or {},
+                                 "intentions": []}}
+        self.ultimo = None
+
+    def err(self, erro, campo=None, validos=None):
+        self.ultimo = {"erro": erro, "campo": campo, "validos": validos}
+        return {"ok": False, **self.ultimo}
+
+
+from motor.intencoes.declaracao import _set_intention  # noqa: E402
+
+ctx = _CtxFalso(needs={"hunger": "faminto"})
+_set_intention("set_intention",
+               {"content": "Fazer um remedio.\n- forage raiz", "status": "ativa",
+                "pronto_quando": "odila-aguadeira"}, ctx)
+ok(ctx.ultimo["campo"] == "pronto_quando",
+   "o criterio desconhecido aponta o CAMPO certo, nao `content`")
+nomes = {v["id"] for v in (ctx.ultimo["validos"] or [])}
+ok(nomes and nomes == set(P._CRITERIO_POR_CAMPO),
+   "e devolve o VOCABULARIO inteiro — sem ele a Mente nao tem como corrigir")
+
+ctx2 = _CtxFalso(needs={"hunger": "faminto"})
+_set_intention("set_intention",
+               {"content": "Fazer um remedio.\n- forage raiz", "status": "ativa"}, ctx2)
+ok(ctx2.ultimo["campo"] == "pronto_quando" and ctx2.ultimo["validos"],
+   "sem criterio nenhum tambem convida o retry, com a lista")
+
+# A RECUSA DE MERITO SEGUE SEM LISTA: nao ha o que corrigir num "isso ja e verdade".
+ctx3 = _CtxFalso(needs={"hunger": "sem fome"})
+_set_intention("set_intention",
+               {"content": "Matar minha fome.\n- eat pao", "status": "ativa",
+                "pronto_quando": "hunger"}, ctx3)
+ok(ctx3.ultimo["validos"] is None,
+   "recusa de MERITO nao devolve lista — ela nao e um erro a corrigir")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

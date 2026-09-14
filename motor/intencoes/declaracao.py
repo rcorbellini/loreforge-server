@@ -69,7 +69,29 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
         trava = travas_do_nascimento(content, pronto_quando, eu)
         if trava:
             regra, valores = trava
-            return ctx.err(_FRASE[regra], "content"), False
+            # ERRO CORRIGÍVEL x RECUSA DE MÉRITO — e a diferença custou uma corrida
+            # de duas horas (medicoes.md §15).
+            #
+            # Medido em jogo: a Nerissa montou um plano BOM de oito passos (pedir o
+            # caminho, viajar, colher a raiz, preparar) e mandou
+            # `pronto_quando: "odila-aguadeira"` — o id de uma PESSOA, porque o
+            # runtime não impõe o enum (spec 060: um id fora dele saiu 4/5) e o nome
+            # do campo convida a responder "com quem". O mundo recusou com uma frase
+            # solta, apontando o campo ERRADO (`content`) e ENGOLINDO a lista de
+            # critérios válidos que a própria trava devolvia. A Mente não tinha como
+            # corrigir, e não tentou de novo: UM `set_intention` em duas horas.
+            #
+            # As duas travas de VOCABULÁRIO são erro corrigível — ela quis dizer algo
+            # real e nomeou errado —, então voltam com o CAMPO certo e os `validos`,
+            # que é o que convida o retry. As outras são recusa de mérito (o
+            # compromisso não devia nascer), e essas seguem sem lista: não há o que
+            # corrigir num "isso já é verdade agora".
+            campo = "pronto_quando" if regra in (
+                "intencao_sem_criterio", "intencao_criterio_desconhecido") else "content"
+            validos = [{"id": v, "nome": v} for v in (valores or {}).get("validos") or []]
+            if not validos and campo == "pronto_quando":
+                validos = [{"id": v, "nome": v} for v in sorted(_CRITERIOS)]
+            return ctx.err(_FRASE[regra], campo, validos or None), False
         # E A GUARDA DO FR-013b: se o critério JÁ é verdade, a intenção nasceria
         # cumprida. Um saciado não firma compromisso de matar a fome — recusar é o
         # que evita criar lixo que fecha no mesmo instante.

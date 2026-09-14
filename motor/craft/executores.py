@@ -23,8 +23,8 @@ from .. import fisica, io, prazo, registro, trabalho
 from ..io import _fail, _rejection, read_doc
 
 from .primitivas import (
-    LIMIAR_SINCRONO_S, banda_final, duracao_segundos_craft, roll_craft_check,
-    sanear_tamanho,
+    LIMIAR_SINCRONO_S, PISO_VIABILIDADE_LOCAL, banda_final,
+    duracao_segundos_craft, roll_craft_check, sanear_tamanho,
 )
 
 _FILENAME_POR_TIPO = {"item": "item.md", "object": "object.md",
@@ -159,6 +159,7 @@ def _abrir(character_id, actor_folder, actor_fm, op, present_items, pendente,
         material_folders.append((mid, pasta))
 
     viabilidade = int(op.get("viabilidade") or 0)
+    tipo_pedido = op.get("tipo") or "item"
     if viabilidade <= 0:
         # GATE — nenhum material é consumido (FR-003/FR-007).
         return False, {
@@ -166,6 +167,28 @@ def _abrir(character_id, actor_folder, actor_fm, op, present_items, pendente,
             "why": io._WHY_BY_REGRA["sem_viabilidade"],
             "memory": _memoria_ator("", "Tentei fazer algo, mas não havia com "
                                     "o quê.", "craft_recusado", None)}
+
+    # O PISO DE VIABILIDADE PARA LUGAR (spec 071). Erguer MORADIA é mais exigente
+    # que fazer coisa: `craft` tem um gate só (`viabilidade <= 0`, decisão da 057),
+    # e nota 1 basta para nascer algo — para um item isso é bom (sai um nó torto e
+    # segue), mas para uma `location` cria LUGAR PERMANENTE e ROTA no mundo.
+    #
+    # MEDIDO (research R14) antes de escolher o número: "levanto uma casa aqui" SEM
+    # material nenhum tirou viabilidade 1 e duração 0 — e nasceu um lugar com rota,
+    # no mesmo ato, de graça. Tentativas legítimas (abrigo de galhos, cabana de
+    # troncos, casa de pedra e madeira, todas com material apontado) tiraram 6-7. O
+    # piso 5 separa as duas populações com folga, sem encostar em nenhuma delas.
+    #
+    # É gate DE TIPO, não segundo gate de mérito: só morde quando o que nasceria é
+    # um lugar. O `craft` de item segue com o gate único da 057, intocado.
+    if tipo_pedido == "location" and viabilidade < PISO_VIABILIDADE_LOCAL:
+        # NENHUM material é consumido — mesma disciplina do gate de cima.
+        return False, {
+            **base, "regra": "lugar_sem_sustentacao", "valores": {},
+            "why": io._WHY_BY_REGRA["lugar_sem_sustentacao"],
+            "memory": _memoria_ator("", "Olhei em volta e entendi que não daria "
+                                    "para levantar nada aqui — não com isto.",
+                                    "craft_recusado", None)}
 
     for _mid, pasta in material_folders:
         io.remove_entity(pasta)  # consumo total — mesma exceção escopada de forja/cook

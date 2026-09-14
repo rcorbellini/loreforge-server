@@ -289,12 +289,19 @@ from .memoria import (  # noqa: F401
 
 # --- extraído para motor/intencoes.py (spec 026) ---
 from .intencoes import (  # noqa: F401
+    _CRITERIO_POR_CAMPO,
     _INTENTION_CONTEXT_CAP,
     _INTENTION_STATUSES,
     _h_intentions,
+    abandonar,
+    casar_e_riscar,
     close_intention,
     create_intention,
+    criterio_cumprido,
+    fechar_por_criterio,
     get_active_intentions,
+    riscar_passo,
+    rotulo_de_parada,
     update_intention,
 )
 

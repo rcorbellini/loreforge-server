@@ -544,9 +544,21 @@ def ensure_fatigue(char_fm: dict) -> tuple[int, int]:
 _FOME_CANONICA = (
     # (marcas no texto da ficha, rótulo canônico) — a ordem importa: o mais
     # específico primeiro, senão "com fome" casaria em "sem fome".
+    #
+    # O RÓTULO CANÔNICO TEM DE SER LIDO DE VOLTA COMO ELE MESMO (item 81).
+    #
+    # A ordem sozinha NÃO bastava, e o defeito viveu no mundo: a marca solta
+    # "fome" casa dentro de "sem fome", então a ficha de quem o próprio mundo
+    # tinha rotulado como `sem fome` voltava a ser lida como `com fome`. Quatro
+    # personagens estavam nesse estado (draven, nerissa, vranna, torvin-britador),
+    # e o efeito não era cosmético: um compromisso de matar a fome NUNCA fecharia
+    # para eles, porque o critério confere justamente este rótulo.
+    #
+    # A regra que fecha o buraco: toda saída desta tabela é também uma ENTRADA
+    # dela, e cai no mesmo balde. `selftest.py` prende a idempotência.
     (("extremo", "faminta", "faminto", "morrendo"), "faminto"),
+    (("sem fome", "saciad", "satisfeit", "cheio"), "sem fome"),
     (("com fome", "fome"), "com fome"),
-    (("saciad", "satisfeit", "cheio"), "sem fome"),
 )
 
 
@@ -617,9 +629,12 @@ _SEDE_CANONICA = (
     # `hunger`, que já existia morto antes de `eat`), então esta função nasce
     # sem dívida de migração — mas herda a FORMA de `hunger_label` para que a
     # PRÓXIMA tool que precisar ler sede encontre o mesmo vocabulário livre.
+    # Mesmo defeito gêmeo do item 81, e ele estava aqui também: "sede" casa dentro
+    # de "sem sede". Consertado com a mesma regra — o rótulo canônico entra no
+    # próprio balde, antes da marca solta.
     (("desidratad", "sedenta", "sedento", "morrendo de sede"), "sedento"),
+    (("sem sede", "hidratad", "saciad", "satisfeit"), "sem sede"),
     (("com sede", "sede"), "com sede"),
-    (("hidratad", "saciad", "satisfeit"), "sem sede"),
 )
 
 

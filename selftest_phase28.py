@@ -188,13 +188,24 @@ if tool:
 # (queue/_MUT_CH/build_tools/execute) funciona de ponta a ponta, não só o
 # handler isolado (que a seção 1-8 já provou via motor.apply_resolution).
 _mk_char("viva-p28")
+# COM FOME DE VERDADE. O `_mk_char` nasce `saciado`, e a guarda do FR-013b (spec
+# 073) recusa firmar um compromisso cujo critério JÁ é verdade — um saciado não
+# promete a si mesmo matar a fome. A guarda está certa; a fixture é que precisava
+# de um personagem com o que resolver.
+motor._set_field(TAVERNA / "viva-p28", "status.hunger", "faminto")
 ctx_viva = motor.get_context("viva-p28")
 intent_viva = {"action": "reflete sobre um compromisso", "target": None,
               "utterance": None, "movement": None, "note": ""}
 out_viva = selftest_helpers.resolve_scripted(intent_viva, ctx_viva, [
-    ("set_intention", {"content": "Vou ajudar a taverneira a encontrar o gato.",
-                       "status": "ativa"}),
-    ("narrate", {"narrative_hint": "resolve ajudar com o gato sumido"}),
+    # spec 073: firmar agora EXIGE `pronto_quando` — o fato que encerra o
+    # compromisso, que o MUNDO confere. "Ajudar a taverneira a encontrar o gato"
+    # é exatamente o compromisso que apodrecia: ninguém sabia dizer quando tinha
+    # acabado. Na fatia 1 o vocabulário é o do corpo; as outras três famílias da
+    # R2 (posse, lugar, fato lembrado) ainda não têm leitor, e por isso a cena
+    # deste teste foi trocada por uma que o mundo sabe fechar.
+    ("set_intention", {"content": "Vou matar minha fome antes do turno da noite.",
+                       "pronto_quando": "hunger", "status": "ativa"}),
+    ("narrate", {"narrative_hint": "resolve comer antes do turno da noite"}),
 ])
 check("caminho vivo: o loop de tools aplicou a intenção (via execute→queue→"
       "_apply_queued_delta, não motor.apply_resolution direto)",
@@ -202,10 +213,11 @@ check("caminho vivo: o loop de tools aplicou a intenção (via execute→queue�
 if _files("viva-p28"):
     fm_viva, body_viva = motor.read_doc(_files("viva-p28")[0])
     check("caminho vivo: conteúdo e status corretos", fm_viva.get("status") == "ativa"
-          and "gato" in body_viva)
+          and "fome" in body_viva)
 check("caminho vivo: nenhuma linha nova em app.inworld_effects (precedente "
       "create_memory — o relato mora no narrative_hint do turno, research.md D6)",
-      not any("gato" in s.lower() for s in server_app.inworld_effects(out_viva)))
+      not any("turno da noite" in s.lower()
+              for s in server_app.inworld_effects(out_viva)))
 
 # 11) FR-015: "origem" é garantia ESTRUTURAL — spec 045 aposentou resolve_action
 # (assinatura nomeada, sem **payload) junto com o Fluxo B. No guichê único que

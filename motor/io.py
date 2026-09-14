@@ -463,6 +463,21 @@ _WHY_BY_REGRA = {
     # hesitação qualquer (Princípio IX). Nada de "erro", "modelo", "sistema".
     # Antes desta spec, este caso não recusava — virava nota 5 e a ação acontecia.
     "juizo_ausente": "o gesto morre no meio — não é hora, ou não é assim",
+    # spec 073 — AS TRAVAS DO NASCIMENTO DE UM COMPROMISSO.
+    #
+    # Cada frase nasce de uma intenção REAL, podre, gravada no mundo (medicoes.md §2).
+    # E cada uma soa como o que a recusa É — uma percepção do personagem —, nunca como
+    # proibição de sistema: "não pode" convida a insistir; estas convidam a refazer.
+    "intencao_vazia": "não há compromisso nenhum aí — só o silêncio",
+    "intencao_meta": ("isso não é algo a fazer no mundo, é um jeito de pensar — "
+                      "um compromisso é o que você VAI fazer"),
+    "intencao_sem_criterio": ("um compromisso sem como saber que acabou não é "
+                              "compromisso, é vontade solta"),
+    "intencao_criterio_desconhecido": ("você não saberia dizer quando isso estaria "
+                                       "cumprido"),
+    "intencao_aponta_pra_si": ("quem você está esperando encontrar aí é você "
+                               "mesmo"),
+    "intencao_ja_cumprida": ("isso já é verdade agora — não há compromisso a firmar"),
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",
     "container_lotado": "não há vaga no contêiner",
     "nao_e_container": "isso não guarda nada dentro",
@@ -572,6 +587,10 @@ _WHY_BY_REGRA = {
     # `descansando` são REUSADOS da forja (mesmo fato, mesma frase — craft segue o
     # mesmo molde de trabalho retomável).
     "sem_viabilidade": "não há nada aqui que sustente o que você quer fazer",
+    # spec 071: erguer MORADIA é mais exigente que fazer coisa. Um item malfeito
+    # é um nó torto; um lugar malfeito é entrada nova no mapa, com rota, para
+    # sempre. A frase fala do LUGAR faltando, nunca de nota nem de piso.
+    "lugar_sem_sustentacao": "não dá para levantar nada que se habite com isto",
     "peca_de_outro_trabalho": "esse trabalho foi começado para outra coisa — não é isto que está em processo",
     # conserto pós-057 (achado da exploração): "sem bloco de trabalho" quase
     # sempre significa "já terminou", não "é de outra coisa" — reusado por

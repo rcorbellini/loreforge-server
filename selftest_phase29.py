@@ -225,10 +225,16 @@ check("caminho vivo: outcome expõe 'promise_ops_applied' (o canal novo)",
 
 intent_si = {"action": "reflete sobre um compromisso", "target": None,
             "utterance": None, "movement": None, "note": ""}
+# spec 073: firmar EXIGE `pronto_quando`, e o personagem precisa ter o que resolver
+# — a guarda do FR-013b recusa um compromisso cujo critério já é verdade. Nesta
+# fatia o vocabulário é o do corpo, então "visitar o ferreiro" (família LUGAR, ainda
+# sem leitor) deu lugar a um critério que o mundo sabe conferir. O que este check
+# prova segue sendo o mesmo: o canal `intentions` aparece no `_ACC_CH`.
+motor._set_field(motor.find_character_folder(TOR), "status.hunger", "faminto")
 out_si = selftest_helpers.resolve_scripted(intent_si, motor.get_context(TOR), [
-    ("set_intention", {"content": "Vou visitar o ferreiro amanhã.",
-                       "status": "ativa"}),
-    ("narrate", {"narrative_hint": "decide visitar o ferreiro"}),
+    ("set_intention", {"content": "Vou matar minha fome antes de dormir.",
+                       "pronto_quando": "hunger", "status": "ativa"}),
+    ("narrate", {"narrative_hint": "decide comer antes de dormir"}),
 ])
 check("achado do _ACC_CH: outcome de set_intention expõe 'intentions_applied' "
       "no caminho VIVO de tool-calling (antes desta spec, _ACC_CH não listava "

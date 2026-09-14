@@ -691,6 +691,25 @@ def _location_lineage(place_folder: Path, self_id: str = "") -> dict | None:
     return None
 
 
+def _carencias_do_corpo(self_fm: dict) -> list[dict]:
+    """O que o corpo PEDE, no formato de quem pode assumir um compromisso.
+
+    Lista VAZIA quando nada aperta — e aí a chave desce vazia, não some: ela é do
+    contrato (spec 067, completo por decisão) e quem filtra é o conector.
+    """
+    from ..intencoes.primitivas import _AINDA_APERTA
+    fora = []
+    for criterio, rotulo, o_que in (
+            ("hunger", hunger_label(self_fm), "matar a fome"),
+            ("thirst", thirst_label(self_fm), "matar a sede"),
+            ("sleep", fatigue_label(self_fm), "descansar")):
+        texto = str(rotulo or "").strip().lower()
+        if texto and any(a in texto for a in _AINDA_APERTA):
+            fora.append({"o_que": o_que, "porque": rotulo,
+                         "pronto_quando": criterio})
+    return fora
+
+
 def get_context(character_id: str) -> dict:
     """Monta o proximity_context do lugar atual do personagem.
 
@@ -959,6 +978,22 @@ def get_context(character_id: str) -> dict:
                 # (Princípios V/IX) — mesmo contrato de `consultar_momento`.
                 "sleep": sono_label(self_fm),
             },
+            # A CARÊNCIA ASSUMÍVEL (spec 073, FR-004/US1).
+            #
+            # A MESMA necessidade acima, dita como o que ela É: um pedido do corpo que
+            # pode virar COMPROMISSO. Não é segunda verdade — deriva dos mesmos
+            # rótulos, e some quando a necessidade passa.
+            #
+            # POR QUE ISTO PRECISOU EXISTIR. A fome aparece no material do turno 64
+            # vezes e produz 2 refeições (`medicoes.md` §1). O prompt já manda
+            # priorizar — "quando a necessidade aperta, ela fala mais alto que a
+            # índole" — e ele lê, é instruído, e não come. A causa não é desatenção:
+            # a fome nunca deixava de ser um RÓTULO que ele reconsiderava do zero a
+            # cada turno. Nunca virava compromisso, então nunca ganhava plano.
+            #
+            # Aqui ela chega como carência, com o critério que a encerraria — que é o
+            # que `set_intention` precisa em `pronto_quando`.
+            "carencias": _carencias_do_corpo(self_fm),
             # DERIVADO e BOOLEANO: o sinal que o CONECTOR lê para não acionar A Mente em
             # sono profundo. Separado do rótulo de propósito — o rótulo é prosa para o
             # personagem ler, isto é estado para a máquina decidir, e casar decisão com

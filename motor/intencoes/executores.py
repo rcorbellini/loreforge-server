@@ -31,6 +31,7 @@ _INTENTION_CONTEXT_CAP = 20
 
 
 from .primitivas import (  # noqa: F401
+    abandonar,
     close_intention,
     create_intention,
     get_active_intentions,
@@ -57,6 +58,7 @@ def _h_intentions(character_id, actor_folder, res, rolls):
         content = (op.get("content") or "").strip()
         status = op.get("status") or "ativa"
         intention_id = op.get("intention_id")
+        pronto_quando = op.get("pronto_quando")
         if not content:
             rejected.append({**op, "why": "'content' vazio"})
             continue
@@ -64,12 +66,34 @@ def _h_intentions(character_id, actor_folder, res, rolls):
             rejected.append({**op, "why": f"'status' inválido: {status}"})
             continue
         if intention_id:
+            # DESISTIR VIRA MEMÓRIA (spec 073, FR-015).
+            #
+            # Quem desiste é A MENTE — ela lê o rótulo de parada ("há muitas voltas
+            # sem andar") e decide largar; a medição (§8) é justamente que SEM esse
+            # rótulo o abandono é 0/32, e com ele 8/8 no extremo. O mundo não
+            # desiste por ninguém.
+            #
+            # Mas o que o mundo NÃO pode deixar acontecer é o silêncio: um
+            # compromisso que morre sem deixar lembrança não ensina nada, e é
+            # exatamente por isso que hoje há quatro intenções podres ativas há
+            # semanas com ZERO abandonos em 425 turnos (`medicoes.md` §1). Por isso
+            # este ramo passa por `abandonar`, que encerra E lembra, em vez do
+            # `update_intention` cru — que encerrava em silêncio.
+            if status == "abandonada":
+                largada = abandonar(actor_folder, intention_id, character_id)
+                if largada is None:
+                    rejected.append({**op, "why": "intention_id inexistente ou já "
+                                                  "não está ativa"})
+                    continue
+                applied.append({**op, "intention_id": intention_id})
+                continue
             if not update_intention(actor_folder, intention_id, content, status):
                 rejected.append({**op, "why": "intention_id inexistente ou já "
                                               "não está ativa"})
                 continue
             applied.append({**op, "intention_id": intention_id})
         else:
-            new_iid = create_intention(actor_folder, content, status)
+            new_iid = create_intention(actor_folder, content, status,
+                                       pronto_quando=pronto_quando)
             applied.append({**op, "intention_id": new_iid})
     return applied, rejected, []

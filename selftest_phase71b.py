@@ -289,8 +289,62 @@ _, corpo_depois = motor.io.read_doc(pasta_peca / "item.md")
 check("V4.2: e continua sendo o que foi terminado, depois de uma leitura",
       "bem colado" in corpo_depois, corpo_depois.strip()[:70])
 
+# =========================================================================== #
+# US5 — o piso de viabilidade para LUGAR (spec 071, achado da medição R14)
+# =========================================================================== #
+print("\n--- US5. erguer moradia é mais exigente que fazer coisa ---------------")
+
+from motor.craft.primitivas import PISO_VIABILIDADE_LOCAL  # noqa: E402
+
+VAG = "vagabundo-p71"
+_mk_char(VAG, "Vagabundo")
+
+
+def _craft_nu(viab, tipo):
+    """Craft SEM material nenhum — o caso que a medição pegou: 'levanto uma casa
+    aqui' tirava viabilidade 1, passava o gate único da 057 (`> 0`) e nascia um
+    LUGAR com rota, no mesmo ato, de graça."""
+    antes = {p.name for p in LOC.iterdir() if p.is_dir()}
+    r = motor.apply_resolution(VAG, {"craft_ops": [{
+        "materiais": [], "narracao": "levanto um abrigo aqui",
+        "viabilidade": viab, "duracao": 0, "tipo": tipo, "tamanho": "P",
+        "nome": f"Abrigo {viab}{tipo}", "descricao_alta": "Um abrigo bom.",
+        "descricao_baixa": "Um abrigo torto.",
+        "urgencia": "", "descricao_vencida": ""}]})
+    novas = {p.name for p in LOC.iterdir() if p.is_dir()} - antes
+    return r, novas
+
+
+r_nu, novas_nu = _craft_nu(1, "location")
+check("viabilidade 1 + location: RECUSA (a casa de graça não nasce mais)",
+      not r_nu.get("craft_ops_applied")
+      and "lugar_sem_sustentacao" in [x.get("regra") for x in (r_nu.get("rejected") or [])],
+      str(r_nu.get("rejected")))
+check("e nada foi criado — nem o lugar, nem a rota de acesso",
+      not novas_nu, str(novas_nu))
+
+r_borda, _ = _craft_nu(PISO_VIABILIDADE_LOCAL - 1, "location")
+check("logo abaixo do piso ainda recusa", not r_borda.get("craft_ops_applied"))
+
+r_piso, novas_piso = _craft_nu(PISO_VIABILIDADE_LOCAL, "location")
+check("no piso, o lugar nasce — e com a rota que o torna alcançável",
+      bool(r_piso.get("craft_ops_applied")) and len(novas_piso) == 2, str(novas_piso))
+
+# o gate é DE TIPO: a generosidade da 057 continua valendo para o que se carrega
+r_item, _ = _craft_nu(1, "item")
+check("viabilidade 1 + item: PASSA (a decisão da 057 fica intacta)",
+      bool(r_item.get("craft_ops_applied")), str(r_item.get("rejected")))
+r_obj, _ = _craft_nu(1, "object")
+check("viabilidade 1 + object: PASSA (idem)",
+      bool(r_obj.get("craft_ops_applied")), str(r_obj.get("rejected")))
+
+why_lugar = motor.io._WHY_BY_REGRA.get("lugar_sem_sustentacao", "")
+check("a recusa fala do lugar faltando, nunca de nota nem de piso",
+      bool(why_lugar) and not any(p in why_lugar.lower() for p in
+                                  ("nota", "piso", "viabilidade", "5")), why_lugar)
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + "; ".join(FAILS))
     sys.exit(1)
-print("fase 71b: extração + relógio OK.")
+print("fase 71b: extração + relógio + piso de lugar OK.")

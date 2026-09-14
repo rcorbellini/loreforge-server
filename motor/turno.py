@@ -25,6 +25,7 @@ from .estado import (
 from .io import (
     WRITE_LOCK,
     find_character_folder,
+    read_doc,
 )
 from .itens import (
     _apply_movement,
@@ -137,6 +138,49 @@ def _ensure_actor_touched(character_id: str, resolution: dict, outcome: dict) ->
         "reason": "garantia de consequência (FR-014)"})
 
 
+def _riscar_passo_cumprido(character_id: str, outcome: dict) -> dict | None:
+    """O ato ACEITO cumpriu o primeiro passo pendente do plano? (spec 073, FR-011).
+
+    Roda ANTES de `_fechar_compromissos` de propósito: riscar ZERA o relógio de
+    estagnação (FR-012), e um compromisso que fecha no mesmo turno deve fechar já
+    tendo contado o passo — senão o registro guarda um plano que chegou ao fim sem
+    nunca ter andado, e a medição de §13 lê estagnação onde houve progresso.
+
+    Nunca derruba o turno: um passo não riscado adia o relógio; um turno perdido
+    custa a vez inteira do jogador.
+    """
+    try:
+        pasta = find_character_folder(character_id)
+        return intencoes.casar_e_riscar(pasta, outcome.get("applied") or [],
+                                        character_id)
+    except Exception:
+        return None
+
+
+def _fechar_compromissos(character_id: str) -> list[dict]:
+    """As intenções cujo `pronto_quando` virou verdade (spec 073, FR-013).
+
+    QUEM FECHA É O MUNDO. A Mente nunca declara ter cumprido — declarar seria pontuar
+    o próprio desfecho (Princípio IX), o mesmo motivo que aposenta `give.intention_id`.
+
+    Devolve o que fechou para a NARRAÇÃO relatar: fechamento silencioso é incompleto
+    (Princípio X, obrigação 2 — aplicar, RELATAR, registrar).
+
+    Nunca derruba o turno: um compromisso que não fecha é bem menos grave que um turno
+    perdido, e o `needs` é lido de arquivo que pode estar em qualquer estado.
+    """
+    try:
+        from .percepcao.consultas import (fatigue_label, hunger_label, sono_label,
+                                          thirst_label)
+        pasta = find_character_folder(character_id)
+        fm, _ = read_doc(pasta / "character.md")
+        needs = {"hunger": hunger_label(fm), "thirst": thirst_label(fm),
+                 "fatigue": fatigue_label(fm), "sleep": sono_label(fm)}
+        return intencoes.fechar_por_criterio(pasta, needs)
+    except Exception:
+        return []
+
+
 def apply_resolution(character_id: str, resolution: dict,
                      ensure_action: bool = True) -> dict:
     """REPLAY em lote (spec 025/038): quebra a resolução em ações e empurra CADA UMA
@@ -200,6 +244,21 @@ def apply_resolution(character_id: str, resolution: dict,
         # fim de turno (ex-`_finalize_turn`, dissolvido — spec 038 L4)
         if ensure_action:
             _ensure_actor_touched(character_id, resolution, outcome)
+        # O COMPROMISSO QUE FECHOU (spec 073, FR-013/FR-013a).
+        #
+        # Roda A CADA TURNO, e isso é decisão, não descuido: a família de leitura de
+        # campo é GRÁTIS (lê `needs`, que já está no `character.md` fresco). E rodar
+        # todo turno é o que faz o compromisso fechar quando é cumprido POR ACASO —
+        # se a fome passa por outro motivo, o compromisso encerra. Cumprir é cumprir,
+        # não importa o caminho; conferindo só no fim do plano, o personagem seguiria
+        # perseguindo uma fome que já passou.
+        #
+        # DEPOIS de `_ensure_actor_touched` de propósito: é ele quem atualiza o corpo
+        # do ator, e conferir antes leria o `needs` de antes do ato.
+        riscado = _riscar_passo_cumprido(character_id, outcome)
+        if riscado:
+            outcome["passo_riscado"] = riscado
+        outcome["intencoes_fechadas"] = _fechar_compromissos(character_id)
         if isinstance(movement, dict) and movement.get("enter_route") \
                 and not (resolution.get("carry_ops") or []):
             mov = _apply_movement(character_id, movement["enter_route"])

@@ -435,6 +435,27 @@ def _validate_intention(fm: dict) -> list[str]:
     memoria_id = fm.get("memoria_id")
     if memoria_id is not None and not isinstance(memoria_id, str):
         errors.append("intention: 'memoria_id' deve ser o id de uma memória.")
+    # spec 073: o CRITÉRIO DE FIM e o RELÓGIO DA ESTAGNAÇÃO.
+    #
+    # Os dois sao campo, e nao prosa, pelo teste do Princípio XI: `pronto_quando`
+    # porque o MUNDO tem de conferi-lo (prosa nao se confere — foi o defeito de
+    # "sem pressa e com cuidado"), e `parada_desde` porque e um RELOGIO (rotulo nao
+    # conta voltas, e o refresh a cada passo exige um numero).
+    #
+    # `pronto_quando` e VOCABULARIO FECHADO, nao id de cena — por isso e validado
+    # contra a lista, no mesmo espirito de `status`.
+    pq = fm.get("pronto_quando")
+    if pq is not None:
+        from motor.intencoes.primitivas import _CRITERIO_POR_CAMPO
+        if pq not in _CRITERIO_POR_CAMPO:
+            errors.append(
+                f"intention: 'pronto_quando' inválido: '{pq}' "
+                f"(permitidos: {', '.join(sorted(_CRITERIO_POR_CAMPO))})."
+            )
+    for campo in ("parada_desde", "passos_cumpridos"):
+        val = fm.get(campo)
+        if val is not None and (isinstance(val, bool) or not isinstance(val, int)):
+            errors.append(f"intention: '{campo}' deve ser inteiro.")
     return errors
 
 

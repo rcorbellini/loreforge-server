@@ -45,6 +45,20 @@ _DURACAO_TABELA_S = {
 # exatamente como `forge_weapon` nunca conclui na abertura.
 LIMIAR_SINCRONO_S = 600
 
+# O PISO DE VIABILIDADE PARA `location` (spec 071). Abaixo disto, nenhum LUGAR
+# nasce — mesmo que a nota passe do gate geral do `craft` (`> 0`).
+#
+# Por que só para lugar: um item malfeito é um nó torto que atrapalha quem o fez;
+# um LUGAR malfeito é uma entrada nova no mapa, com rota, que fica ali para sempre
+# e todo mundo vê. A generosidade que a 057 escolheu (nota baixa produz coisa ruim
+# em vez de recusar) vale para o que se carrega, não para o que se habita.
+#
+# MEDIDO (research R14): "levanto uma casa aqui" sem material nenhum tira 1;
+# tentativas legítimas com material apontado tiram 6-7. O 5 fica no vale entre as
+# duas populações, sem encostar em nenhuma — CALIBRAGEM, e o número certo se
+# descobre jogando.
+PISO_VIABILIDADE_LOCAL = 5
+
 
 def indice(banda: str) -> int:
     return _IDX.get(banda, 0)

@@ -297,6 +297,25 @@ def inworld_effects(outcome: dict) -> list[str]:
             dito = frase(op)
             if dito:
                 ditos.append(dito)
+    # O COMPROMISSO QUE FECHOU (spec 073, FR-013 / Princípio X obrigação 2).
+    #
+    # Não passa por `inworld_phrases` de propósito: aquele registro é por CANAL DE OP,
+    # e isto não é uma op — é uma pós-condição do turno, que o mundo descobriu ao
+    # conferir o critério. Vem de `outcome["intencoes_fechadas"]`.
+    #
+    # E FECHAMENTO SILENCIOSO É INCOMPLETO. Um compromisso que se encerra sem uma
+    # palavra chegar ao jogador é exatamente o defeito que este bloco existe para
+    # impedir — o mesmo da Hulda e do gibão de placas, descrito acima.
+    #
+    # A frase diz o FATO, nunca o mecanismo: "a fome passou", jamais "a intenção
+    # int-… mudou para concluida". Quem narra é A Mente; isto é matéria-prima.
+    _FIM = {"hunger": "a fome passou, e o compromisso de matá-la se encerrou",
+            "thirst": "a sede passou, e o compromisso de matá-la se encerrou",
+            "sleep": "o corpo descansou, e o compromisso de dormir se encerrou"}
+    for fechada in outcome.get("intencoes_fechadas") or []:
+        dito = _FIM.get(fechada.get("pronto_quando"))
+        if dito:
+            ditos.append(dito)
     return ditos
 
 

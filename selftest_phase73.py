@@ -453,6 +453,43 @@ ok(criterio_cumprido_de := P.criterio_cumprido(
    "e com o rotulo certo o compromisso de fome FECHA (SC-001 deixa de ser inmedivel)")
 
 
+# --------------------------------------------------------------------------- #
+# FR-007 — o passo que nao nomeia ato nenhum
+# --------------------------------------------------------------------------- #
+#
+# O caso do Tobias, literal e ativo no mundo: "fazer um inventario completo dos
+# frascos de vidro". Nasceu impossivel e nada percebeu.
+
+print("\n--- o passo sem verbo (FR-007) ---")
+
+VERBOS = ["take", "eat", "travel_to", "forge_weapon", "examine"]
+
+ok(P.passos_sem_verbo("Matar minha fome.\n- take o pao\n- eat o pao", VERBOS) == [],
+   "plano feito de verbos do mundo passa inteiro")
+ok(P.passos_sem_verbo(
+       "Inventario.\n- fazer um inventario completo dos frascos de vidro",
+       VERBOS) == ["fazer um inventario completo dos frascos de vidro"],
+   "o passo do Tobias e reprovado: nao ha ato nenhum ali")
+
+# A CORRECAO AO FR-007: a regua e o VOCABULARIO DO MUNDO, nao a face da cena. Um
+# plano que atravessa cenas e bom, e validar contra a face rejeitaria justamente os
+# melhores — `forge_weapon` nao esta na face de quem ainda esta na praca.
+ok(P.passos_sem_verbo(
+       "Forjar a lamina.\n- travel_to Forja de Ferro\n- forge_weapon lamina",
+       VERBOS) == [],
+   "plano que ATRAVESSA cenas passa — a regua e o mundo, nao a face de agora")
+
+ok(P.passos_sem_verbo("So o compromisso, sem plano.", VERBOS) == [],
+   "compromisso sem plano nao tem passo a reprovar")
+ok(P.passos_sem_verbo("Qualquer coisa.\n- inventar", []) == [],
+   "sem vocabulario nao se reprova no escuro — regua ausente nao e regua zero")
+ok(P.passos_sem_verbo("Comer.\n- Take a maca", VERBOS) == [],
+   "o casamento e por palavra, insensivel a caixa")
+ok(P.passos_sem_verbo("Comer.\n- retaken o pao", VERBOS) ==
+   ["retaken o pao"],
+   "`take` DENTRO de outra palavra nao conta como verbo")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

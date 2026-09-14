@@ -205,10 +205,8 @@ def _apply_trade_ops(character_id: str, actor_folder: Path, resolution: dict,
             slot = (grasp_slot_of(_char_fm(recebedor)) or HAND_SLOT) if destino is None else None
             itens._set_item_slot(item_folder, slot)
             io.move_entity(item_folder, (destino or recebedor) / item_folder.name)
-        ap = {"parceiro": parceiro, "modo": modo, "dou": dou, "recebo": recebo}
-        if op.get("intention_id"):
-            ap["intention_id"] = op["intention_id"]
-        applied.append(ap)
+        applied.append({"parceiro": parceiro, "modo": modo,
+                        "dou": dou, "recebo": recebo})
         fisica.spend_fatigue(character_id, _CUSTO_ENTREGA)  # spec 030
     return applied, rejected
 
@@ -307,13 +305,11 @@ def _apply_persuade_give_ops(character_id: str, actor_folder: Path, resolution: 
 
 @registro.handler("trade_ops")
 def _h_trade(cid, af, res, rolls):
+    # FR-014 (spec 073): aqui havia o fechamento da própria intenção pelo
+    # `intention_id` que a Mente mandava junto da troca. Foi APOSENTADO — declarar
+    # que a troca cumpriu o compromisso é pontuar o próprio desfecho (Princípio IX).
+    # Quem fecha é `turno._fechar_compromissos`, conferindo o `pronto_quando`.
     applied, rejected = _apply_trade_ops(cid, af, res, rolls)
-    for ap in applied:
-        # spec 027: mesmo tratamento de itens._h_transfer — fechar a própria
-        # intenção é bônus, nunca vira `rejected` (FR-007).
-        intention_id = ap.pop("intention_id", None)
-        if intention_id:
-            ap["intention_closed"] = intencoes.close_intention(af, intention_id)
     return applied, rejected, []  # memória do ator via react_actor_memory (spec 038)
 
 

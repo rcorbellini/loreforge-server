@@ -204,8 +204,6 @@ def _buy_trade(name: str, args: dict, ctx) -> tuple[dict, bool]:
                                 "afeto_por_voce": motor.sentiment_label(motor.sentiment_toward(parceiro, ctx.actor)),
                                 "prosa": ctx.prosa}, ensure_ascii=False, indent=2)),
             default=3)   # o padrão é NÃO negociar
-        if args.get("intention_id"):
-            op["intention_id"] = args["intention_id"]
     ctx.negociados.add(parceiro)
     rej, rolled = ctx.apply_arbitrated("trade_ops", op)
     if rej:
@@ -269,16 +267,14 @@ TRADE = tool_spec(ToolSpec(
     description=("Troca bens por bens com OUTRO personagem presente, sem dinheiro. Só "
      "aparecem aqui os itens que o mundo marca como negociáveis. Ninguém "
      "entrega o que é seu sem precisar do que recebe: o parceiro pesa o "
-     "que ganha contra o que perde, e o valor das coisas também conta. Se "
-     "esta troca CUMPRE um compromisso seu, informe intention_id com o id "
-     "dela — a intenção fecha sozinha; omitir não muda nada."),
+     "que ganha contra o que perde, e o valor das coisas também conta."),
     params={"parceiro": _STR,
             "ofereco": {"type": "array", "items": {"type": "string"}},
             "quero": {"type": "array", "items": {"type": "string"}},
-            "necessidade": _NOTA, "intention_id": _STR},
+            "necessidade": _NOTA},
     required=("parceiro", "ofereco", "quero", "necessidade"),
+    # FR-014 (spec 073): sem `intention_id` — ver a nota em `itens/declaracao.py`.
     enum_sources={"parceiro": "negociar_com", "ofereco": "ofertar",
-                  "quero": "pedir",
-                  "intention_id": lambda s: s.active_intention_ids},
+                  "quero": "pedir"},
     apply=_buy_trade,
 ))

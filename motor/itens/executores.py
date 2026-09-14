@@ -267,7 +267,7 @@ def _apply_item_transfers(
     """`give`/`take`/`stow`/`drop` — ORQUESTRA `transfer_item` (spec 037). Este corpo
     é o SENTIDO da tool `give`: resolve as referências FROUXAS do Árbitro
     ('Frasco de Tintura Vermelha', 'chão da praça') para ids exatos, chama a primitiva
-    `transfer_item` para a física, e faz `intention_id`/`emprestimo` atravessarem até o
+    `transfer_item` para a física, e faz `emprestimo` atravessar até o
     applied (a memória e o dono-de-fato moram em `memoria._record_transfer`, no wrapper
     `_h_transfer`). `item` MUST estar presente; `to` MUST ser personagem, contêiner ou
     o próprio lugar. Entradas inválidas voltam em `rejected` (devlog), nunca descarte
@@ -365,10 +365,8 @@ def _apply_item_transfers(
             continue
         if ap is None:
             continue  # já está no destino — nada a fazer
-        # SENTIDO do give: intention_id (spec 027) e emprestimo (spec 036) atravessam
+        # SENTIDO do give: emprestimo (spec 036) atravessa
         # até o applied; a física em si não sabe nada deles.
-        if transfer.get("intention_id"):
-            ap["intention_id"] = transfer["intention_id"]
         if transfer.get("emprestimo"):
             ap["emprestimo"] = True
         applied.append(ap)
@@ -451,16 +449,12 @@ def _h_equip(cid, af, res, rolls):
 
 @registro.handler("item_transfers")
 def _h_transfer(cid, af, res, rolls):
+    # FR-014 (spec 073): aqui havia o fechamento da própria intenção pelo
+    # `intention_id` que a Mente mandava junto do `give`. Foi APOSENTADO — declarar
+    # que a entrega cumpriu o compromisso é pontuar o próprio desfecho (Princípio
+    # IX), o mesmo motivo que tira dela o direito de riscar o passo. Quem fecha é
+    # `turno._fechar_compromissos`, conferindo o `pronto_quando` a cada turno.
     applied, rejected = _apply_item_transfers(cid, af, res, rolls)
-    for ap in applied:
-        # spec 027: fechar a PRÓPRIA intenção é um bônus sobre a transferência,
-        # NUNCA pode virar `rejected` — `give` aplica por-op via _apply_op_now
-        # (arbiter.py), que trata QUALQUER rejeição como "a op inteira foi
-        # negada", mas a transferência real já aconteceu neste ponto. Falha
-        # aqui fica só anotada dentro do próprio applied (contracts/, FR-007).
-        intention_id = ap.pop("intention_id", None)
-        if intention_id:
-            ap["intention_closed"] = intencoes.close_intention(af, intention_id)
     # memória do ator (e do receptor/dono-de-fato) via react_actor_memory (spec 038):
     # a reação recompõe a cena com o MESMO `io._scene_entities(af.parent)`.
     return applied, rejected, []

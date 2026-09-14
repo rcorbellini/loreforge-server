@@ -478,6 +478,12 @@ _WHY_BY_REGRA = {
     "intencao_aponta_pra_si": ("quem você está esperando encontrar aí é você "
                                "mesmo"),
     "intencao_ja_cumprida": ("isso já é verdade agora — não há compromisso a firmar"),
+    # FR-007: o passo que não nomeia ato nenhum. O caso do Tobias, literal:
+    # "fazer um inventário completo dos frascos de vidro". A frase diz O QUE FALTA
+    # (um ato), não "parâmetro inválido" — recusa que soa como proibição do sistema
+    # convida a insistir; recusa que soa como ignorância convida a refazer.
+    "intencao_passo_sem_verbo": ("aí não há nada que você saiba FAZER — diga o ato, "
+                                 "não o resultado"),
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",
     "container_lotado": "não há vaga no contêiner",
     "nao_e_container": "isso não guarda nada dentro",

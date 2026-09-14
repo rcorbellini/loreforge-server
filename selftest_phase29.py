@@ -153,42 +153,38 @@ check("prometer: FR-004 (sem rolagem) — nenhum boom do forbid_roll() disparou"
       True)
 
 # --------------------------------------------------------------------------- #
-# 5) give com intention_id VÁLIDO e da própria pasta — fecha junto. `iid1`
-#    pertence a TORVIN (nasceu do prometer dele em 1), então é ELE quem tem
-#    que ser o ator aqui — só a própria pasta fecha a própria intenção.
+# 5-6) FR-014 (spec 073): `give.intention_id` foi APOSENTADO.
+#
+# Daqui (spec 027) ate a 073 existia um bonus: quem entregava mandava junto o id da
+# propria intencao, e ela fechava na mesma chamada. O que o aposenta e o mesmo
+# principio que tira da Mente o direito de riscar o passo — declarar que a entrega
+# cumpriu o compromisso e pontuar o proprio desfecho (Principio IX).
+#
+# Os checks antigos (`intention_closed=True`, `=False`, o parametro no manifest)
+# NAO foram apagados: viraram a trava do CONTRARIO. Um teste que some deixa a porta
+# reaberta em silencio pela proxima spec que achar a ideia conveniente.
 dar(TOR, MOEDA2)
 out5 = motor.apply_resolution(TOR, {"item_transfers": [
     {"item": MOEDA2, "to": ELGA, "intention_id": iid1}]})
-check("give+intention_id válido: item mudou de mão", dono(MOEDA2) == ELGA)
+check("FR-014: a entrega acontece (o id extra e IGNORADO, nao recusado)",
+      dono(MOEDA2) == ELGA)
 applied5 = out5.get("item_transfers_applied") or []
-check("give+intention_id válido: applied marca intention_closed=True",
-      len(applied5) == 1 and applied5[0].get("intention_closed") is True)
+check("FR-014: applied NAO carrega mais `intention_closed`",
+      len(applied5) == 1 and "intention_closed" not in applied5[0])
 fm_iid1, _ = motor.read_doc(
     motor.find_character_folder(TOR) / "intentions" / f"{iid1}.md")
-check("give+intention_id válido: a intenção realmente fechou no disco",
-      fm_iid1.get("status") == "concluida")
-check("give+intention_id válido: NENHUMA rejeição — não é isso que sinaliza sucesso/falha",
+check("FR-014: a intencao NAO fechou pela entrega — quem fecha e o mundo, "
+      "conferindo o `pronto_quando`",
+      fm_iid1.get("status") == "ativa")
+check("FR-014: e nada disso vira rejeicao — a entrega e valida como sempre foi",
       not out5.get("rejected"))
-
-# 6) give com intention_id INVÁLIDO — transferência PERMANECE, só o fechamento falha
-dar(TOR, MOEDA2)  # devolve pra Torvin poder tentar de novo
-out6 = motor.apply_resolution(TOR, {"item_transfers": [
-    {"item": MOEDA2, "to": ELGA, "intention_id": "int-nao-existe"}]})
-check("give+intention_id inválido: a transferência acontece MESMO ASSIM",
-      dono(MOEDA2) == ELGA)
-applied6 = out6.get("item_transfers_applied") or []
-check("give+intention_id inválido: applied marca intention_closed=False",
-      len(applied6) == 1 and applied6[0].get("intention_closed") is False)
-check("give+intention_id inválido: NUNCA vira `rejected` (FR-007) — "
-      "senão _apply_op_now trataria a op inteira como negada",
-      not out6.get("rejected"))
 
 # 7) give SEM intention_id — comportamento idêntico ao de sempre (zero regressão)
 dar(ELGA, MOEDA2)
 out7 = motor.apply_resolution(ELGA, {"item_transfers": [{"item": MOEDA2, "to": TOR}]})
 applied7 = out7.get("item_transfers_applied") or []
 check("give sem intention_id: aplica normalmente", dono(MOEDA2) == TOR)
-check("give sem intention_id: applied NÃO ganha a chave intention_closed",
+check("give: applied nunca ganha a chave intention_closed",
       len(applied7) == 1 and "intention_closed" not in applied7[0])
 
 # --------------------------------------------------------------------------- #
@@ -206,9 +202,15 @@ if tool_prometer:
           "exclusividade de give+emprestimo)",
           "item" not in props)
 tool_give = next((t for t in tools if t["name"] == "give"), None)
-check("manifest: 'give' ganhou intention_id opcional",
-      tool_give is not None and "intention_id" in tool_give["parameters"]["properties"]
-      and "intention_id" not in tool_give["parameters"]["required"])
+check("FR-014: 'give' NAO expoe mais intention_id no manifest — a Mente nao pode "
+      "nem pedir para fechar o proprio compromisso",
+      tool_give is not None
+      and "intention_id" not in tool_give["parameters"]["properties"])
+# `trade` so entra no manifest quando ha parceiro negociavel na cena, entao a
+# asserção e sobre a DECLARAÇÃO — que e o invariante, e vale em toda cena.
+from motor.comercio.declaracao import TRADE  # noqa: E402
+check("FR-014: 'trade' tambem NAO declara mais intention_id",
+      "intention_id" not in (TRADE.params or {}))
 check("manifest: 'give' ganhou 'emprestimo' opcional (spec 036)",
       tool_give is not None and "emprestimo" in tool_give["parameters"]["properties"]
       and "emprestimo" not in tool_give["parameters"]["required"])

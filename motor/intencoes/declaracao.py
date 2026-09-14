@@ -14,6 +14,20 @@ from ..registro import ToolSpec, tool_spec
 _CRITERIOS = ("hunger", "thirst", "sleep")
 
 
+def _verbos_do_mundo() -> set:
+    """Os verbos que EXISTEM e estão ativos neste mundo (FR-007).
+
+    Sai do mesmo registro que monta a face, e respeita o manifesto de ativação
+    (spec 038, US2) — um mundo que desligou `forge_weapon` não aceita um plano que
+    o cite. Import tardio de propósito: `registro` já está carregado quando a tool
+    roda, e amarrá-lo no topo faria ciclo.
+    """
+    from .. import ativacao, registro
+    ativos = ativacao.active_tool_ids()
+    nomes = {n for sp in registro.specs().values() for n in sp.names}
+    return nomes if ativos is None else (nomes & set(ativos))
+
+
 def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
     content = (args.get("content") or "").strip()
     status = args.get("status") or "ativa"
@@ -51,6 +65,18 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
         if criterio_cumprido((ctx.context.get("self") or {}).get("needs"),
                              pronto_quando):
             return ctx.err(_FRASE["intencao_ja_cumprida"], "pronto_quando"), False
+        # E A TRAVA DO PASSO SEM VERBO (FR-007). O caso do Tobias: "fazer um
+        # inventário completo dos frascos de vidro" não nomeia ato nenhum que o
+        # mundo saiba executar — nasce impossível, e nada percebia.
+        #
+        # A régua é o VOCABULÁRIO DO MUNDO, não a face da cena (ver a nota em
+        # `primitivas.passos_sem_verbo`): um plano que atravessa cenas — "ir à
+        # forja", depois "forjar" — é bom, e a face de quem está na praça não tem
+        # `forge_weapon`. Validar contra a face rejeitaria os melhores planos.
+        from ..intencoes.primitivas import passos_sem_verbo
+        ruins = passos_sem_verbo(content, _verbos_do_mundo())
+        if ruins:
+            return ctx.err(_FRASE["intencao_passo_sem_verbo"], "content"), False
 
     ctx.queue["intentions"].append({"intention_id": intention_id,
                                     "content": content, "status": status,

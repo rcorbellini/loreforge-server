@@ -374,6 +374,49 @@ def _referencias(aplicadas: list, ator_id: str) -> list[str]:
     return out
 
 
+# === O PASSO SEM VERBO (spec 073, FR-007) ==================================== #
+#
+# O defeito do Tobias, literal e ativo no mundo: *"fazer um inventário completo dos
+# frascos de vidro"*. Não há verbo nenhum ali que o mundo saiba executar — nasceu
+# impossível, e nada percebeu. É o irmão da meta-instrução do Draven: uma trava do
+# NASCIMENTO, determinística, sem juízo de modelo.
+#
+# CONTRA O QUE SE VALIDA — e isto é uma CORREÇÃO ao FR-007 como escrito.
+#
+# O requisito dizia "validados contra a FACE". A face é da CENA, e um plano de mais
+# de um passo atravessa cenas de propósito: "ir à Forja de Ferro" e depois "forjar a
+# lâmina" é plano bom, e `forge_weapon` NÃO está na face de quem ainda está na praça.
+# Validar contra a face rejeitaria exatamente os planos que se movem — os melhores.
+#
+# A régua certa é o VOCABULÁRIO DO MUNDO: os verbos que existem, ativos neste mundo.
+# Ela pega o caso que importa (o passo que não nomeia ato nenhum) e deixa passar o
+# que só depende de o personagem chegar lá.
+def passos_sem_verbo(content: str, verbos) -> list[str]:
+    """Os passos do plano que não nomeiam nenhum verbo do mundo, na ordem.
+
+    Compara por SEQUÊNCIA DE PALAVRAS INTEIRAS sobre o texto dobrado: `take` casa em
+    "take o pão" e em "Take a maçã", e NÃO casa dentro de "retaken". O verbo também é
+    dobrado, que é o que faz `travel_to` casar com "travel to Forja" — o underscore
+    vira espaço dos dois lados, e a comparação continua sendo de palavra inteira.
+    (A primeira versão testava `verbo in passo.lower()` como atalho para o
+    underscore, e o próprio teste pegou: "retaken o pão" passava.)
+
+    Um `content` sem plano nenhum (só o compromisso) devolve lista vazia — não há
+    passo a reprovar, e um compromisso sem plano continua legítimo.
+    """
+    vocab = [_dobrar(v).strip() for v in (verbos or [])]
+    vocab = [v for v in vocab if v]
+    if not vocab:
+        return []          # sem vocabulário não há régua; nunca reprove no escuro
+    ruins = []
+    for passo in passos_do_plano(content):
+        alvo = _dobrar(passo)
+        if any(f" {v} " in alvo for v in vocab):
+            continue
+        ruins.append(passo)
+    return ruins
+
+
 def casar_e_riscar(folder: Path, aplicadas: list, ator_id: str) -> dict | None:
     """O ato aceito cumpriu o primeiro passo pendente? Se sim, risca (FR-011).
 

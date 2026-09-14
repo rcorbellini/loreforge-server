@@ -300,6 +300,7 @@ from .intencoes import (  # noqa: F401
     criterio_cumprido,
     fechar_por_criterio,
     get_active_intentions,
+    passos_sem_verbo,
     riscar_passo,
     rotulo_de_parada,
     update_intention,

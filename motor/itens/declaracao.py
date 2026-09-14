@@ -258,8 +258,6 @@ def _give(name: str, args: dict, ctx) -> tuple[dict, bool]:
     # posse (item na mão) e slot (não vestido) são AUTORIDADE do executor agora
     # (item 31): a recusa volta corrigível, com os validos. Aqui só o SENTIDO de give.
     give_op = {"item": item, "to": to, "mode": "give"}
-    if args.get("intention_id"):
-        give_op["intention_id"] = args["intention_id"]
     if args.get("emprestimo"):
         give_op["emprestimo"] = True
     rej = ctx.apply_op_now("item_transfers", give_op)
@@ -476,11 +474,7 @@ TAKE = tool_spec(ToolSpec(
 GIVE = tool_spec(ToolSpec(
     names=("give",),
     description=(
-        "Entrega um item seu na mão de outro personagem presente. Se esta "
-        "entrega CUMPRE algo que você mesmo pretendia (devolver, pagar, "
-        "completar um compromisso seu), informe intention_id com o id dela — "
-        "a intenção fecha automaticamente. Omitir não muda nada: a entrega "
-        "funciona normalmente, sem tocar em nenhuma intenção. Se emprestimo "
+        "Entrega um item seu na mão de outro personagem presente. Se emprestimo "
         "for true, a posse muda mas o DONO não — você continua sendo "
         "reconhecido como dono de fato (ninguém mais consegue vender/"
         "oferecer o item enquanto isso for lembrado), sem precisar de "
@@ -489,11 +483,13 @@ GIVE = tool_spec(ToolSpec(
         "dias'), use promise (sem item) OU faça quem recebeu prometer "
         "verbalmente — os dois se somam, não se substituem."
     ),
-    params={"item": _STR, "to": _STR, "intention_id": _STR,
-            "emprestimo": {"type": "boolean"}},
+    # FR-014 (spec 073): `intention_id` foi APOSENTADO daqui. Fechar o próprio
+    # compromisso no ato de entregar é pontuar o próprio desfecho (Princípio IX) — o
+    # mesmo motivo que tira da Mente o direito de riscar o passo. Quem fecha é o
+    # MUNDO, conferindo o `pronto_quando`, a cada turno, de graça.
+    params={"item": _STR, "to": _STR, "emprestimo": {"type": "boolean"}},
     required=("item", "to"),
-    enum_sources={"item": "give", "to": "give_to",
-                  "intention_id": lambda s: s.active_intention_ids},
+    enum_sources={"item": "give", "to": "give_to"},
     apply=_give,
 ))
 

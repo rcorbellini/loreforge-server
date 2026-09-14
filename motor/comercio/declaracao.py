@@ -160,6 +160,26 @@ def _persuade_give(name: str, args: dict, ctx) -> tuple[dict, bool]:
                                      "nota": "o desfecho sai na aplicação"}}, False
 
 
+REGUA_COBRANCA = """\
+Régua do CUMPRIMENTO (dimensione SEMPRE por ela, lendo o que o MUNDO lembra da
+promessa e do que veio depois dela — nunca o desejo de quem cobra, nunca o fato de o
+player ter pedido; reavalie a cada cena):
+  0  não cumpriu nada do que foi prometido (não paga, sem teste)
+  1  fez o contrário do combinado
+  2  começou e largou
+  3  cumpriu mal, ou cobra na frente de gente, constrangendo
+  4  cumpriu em parte, e faz tempo
+  5  cumpriu faz tempo, ou cumpriu em parte — o caso comum
+  6  cumpriu o essencial, com sobras pendentes
+  7  cumpriu, mas ele não presenciou — precisa acreditar na sua palavra
+  8  cumpriu e há quem tenha visto
+  9  cumpriu à vista dele, e ainda é assunto recente
+  10 cumpriu exatamente o combinado, ele viu, e foi há pouco (paga sem teste)
+PUXAM PARA BAIXO: cobrar antes da hora combinada, cobrar com agressividade, cobrar o
+que não se cumpriu. O PADRÃO É 4-5, NÃO 7: quem cobra sempre acha que cumpriu mais do
+que o outro viu, e nota alta precisa de um fato na cena ou na memória que a sustente."""
+
+
 def _buy_trade(name: str, args: dict, ctx) -> tuple[dict, bool]:
     parceiro = args.get("parceiro")
     outros_n = ctx.validos({c: n for c, n in ctx.chars.items() if c != ctx.actor})
@@ -278,3 +298,104 @@ TRADE = tool_spec(ToolSpec(
                   "quero": "pedir"},
     apply=_buy_trade,
 ))
+
+
+def _cobrar(name: str, args: dict, ctx) -> tuple[dict, bool]:
+    """COBRAR o que foi prometido (spec 073, US6).
+
+    A guarda PROPÕE (resolve referências, barra o que é erro corrigível); o Motor
+    DECIDE (a promessa existe? o dado passou?). A régua é lida UMA VEZ por turno por
+    alvo — ver `ctx.cobrados`.
+    """
+    de_quem = args.get("de_quem")
+    item = args.get("item")
+    outros_n = ctx.validos({c: n for c, n in ctx.chars.items() if c != ctx.actor})
+    if de_quem == ctx.actor:
+        return ctx.err("ninguém cobra de si mesmo — escolha outro personagem "
+                       "presente", "de_quem", outros_n), False
+    if de_quem not in ctx.chars:
+        return ctx.err(f"'{de_quem}' não é um personagem presente", "de_quem",
+                       outros_n), False
+    # O VEREDITO É ÚNICO NO TURNO. A cena se lê uma vez; recusado o desfecho, re-ler a
+    # régua com nota maior seria contornar o Árbitro por reescrita de régua.
+    if de_quem in ctx.cobrados:
+        return ctx.err(f"a cobrança a '{de_quem}' já aconteceu neste turno — o "
+                       "desfecho sai na aplicação; NÃO repita"), False
+    op = {"de_quem": de_quem}
+    if item:
+        op["item"] = item
+    # CONTRATO DE ANÁLISE: a régua lê o que o MUNDO lembra, não o que quem cobra acha.
+    # O afeto desce em RÓTULO (o mundo é que soma as memórias — pedir ao Árbitro que
+    # as some de cabeça foi medido ruim na spec 016).
+    # A DÍVIDA DESCE COMO DADO, e o NOME DA CHAVE CARREGA O SUJEITO.
+    #
+    # Medido em três variantes (`tests/exploracao/sondagem_cobranca.py`, e o
+    # registro em `medicoes.md` §14):
+    #
+    #   V0  sem o fato                        média 2.31, 2 contrastes frouxos
+    #   V1  `o_que_ele_prometeu`              média 1.06, 2 contrastes INVERTIDOS
+    #   V2  `a_divida_dele_com_voce`          média 3.88, todos os contrastes OK
+    #
+    # A V1 foi um erro meu, e ele ensina: a régua julga se VOCÊ cumpriu a sua parte,
+    # e uma chave chamada "o que ele prometeu" trocou o sujeito do juízo — o modelo
+    # passou a perguntar se ELE cumpriu, e como ele ainda não pagou (é por isso que
+    # se cobra), a nota desabou para 0. O nome da chave não é rótulo: é parte do
+    # contrato de análise.
+    promessa = motor.memoria.promessa_em_texto(
+        motor.memoria.promessa_viva_de(ctx.actor, de_quem))
+    op["cumprimento"] = juizo.nota(
+        ctx.ask(REGUA_COBRANCA + juizo.NOTA_0_10,
+                json.dumps({"de_quem": ctx.describe(de_quem),
+                            "a_divida_dele_com_voce": promessa,
+                            "afeto_por_voce": motor.sentiment_label(
+                                motor.sentiment_toward(de_quem, ctx.actor)),
+                            "prosa": ctx.prosa}, ensure_ascii=False, indent=2)),
+        default=4)   # o padrão é a dúvida, não o pagamento
+    ctx.cobrados.add(de_quem)
+    rej, rolled = ctx.apply_arbitrated("cobranca_ops", op)
+    if rej:
+        return ctx.arb_deny(rolled, ("cobrar", de_quem), {"cobrar": de_quem}, rej)
+    return {"ok": True, "aplicado": {"de_quem": de_quem,
+                                     "nota": "o desfecho sai na aplicação"}}, False
+
+
+COBRAR = tool_spec(ToolSpec(
+    names=("cobrar",),
+    juizo=(("cumprimento", REGUA_COBRANCA),),
+    description=(
+        "Reivindica de OUTRO personagem presente aquilo que ele prometeu a você. "
+        "Use quando o personagem decide COBRAR — não para perguntar se o outro "
+        "pretende pagar (isso é ask_about, e não obriga ninguém). Aqui duas "
+        "vontades se opõem: você exige, ele decide. Só cabe cobrar de quem você "
+        "LEMBRA ter prometido algo; sem essa lembrança, não há o que reivindicar. "
+        "Você NÃO decide o desfecho: o mundo pesa o quanto você cumpriu a sua "
+        "parte, o que ele guarda de você, e o acaso. Ele pode pagar, regatear "
+        "(pagar menos, ou em outra coisa) ou negar — e negar deixa marca nos dois. "
+        "Informe item se há algo dele que você aceita como pagamento. UMA vez por "
+        "pessoa no turno."
+    ),
+    params={"de_quem": _STR, "item": _STR},
+    required=("de_quem",),
+    enum_sources={"de_quem": "negociar_com", "item": "cobrar_item"},
+    apply=_cobrar,
+))
+
+
+@inworld("cobranca_ops_applied")
+def _iw_cobranca(op):
+    """O desfecho da cobrança, sem NENHUM número (Princípio V).
+
+    Os três desfechos são coisas diferentes na cena, e por isso três frases: pagar
+    encerra, regatear deixa um resto, negar deixa uma dívida de pé. A última é a que
+    o jogo precisa que se leia — é dela que nasce a memória que endurece os dois.
+    """
+    de_quem = name_of(op.get("de_quem"))
+    item = op.get("item")
+    desfecho = op.get("desfecho")
+    if desfecho == "nega":
+        return f"cobrou {de_quem}, e não recebeu nada"
+    if desfecho == "regateia":
+        return f"cobrou {de_quem}, e saiu com menos do que era devido"
+    if item:
+        return f"cobrou {de_quem}, e recebeu {name_of(item)}"
+    return f"cobrou {de_quem}, e ele acertou o que devia"

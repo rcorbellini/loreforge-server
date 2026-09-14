@@ -9,10 +9,13 @@ from .primitivas import (  # noqa: F401
     check_purchase_affordable,
     offered_by,
     roll_persuade_give_check,
+    cobranca_tendencia,
+    roll_cobranca_check,
     roll_trade_check,
     trade_terms,
 )
 from .executores import (  # noqa: F401
+    _apply_cobranca_ops,
     _apply_persuade_give_ops,
     _apply_trade_ops,
     _h_persuade_give,

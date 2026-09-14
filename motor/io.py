@@ -484,6 +484,12 @@ _WHY_BY_REGRA = {
     # convida a insistir; recusa que soa como ignorância convida a refazer.
     "intencao_passo_sem_verbo": ("aí não há nada que você saiba FAZER — diga o ato, "
                                  "não o resultado"),
+    # COBRAR (spec 073, US6). As duas frases dizem coisas diferentes de propósito:
+    # a primeira é IGNORÂNCIA (convida a verificar), a segunda é RELUTÂNCIA DELE
+    # (convida a insistir noutra hora, ou a lembrar disso). Nenhuma soa como
+    # proibição do sistema — recusa que soa assim faz o modelo teimar.
+    "sem_promessa": "você não lembra de ele ter prometido nada disso",
+    "nao_pagou": "ele não paga — e a dívida fica de pé entre vocês",
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",
     "container_lotado": "não há vaga no contêiner",
     "nao_e_container": "isso não guarda nada dentro",

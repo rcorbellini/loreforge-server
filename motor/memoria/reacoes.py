@@ -75,6 +75,29 @@ _ACTOR_CANAIS = frozenset({
 })
 
 
+def _grava_uma(quem: str, mem: dict) -> list:
+    """Grava UMA memória declarada pela tool, na perspectiva de `quem`.
+
+    Extraída do corpo de `react_actor_memory` sem mudar o que ela faz — é o mesmo
+    caminho de sempre, agora nomeável, para que um fato possa marcar mais de uma
+    pessoa (spec 073, US6: o calote marca os dois).
+    """
+    if mem.get("about"):
+        mid, vezes = remember_recurring(
+            quem, mem["content"], about=mem["about"], evento=mem.get("event"),
+            involved=mem.get("involved"), summary=mem.get("summary", ""),
+            intensity=mem.get("intensity", "small"),
+            frag=mem.get("reincidencia", ""), valence=mem.get("valence"))
+        return ([{"target": quem, "id": mid, "event": mem.get("event"),
+                  "vezes": vezes}] if mid else [])
+    mid = remember(quem, mem["content"],
+                   intensity=mem.get("intensity", "medium"),
+                   involved=mem.get("involved"), valence=mem.get("valence"),
+                   evento=mem.get("event"), domain=mem.get("domain"),
+                   summary=mem.get("summary", ""))
+    return [{"target": quem, "id": mid, "event": mem.get("event")}] if mid else []
+
+
 @fatos.reacao()  # TODO fato: o legado despacha por canal; a tool NOVA traz o contrato
 def react_actor_memory(fato, actor_folder, present) -> list:
     """A lembrança de quem AGIU (e do participante direto), derivada do fato.
@@ -100,8 +123,27 @@ def react_actor_memory(fato, actor_folder, present) -> list:
         if fato.status not in ("applied", "rejected") or not isinstance(op, dict):
             return []
         mem = op.get("memory")
-        if not isinstance(mem, dict) or not mem.get("content"):
+        # UM FATO PODE MARCAR DOIS (spec 073, US6). `memory` aceita um dict OU uma
+        # LISTA deles, e cada entrada pode nomear `quem` lembra (default: o ator).
+        #
+        # Isto nasceu porque o calote precisa gravar nos DOIS lados com valências
+        # diferentes — quem levou o cano e quem o deu —, e a via genérica da 038 só
+        # sabia gravar em quem agiu. A saída errada seria escrever um recordador
+        # legado a mais (`_record_cobranca`) e voltar a hardcodear canal aqui, que é
+        # exatamente o que a 038 matou. Consertar a PRIMITIVA deixa a memória de
+        # dois lados disponível para toda tool futura, sem editar esta reação de
+        # novo (SC-003).
+        entradas = mem if isinstance(mem, list) else [mem]
+        entradas = [m for m in entradas if isinstance(m, dict) and m.get("content")]
+        if not entradas:
             return []
+        if len(entradas) > 1:
+            saida = []
+            for m in entradas:
+                saida += _grava_uma(m.get("quem") or cid, m)
+            return saida
+        mem = entradas[0]
+        cid = mem.get("quem") or cid
         # O FATO QUE SE REPETE, declarado pela própria tool (SC-003: uma tool nova
         # não edita esta reação). Com `about` no contrato, a repetição RENOVA e
         # ADENSA em vez de criar arquivo novo — é o que impede a recusa re-tentada

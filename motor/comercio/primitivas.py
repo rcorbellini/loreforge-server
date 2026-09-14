@@ -270,6 +270,85 @@ def trade_terms(op: dict, fms_dou: list, fms_recebo: list) -> tuple[int, float]:
     return necessidade, razao
 
 
+# === COBRAR (spec 073, US6 / FR-017) ========================================= #
+#
+# Reivindicar o que foi prometido a você. NÃO é "perguntar se ele vai pagar" —
+# perguntar é `ask_about`, custa nada e não obriga ninguém. Cobrar é OPOR VONTADES,
+# e por isso é arbitrada.
+#
+# O FATO E O JUÍZO, SEPARADOS (`loreforge-arbiter-boundary`):
+#
+#   houve promessa?          -> o MUNDO, por memória (spec 027, gravada dos dois lados)
+#   o combinado foi entregue? -> o MUNDO, por memória
+#   ele paga AGORA?           -> o ÁRBITRO, por régua, colorida pelo afeto, no dado
+#
+# Só o terceiro é juízo. Confundi-los seria pedir ao modelo que somasse memórias de
+# cabeça — que ele faz mal (a spec 016 mediu nota 7 para quem o personagem espancou).
+def cobranca_tendencia(nota: int) -> str:
+    """O que a NOTA sozinha indicava — para saber se o dado VIROU o resultado."""
+    return "paga" if int(nota) >= 5 else "nega"
+
+
+def roll_cobranca_check(actor_fm: dict, char_id: str, alvo_id: str, nota: int,
+                        rolls: list | None = None,
+                        alvo_fm: dict | None = None) -> tuple[str, dict]:
+    """Devolve (desfecho, roll_info). desfecho ∈ {'paga','regateia','nega'}.
+
+    `d20 + mod(CHA)` contra `persuade_dc(nota)` = `20 − 2×nota`. REUSA A CURVA: a
+    aritmética de vencer uma relutância grau N não muda com o que se pede, e uma
+    segunda curva seria duas calibragens a manter em sincronia.
+
+    O DADO SOME em três portões (o quarto, a ausência de promessa, é do executor —
+    ele nem chega aqui):
+
+      · PORTÃO DE TRAUMA, genérico da spec 023: quem sofreu trauma vivo de quem
+        cobra não coopera. Força a nota a 0 ANTES do dado;
+      · nota 0 — não cumpriu nada. Nega, sem teste;
+      · nota 10 — cumpriu à vista dele, há pouco. Paga, sem teste.
+
+    Entre 1 e 9, a DISTÂNCIA à DC governa o meio-termo, no molde do
+    `roll_steal_check`: passou → PAGA; falhou por ≤5 → REGATEIA (paga menos, ou em
+    outra coisa); falhou por mais → NEGA. Nota e DC são SEGREDO DO MUNDO.
+    """
+    nota = int(nota)
+    if memoria.has_trauma_from(alvo_id, char_id):
+        nota = 0
+    if nota <= 0 or nota >= 10:
+        desfecho = "paga" if nota >= 10 else "nega"
+        info = {"tipo": "cobranca", "personagem": char_id, "alvo": alvo_id,
+                "resultado": desfecho, "virada": False, "critico": None,
+                "rolagem": None}
+        if rolls is not None:
+            rolls.append(info)
+        return desfecho, info
+    d20 = rolagem._roll_d20()
+    mod = rolagem.attr_modifier((actor_fm.get("attributes") or {}).get("CHA", 10))
+    dc = rolagem.persuade_dc(nota)
+    total = d20 + mod
+    if total >= dc:
+        desfecho = "paga"
+    elif dc - total <= 5:
+        desfecho = "regateia"
+    else:
+        desfecho = "nega"
+    natural = cobranca_tendencia(nota)
+    info = {
+        "tipo": "cobranca", "personagem": char_id, "alvo": alvo_id,
+        "resultado": desfecho,
+        # A VIRADA é sobre o que a cena fazia esperar: tudo apontava para ele pagar
+        # e ele negou, ou o contrário. O `regateia` NÃO é virada — é o meio-termo
+        # que a faixa prevê, não uma surpresa.
+        "virada": (natural == "paga" and desfecho == "nega")
+                  or (natural == "nega" and desfecho == "paga"),
+        "critico": ("sucesso" if (d20 == 20 and desfecho == "paga")
+                    else "falha" if (d20 == 1 and desfecho == "nega") else None),
+        "rolagem": {"d20": d20, "mod": mod, "total": total, "dc": dc},
+    }
+    if rolls is not None:
+        rolls.append(info)
+    return desfecho, info
+
+
 def roll_persuade_give_check(actor_fm: dict, char_id: str, alvo_id: str,
                              destino_id: str, item_id: str, disposicao: int,
                              rolls: list | None = None,

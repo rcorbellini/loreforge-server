@@ -2276,6 +2276,56 @@ def has_trauma_from(quem_id: str, agressor_id: str | None) -> bool:
     return False
 
 
+def promessa_viva_de(quem_id: str, promissor_id: str | None) -> dict | None:
+    """`quem_id` lembra de `promissor_id` ter prometido algo? (spec 073, US6).
+
+    O PRIMEIRO dos quatro portões do `cobrar`, e o que a torna barata: sem promessa
+    na memória de quem cobra, a cobrança é recusada SEM ROLAR DADO.
+
+    É FATO, não juízo (`loreforge-arbiter-boundary`). "Houve promessa?" sai de
+    memória que já existe dos dois lados desde a spec 027 — o `promise` grava em
+    quem promete ("Prometi a X: …") e em quem ouve ("X me prometeu: …"). Nenhum
+    campo novo, nenhuma entidade nova: só se consulta o que o mundo já guarda.
+
+    Devolve a memória mais RECENTE (para a régua saber há quanto tempo foi), ou
+    `None`. Só memória VIVA conta: promessa esquecida não se cobra, e esse é o
+    prazo social que o mundo já tem.
+    """
+    if not promissor_id or quem_id == promissor_id:
+        return None
+    achadas = [m for m in _iter_memories(quem_id)
+               if _is_alive(m) and m.get("evento") == "promise"
+               and promissor_id in memory_involved(m)]
+    if not achadas:
+        return None
+    return max(achadas, key=lambda m: m.get("timestamp_start") or 0)
+
+
+def promessa_em_texto(mem: dict | None) -> dict | None:
+    """A promessa como o Árbitro precisa vê-la: O QUÊ e HÁ QUANTO TEMPO, em rótulo.
+
+    O FATO DESCE COMO DADO (spec 073, US6). Medido: sem isto, o `llama3.1:8b` lê
+    *"você deixou as barras enquanto ele estava fora"* como **não cumpriu** e dá
+    nota 0 — e nota 0 elimina o dado, então quem entregou de verdade nunca recebe.
+    Duas redações da régua foram medidas contra esse caso (V0 e V1, uma delas com
+    uma linha explícita separando "não presenciou" de "não aconteceu"): **as duas
+    deram 0,00 em 3/3**. Não é redação; é que a pergunta "houve entrega?" não é
+    juízo — é FATO, e o mundo já o tem guardado.
+
+    Então ele desce pronto, e o modelo julga só o que lhe cabe julgar. O instante
+    vira RÓTULO (Princípio V) — "há pouco", "ontem" —, nunca epoch.
+
+    QUEM MONTA A CHAVE É QUEM CHAMA, e o nome dela importa: medido, uma chave
+    chamada `o_que_ele_prometeu` TROCA O SUJEITO do juízo (o modelo passa a julgar
+    se ELE cumpriu, e a nota desaba para 0). Ver a nota em `comercio/declaracao.py`.
+    """
+    if not mem:
+        return None
+    idade = max(0.0, time.time() - float(mem.get("timestamp_start") or 0))
+    return {"o_que": (mem.get("summary") or "").strip(),
+            "desde": _recency_label(idade)}
+
+
 def _recency_label(age: float) -> str:
     if age < 120:
         return "agora mesmo"

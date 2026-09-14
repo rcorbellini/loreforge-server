@@ -151,8 +151,16 @@ for p in sorted((RAIZ / "motor").rglob("*.py")):
                 fora.append(f"{p.relative_to(RAIZ)}:{n}")
 check("toda chamada de juízo vive em declaracao.py (logo, sob _execute)",
       not fora, ", ".join(fora))
-check("o inventário de chamadas de juízo bate com o baseline da spec (19)",
-      dentro == 19, f"achei {dentro}")
+# O INVENTÁRIO É UM PORTÃO, não um contador. Ele existe para que nenhuma chamada de
+# juízo nova entre sem alguém decidir que ela devia entrar — cada uma custa uma ida
+# ao modelo por turno, e a 071 mediu que é aí que o turno engorda.
+#
+# 19 -> 20 na spec 073 (US6): `cobrar` pede a nota de CUMPRIMENTO. É chamada nova, e
+# é deliberada — "ele paga agora?" é a única das três perguntas da cobrança que é
+# juízo. As outras duas ("houve promessa?", "foi entregue?") são FATO, e saem de
+# memória que já existia desde a spec 027, sem custo de modelo.
+check("o inventário de chamadas de juízo bate com o baseline da spec (20)",
+      dentro == 20, f"achei {dentro}")
 
 print()
 if falhas:

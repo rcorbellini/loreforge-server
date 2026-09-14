@@ -74,6 +74,7 @@ from .primitivas import (  # noqa: F401
     check_availability,
     check_purchase_affordable,
     offered_by,
+    roll_cobranca_check,
     roll_persuade_give_check,
     roll_trade_check,
     trade_terms,
@@ -319,3 +320,158 @@ def _h_persuade_give(cid, af, res, rolls):
     # memória gravada na perspectiva do ALVO via react_actor_memory (spec 038):
     # a reação recompõe a cena com o MESMO `io._scene_entities(af.parent)`.
     return applied, rejected, []
+
+
+# A MEMÓRIA DA COBRANÇA, nos DOIS lados (spec 073, US6).
+#
+# O que faz esta tool valer é o CALOTE: negar deixa memória `large` NEGATIVA nos dois,
+# e `large` é justamente o que `sofreu_trauma_de` procura — daí em diante eles não
+# cooperam. Punição por reputação, num mundo sem Estado.
+#
+# Pagar aproxima (positiva, `medium`). Regatear deixa um resto: leve negativa em quem
+# cobrou, e nada de positivo em quem pagou menos do que devia.
+_COBRANCA = {
+    # desfecho: (intensidade, valência de quem COBROU para com o outro,
+    #            valência do OUTRO para com quem cobrou)
+    "paga":     ("medium", memoria.POSITIVA, memoria.POSITIVA),
+    "regateia": ("small",  memoria.NEGATIVA, None),
+    "nega":     ("large",  memoria.NEGATIVA, memoria.NEGATIVA),
+}
+
+
+def _memoria_da_cobranca(quem_cobrou: str, alvo: str, desfecho: str,
+                         item_id: str | None = None) -> list:
+    """As DUAS lembranças do mesmo ato, cada uma na sua perspectiva.
+
+    Duas entradas, não uma repetida: quem cobra lembra de ter cobrado, quem foi
+    cobrado lembra de ter sido — e a frase de cada um diz o que ELE viveu. A lição é
+    a do `_rec_unico` (spec 040): sem isso, os dois lados recebem a MESMA frase e a
+    memória mente sobre quem fez o quê.
+    """
+    intensidade, val_ator, val_alvo = _COBRANCA[desfecho]
+    eu = memoria._char_name(quem_cobrou)
+    ele = memoria._char_name(alvo)
+    o_que = f" ({io.name_of(item_id)})" if item_id else ""
+    if desfecho == "paga":
+        texto_ator = f"Cobrei {ele} o que me devia, e ele pagou{o_que}"
+        texto_alvo = f"{eu} me cobrou o que eu devia, e eu paguei{o_que}"
+    elif desfecho == "regateia":
+        texto_ator = f"Cobrei {ele}, e ele me pagou menos do que devia"
+        texto_alvo = f"{eu} me cobrou, e eu paguei menos do que devia"
+    else:
+        texto_ator = f"Cobrei {ele} o que me devia, e ele NÃO pagou"
+        texto_alvo = f"{eu} me cobrou o que eu devia, e eu não paguei"
+    envolvidos = [quem_cobrou, alvo]
+    saida = [{"quem": quem_cobrou, "content": texto_ator, "event": "cobranca",
+              "intensity": intensidade, "involved": envolvidos,
+              "valence": {alvo: val_ator}}]
+    entrada_alvo = {"quem": alvo, "content": texto_alvo, "event": "cobranca",
+                    "intensity": intensidade, "involved": envolvidos}
+    if val_alvo is not None:
+        entrada_alvo["valence"] = {quem_cobrou: val_alvo}
+    saida.append(entrada_alvo)
+    return saida
+
+
+def _apply_cobranca_ops(character_id: str, actor_folder: Path, resolution: dict,
+                        rolls: list | None = None) -> tuple[list, list]:
+    """COBRAR o que foi prometido (spec 073, US6 / FR-017, FR-018).
+
+    Reivindicar, não perguntar: perguntar é `ask_about` e não obriga ninguém. Aqui
+    duas vontades se opõem, e por isso há régua e dado.
+
+    O QUARTO PORTÃO mora aqui, e é o que torna a tool barata: **sem promessa na
+    memória de quem cobra, recusa SEM ROLAR**. É FATO, não juízo — a memória existe
+    dos dois lados desde a spec 027, e só se consulta.
+
+    FR-018: o pagamento NÃO se move por conta própria. Quando o desfecho é `paga`, a
+    transferência corre pela PRIMITIVA `itens.transfer_item` (a mesma do `give`),
+    com o ALVO como origem — nunca chamando a tool `give`. Princípio XII: a tool
+    orquestra, a primitiva opera.
+
+    Assume o WRITE_LOCK já em mãos.
+    """
+    applied, rejected = [], []
+    if not resolution.get("cobranca_ops"):
+        return applied, rejected
+    present_chars, present_objects, present_items = io._scene_entities(actor_folder.parent)
+    actor_fm, _ = read_doc(actor_folder / "character.md")
+    if fisica.is_resting(actor_fm) or trabalho.is_busy(actor_folder):
+        rejected.append(_fail("descansando"))
+        return applied, rejected
+    for op in resolution.get("cobranca_ops") or []:
+        alvo = op.get("de_quem")
+        item_id = op.get("item")          # opcional: o que se aceita como pagamento
+        nota = op.get("cumprimento")
+        base = {"cobrar_de": alvo, **({"item": item_id} if item_id else {})}
+        if alvo == character_id:
+            rejected.append({**base, "why": "não se cobra de si mesmo"})
+            continue
+        if alvo not in present_chars:
+            rejected.append(_rejection(base, _fail("personagem_inacessivel", alvo=alvo)))
+            continue
+        alvo_folder = present_chars[alvo]
+        alvo_fm, _ = read_doc(alvo_folder / "character.md")
+        if is_down(alvo_fm):
+            rejected.append(_rejection(base, _fail("alvo_desacordado", alvo=alvo)))
+            continue
+        # PORTÃO 1 — A PROMESSA. Sem ela não há o que cobrar, e o dado nem entra.
+        # A frase convida a VERIFICAR, não a insistir: "não se lembra" é ignorância,
+        # não proibição do sistema.
+        if memoria.promessa_viva_de(character_id, alvo) is None:
+            rejected.append(_rejection(base, _fail("sem_promessa", alvo=alvo)))
+            continue
+        # O item, quando nomeado, tem de ser DELE — cobrar apontando o que é seu, ou
+        # o que é de terceiro, é erro de referência, não recusa de mérito.
+        if item_id and _find_item_under(alvo_folder, item_id) is None:
+            rejected.append(_rejection(base, _fail("item_nao_e_do_alvo",
+                                                   item=item_id, alvo=alvo)))
+            continue
+        desfecho, info = roll_cobranca_check(actor_fm, character_id, alvo,
+                                             int(nota or 0), rolls, alvo_fm=alvo_fm)
+        if desfecho == "nega":
+            # A FALHA NUNCA É SILENCIOSA (Princípio X): volta com regra e frase de
+            # mundo, e A Mente narra a tentativa frustrada. O calote é o ponto da
+            # tool — quem lembra dele é `_record_cobranca`.
+            rejected.append(_rejection(base, _fail("nao_pagou", alvo=alvo)))
+            fisica.spend_fatigue(character_id, fisica.CUSTO_TENTATIVA_SOCIAL)
+            # O CALOTE É O PONTO DESTA TOOL, e por isso ele é um fato APLICADO —
+            # ainda que nada se mova. `large` negativa dos DOIS lados é o que dispara
+            # o portão de trauma (`sofreu_trauma_de`) nas próximas interações entre
+            # eles: a asfixia social por memória, num mundo sem Estado. Valência e
+            # intensidade viajam COM o ato, nunca numa tabela central — as
+            # `_VALENCE_BY_EVENT`/`_RELEVANCE_BY_EVENT` morreram na spec 038.
+            applied.append({
+                "de_quem": alvo, "desfecho": "nega",
+                "virada": bool(info.get("virada")),
+                "memory": _memoria_da_cobranca(character_id, alvo, "nega"),
+            })
+            continue
+        ap = {"de_quem": alvo, "desfecho": desfecho,
+              "virada": bool(info.get("virada"))}
+        if desfecho == "paga" and item_id:
+            # FR-018: a PRIMITIVA de doação, com o alvo como origem. Nunca a tool.
+            scene = {"chars": present_chars, "objects": present_objects,
+                     "items": present_items, "location_folder": actor_folder.parent,
+                     "place_id": None}
+            t_ap, t_rej = itens.transfer_item(item_id, alvo_folder, character_id,
+                                              scene, rolls)
+            if t_ap is None:
+                rej = t_rej or {"why": "não coube em quem receberia"}
+                entry = {**base, "why": rej.get("why", "não coube")}
+                if rej.get("regra"):
+                    entry["regra"], entry["valores"] = rej["regra"], rej.get("valores")
+                rejected.append(entry)
+                continue
+            ap["item"] = item_id
+        ap["memory"] = _memoria_da_cobranca(character_id, alvo, desfecho,
+                                            item_id if desfecho == "paga" else None)
+        applied.append(ap)
+        fisica.spend_fatigue(alvo, fisica.CUSTO_TENTATIVA_SOCIAL)
+    return applied, rejected
+
+
+@registro.handler("cobranca_ops")
+def _h_cobranca(cid, af, res, rolls):
+    applied, rejected = _apply_cobranca_ops(cid, af, res, rolls)
+    return applied, rejected, []  # memória dos dois via react_actor_memory (spec 038)

@@ -42,6 +42,8 @@ def _mundo_temporario():
 RAIZ = _mundo_temporario()
 import motor  # noqa: E402  (depois de LOREFORGE_WORLD)
 from motor.intencoes import primitivas as P  # noqa: E402
+import app as server_app  # noqa: E402
+import arbiter  # noqa: E402
 
 PASTA = RAIZ / "lugar" / "fulano"
 (PASTA / "intentions").mkdir(parents=True, exist_ok=True)
@@ -544,6 +546,243 @@ ok(_rotulo_da_peca([]) == "nenhuma parada"
    "e o compromisso sobre a peca FECHA pelo mesmo criterio de leitura de campo")
 ok(P.criterio_cumprido({"peca": "parada no meio"}, "peca") is False,
    "peca ainda no meio NAO fecha")
+
+
+# --------------------------------------------------------------------------- #
+# US6 / FR-017, FR-018 — COBRAR, a acao arbitrada que fecha o laco economico
+# --------------------------------------------------------------------------- #
+#
+# Rolagem FORCADA. O que se prende aqui e o molde inteiro da
+# `loreforge-arbitrated-action`: onde o dado SOME, os tres desfechos por distancia
+# a DC, a virada, a falha nao-silenciosa, o segredo da nota, a memoria dos dois
+# lados, e o veredito unico no turno.
+#
+# CADA CASO USA UM PAR NOVO, e isso nao e higiene: a primeira versao deste bloco
+# reusava o mesmo credor e devedor, e a partir do primeiro CALOTE tudo passou a dar
+# "nega". Nao era bug — era o portao de trauma funcionando: a memoria `large`
+# negativa do calote envenena a relacao dali em diante, que e exatamente o que esta
+# tool veio fazer. O teste e que estava errado. Fica travado abaixo, de proposito.
+
+print("\n--- cobrar (US6) ---")
+
+CENA = RAIZ / "porto"
+CENA.mkdir(parents=True, exist_ok=True)
+motor.write_doc(CENA / "location.md",
+                {"type": "location", "id": "porto", "name": "Porto",
+                 "size": "M", "entry_point": None, "origin": "editorial"},
+                "Um cais.")
+_n_par = [0]
+
+
+def _gente(cid, nome, cha=10):
+    d = CENA / cid
+    d.mkdir(parents=True, exist_ok=True)
+    motor.write_doc(d / "character.md",
+                    {"type": "character", "id": cid, "name": nome,
+                     "controlled_by": "player_local", "weight_kg": 70,
+                     "attributes": {"STR": 10, "DEX": 10, "CON": 10,
+                                    "INT": 10, "WIS": 10, "CHA": cha},
+                     "status": {"hp": 50, "hp_max": 50, "hunger": "saciado",
+                                "fatigue": 10, "action": "parado",
+                                "mood": "neutro", "conditions": []}},
+                    f"{nome}, de teste.")
+    return d
+
+
+def _par(com_promessa=True):
+    """Um credor e um devedor NOVOS, sem historia entre eles."""
+    _n_par[0] += 1
+    n = _n_par[0]
+    cr, dv = f"credor{n}-p73", f"devedor{n}-p73"
+    # NOME SEM DIGITO: a trava do Principio V varre digito por digito na narracao,
+    # e "Credor 3" reprovaria por causa do teste, nao do codigo.
+    letra = chr(ord("A") + (n - 1) % 26)
+    _gente(cr, f"Credor {letra}")
+    _gente(dv, f"Devedor {letra}")
+    if com_promessa:
+        # o `promise` DE VERDADE — a lembranca dos dois lados nasce dele, nao a mao.
+        motor.apply_resolution(dv, {"promise_ops": [
+            {"para": cr, "expectativa": "devolver as tres moedas"}]})
+    return cr, dv
+
+
+def _force(v):
+    motor._roll_d20 = lambda: v
+
+
+def _cobra(cr, dv, nota, item=None):
+    op = {"de_quem": dv, "cumprimento": nota}
+    if item:
+        op["item"] = item
+    return motor.apply_resolution(cr, {"cobranca_ops": [op]})
+
+
+# --- PORTAO 1: sem promessa, recusa SEM ROLAR -------------------------------
+cr, dv = _par(com_promessa=False)
+_force(20)   # dado que passaria em qualquer DC
+out = _cobra(cr, dv, 9)
+ok(any(r.get("regra") == "sem_promessa" for r in (out.get("rejected") or [])),
+   "sem promessa na memoria: recusa, e a regra e `sem_promessa`")
+ok(not (out.get("rolls") or []),
+   "sem promessa NAO ROLA DADO — e o portao que torna a tool barata")
+
+cr, dv = _par()
+ok(motor.memoria.promessa_viva_de(cr, dv) is not None,
+   "o `promise` deixou a lembranca nos dois lados — o fato ja existia (spec 027)")
+ok(motor.memoria.promessa_viva_de(dv, cr) is not None,
+   "e dos DOIS lados mesmo: quem prometeu tambem lembra")
+
+# --- PORTAO 2 e 3: os extremos da regua, sem dado ---------------------------
+cr, dv = _par()
+out = _cobra(cr, dv, 0)
+ok(any(r.get("regra") == "nao_pagou" for r in (out.get("rejected") or [])),
+   "nota 0: nao paga")
+ok(all(r.get("rolagem") is None for r in (out.get("rolls") or [])),
+   "nota 0 nao rola o dado — o extremo da regua e deterministico")
+
+cr, dv = _par()
+out = _cobra(cr, dv, 10)
+ap = out.get("cobranca_ops_applied") or []
+ok(len(ap) == 1 and ap[0]["desfecho"] == "paga", "nota 10: paga")
+ok(all(r.get("rolagem") is None for r in (out.get("rolls") or [])),
+   "nota 10 tambem nao rola")
+
+# --- A FAIXA DO MEIO: uma rolagem, tres desfechos por distancia -------------
+# nota 5 -> DC 10. mod(CHA 10) = 0.
+cr, dv = _par()
+_force(20)
+out = _cobra(cr, dv, 5)
+ap = out.get("cobranca_ops_applied") or []
+ok(len(ap) == 1 and ap[0]["desfecho"] == "paga", "passou a DC: PAGA")
+rolls = [r for r in (out.get("rolls") or []) if r.get("tipo") == "cobranca"]
+ok(len(rolls) == 1 and rolls[0].get("rolagem"),
+   "UMA rolagem, e so uma — o dado e unico no ato")
+
+cr, dv = _par()
+_force(7)    # total 7 vs DC 10: falhou por 3 (<=5)
+out = _cobra(cr, dv, 5)
+ap = out.get("cobranca_ops_applied") or []
+ok(len(ap) == 1 and ap[0]["desfecho"] == "regateia",
+   "falhou por <=5: REGATEIA — o meio-termo que a faixa preve")
+
+cr, dv = _par()
+_force(1)    # total 1 vs DC 10: falhou por 9
+out = _cobra(cr, dv, 5)
+ok(any(r.get("regra") == "nao_pagou" for r in (out.get("rejected") or [])),
+   "falhou por mais de 5: NEGA")
+ok(any("não paga" in (r.get("why") or "") for r in (out.get("rejected") or [])),
+   "e a recusa NAO E SILENCIOSA: volta com a frase de mundo (Principio X)")
+
+# --- O CALOTE ENVENENA A RELACAO: o portao de trauma ------------------------
+#
+# E AQUI QUE ESTA TOOL PAGA O JOGO. O calote deixa memoria `large` negativa nos
+# dois, e `large` e justamente o que `sofreu_trauma_de` procura: dali em diante
+# eles nao cooperam. Punicao por reputacao, num mundo sem Estado.
+ok(motor.memoria.has_trauma_from(dv, cr) is True,
+   "depois do calote, o devedor guarda TRAUMA de quem o cobrou")
+_force(20)   # dado maximo, nota maxima
+out = _cobra(cr, dv, 10)
+ap = out.get("cobranca_ops_applied") or []
+ok(ap and ap[0]["desfecho"] == "nega",
+   "e nem nota 10 com dado 20 o faz pagar — o portao forca a nota a 0 ANTES do dado")
+
+# --- A VIRADA, e o que NAO e virada -----------------------------------------
+cr, dv = _par()
+_force(20)
+out = _cobra(cr, dv, 3)   # a cena nao prometia pagamento, e o dado virou
+ap = out.get("cobranca_ops_applied") or []
+ok(ap and ap[0]["desfecho"] == "paga" and ap[0].get("virada") is True,
+   "nota baixa + dado otimo = VIRADA, e ela sobe para a narracao")
+
+# A VIRADA SO EXISTE NUM SENTIDO, e isso e propriedade da CURVA, nao esquecimento.
+#
+# Medido aqui: com nota >= 8 a DC cai para <= 4, e "falhar por mais de 5" exigiria
+# um total NEGATIVO — impossivel com d20 >= 1. Entao uma cobranca JUSTA nunca e
+# NEGADA pelo acaso; o pior que o dado faz e rebaixa-la a regateio.
+#
+# Isso e o certo, e vale escrito: o acaso pode dar a quem nao merecia, mas nao pode
+# roubar por completo de quem cumpriu. Se um dia se quiser o contrario, e a curva
+# que muda — nao este teste.
+cr, dv = _par()
+_force(1)
+out = _cobra(cr, dv, 9)
+ap = out.get("cobranca_ops_applied") or []
+ok(ap and ap[0]["desfecho"] == "regateia",
+   "nota alta com o pior dado NAO vira calote: o piso de quem cumpriu e o regateio")
+
+cr, dv = _par()
+_force(7)
+out = _cobra(cr, dv, 5)
+ap = out.get("cobranca_ops_applied") or []
+ok(ap and ap[0].get("virada") is False,
+   "regatear NAO e virada — e o meio-termo previsto, nao uma surpresa")
+
+# --- A MEMORIA DOS DOIS LADOS, cada uma na sua perspectiva ------------------
+cr, dv = _par()
+_force(20)
+out = _cobra(cr, dv, 6)
+alvos = {m["target"] for m in (out.get("memories_created") or [])
+         if m.get("event") == "cobranca"}
+ok(alvos == {cr, dv},
+   "um ato, DUAS lembrancas — o fato marca os dois (e a via generica da 038 "
+   "aprendeu a fazer isso para toda tool futura)")
+textos = {}
+for cid in (cr, dv):
+    for m in motor.memoria._iter_memories(cid):
+        if m.get("evento") == "cobranca":
+            textos[cid] = motor.read_doc(
+                motor.find_character_folder(cid) / "memories" / f"{m['id']}.md")[1]
+ok("Cobrei" in textos.get(cr, "") and "me cobrou" in textos.get(dv, ""),
+   "cada lado lembra o que ELE viveu — a mesma frase nos dois faria a memoria "
+   "mentir sobre quem fez o que")
+ok(motor.sentiment_toward(cr, dv) > 0,
+   "a divida quitada APROXIMA: o afeto de quem cobrou pelo que pagou sobe")
+
+# --- O VEREDITO E UNICO NO TURNO -------------------------------------------
+#
+# Numa acao arbitrada quem escolhe a nota e o MODELO, e isso abre um buraco que
+# toda tool deste molde tem: recusado o desfecho, ele re-chama a MESMA acao com uma
+# nota MAIOR e escapa do veredito. Um modelo fraco entra em loop nisso (mediu-se um
+# turno de 129 s no caso do `persuade`).
+#
+# A cena se le UMA VEZ por turno. E a marca vale TAMBEM na recusa deterministica
+# (sem promessa, nota 0), nao so no sucesso — senao o buraco fica aberto justamente
+# onde ele e mais barato de explorar.
+cr, dv = _par(com_promessa=False)
+ctx_escape = arbiter.build_ctx(motor.get_context(cr), ask=lambda _s, _u: "0",
+                               prosa={"acao": "cobra, e insiste"})
+r1 = ctx_escape.execute("cobrar", {"de_quem": dv})
+r2 = ctx_escape.execute("cobrar", {"de_quem": dv})
+ok(not r1[0].get("ok") and "NÃO refaça a MESMA" in (r1[0].get("erro") or ""),
+   "a 1a recusa (sem promessa) ja ORIENTA a nao re-tentar mudando a regua")
+ok(not r2[0].get("ok") and "já aconteceu" in (r2[0].get("erro") or ""),
+   "re-cobrar o MESMO alvo no turno e BARRADO — inclusive depois da recusa "
+   "deterministica, que e onde o buraco era mais barato")
+
+# COBRAR OUTRA PESSOA no mesmo turno PASSA: e trabalho novo, nao re-tentativa. A
+# fronteira importa — barrar a ferramenta inteira seria proibir o legitimo.
+cr2, dv2 = _par()
+ctx_outro = arbiter.build_ctx(motor.get_context(cr2), ask=lambda _s, _u: "6",
+                              prosa={"acao": "cobra de um, depois de outro"})
+_force(20)
+ra = ctx_outro.execute("cobrar", {"de_quem": dv2})
+ok(ra[0].get("ok"), "a primeira cobranca do turno passa")
+ok("de_quem" in str(ra[0]), "e devolve o alvo, sem nota nenhuma")
+
+
+# --- O SEGREDO DO MUNDO (Principio V/IX) ------------------------------------
+cr, dv = _par()
+_force(12)
+out = _cobra(cr, dv, 6)
+visivel = json.dumps({k: v for k, v in out.items() if k != "rolls"},
+                     ensure_ascii=False, default=str)
+ok("cumprimento" not in visivel and '"dc"' not in visivel,
+   "a NOTA e a DC nao aparecem em nada que desca ao client")
+frases = server_app.inworld_effects(out)
+ok(frases and not any(ch.isdigit() for f in frases for ch in f),
+   "a narracao do desfecho nao tem NENHUM numero")
+ok(any("cobrou" in f for f in frases),
+   "e o desfecho VIRA NARRACAO — cobrar em silencio seria incompleto (Principio X)")
 
 
 print()

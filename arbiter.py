@@ -714,6 +714,16 @@ def scene_candidates(idx: dict) -> dict:
     cand["comprar"] = sorted(set(a_venda))
     cand["pedir"] = sorted(set(trocaveis))
 
+    # O QUE SE ACEITA COMO PAGAMENTO numa cobrança (spec 073, US6). São os itens dos
+    # OUTROS presentes — cobrar apontando o que já é seu não é cobrança. Fica ao lado
+    # de `pedir` de propósito: a diferença é que `pedir` exige o item marcado como
+    # negociável, e uma dívida se paga com o que houver. Quem cobra não escolhe da
+    # vitrine; reivindica do que existe.
+    cand["cobrar_item"] = sorted(
+        {iid for iid, v in idx["items"].items()
+         if v.get("porter") not in (None, idx["actor_id"])}
+    ) if isinstance(idx.get("items"), dict) else []
+
     # Destino que ele não sabe alcançar NÃO VIRA ENUM: a regra "só se sabe o
     # caminho" é cumprida aqui, antes de qualquer guarda.
     try:
@@ -1062,6 +1072,12 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
     carried: set = set()    # alvos já levantados neste turno (spec 010)
     expulsos: set = set()   # alvos já postos para fora neste turno (spec 041)
     negociados: set = set() # parceiros com quem já se negociou (spec 011)
+    # spec 073 (US6): de quem já se cobrou neste turno. A dedup é por `(de_quem)`, e
+    # é marcada TAMBÉM na recusa determinística (sem promessa, nota 0) — não só no
+    # sucesso. Senão o modelo re-lê a régua com nota maior e escapa do veredito, que
+    # é o buraco que o caso `régua-escape` do phase10 pegou. Cobrar OUTRA pessoa no
+    # mesmo turno passa: é trabalho novo, não re-tentativa.
+    cobrados: set = set()
     rejections: dict[tuple, dict] = {}
 
     def _err(erro: str, campo: str | None = None, validos: list | None = None,
@@ -1283,6 +1299,7 @@ def build_ctx(context: dict, emit=None, ask=None, prosa=None,
         craft_asked=craft_asked,
         forage_asked=forage_asked, brewed_asked=brewed_asked, sung_asked=sung_asked,
         attacked=attacked, curados=curados, carried=carried, negociados=negociados,
+        cobrados=cobrados,
         expulsos=expulsos,
         viajado=viajado, perguntados=perguntados, perguntados_sobre=perguntados_sobre,
         ouvido=ouvido, lido=lido,

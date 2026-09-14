@@ -84,6 +84,8 @@ from .primitivas import (  # noqa: F401
     fatigue_penalty,
     get_active_memories,
     has_trauma_from,
+    promessa_em_texto,
+    promessa_viva_de,
     memory_about,
     memory_involved,
     memory_kind,

@@ -691,8 +691,13 @@ def _location_lineage(place_folder: Path, self_id: str = "") -> dict | None:
     return None
 
 
-def _carencias_do_corpo(self_fm: dict) -> list[dict]:
-    """O que o corpo PEDE, no formato de quem pode assumir um compromisso.
+def _carencias_do_corpo(self_fm: dict, paradas: list | None = None) -> list[dict]:
+    """O que PEDE atenção, no formato de quem pode assumir um compromisso.
+
+    O corpo E o mundo descem pela MESMA vista, em rótulo (FR-004) — é o ponto do
+    requisito: para quem decide, "estou faminto" e "deixei o martelo no meio" são a
+    mesma espécie de coisa, e separá-las em duas listas faria a Mente tratar uma
+    como urgência e a outra como enfeite.
 
     Lista VAZIA quando nada aperta — e aí a chave desce vazia, não some: ela é do
     contrato (spec 067, completo por decisão) e quem filtra é o conector.
@@ -707,7 +712,64 @@ def _carencias_do_corpo(self_fm: dict) -> list[dict]:
         if texto and any(a in texto for a in _AINDA_APERTA):
             fora.append({"o_que": o_que, "porque": rotulo,
                          "pronto_quando": criterio})
+    # A CARÊNCIA DO MUNDO, pela mesma porta (US4/FR-004). O `porque` nomeia a peça:
+    # sem o nome, o compromisso nasceria sobre "uma peça", e o plano não teria alvo.
+    for peca in (paradas or []):
+        fora.append({"o_que": f"terminar {peca['nome']}",
+                     "porque": "está parada no meio",
+                     "pronto_quando": "peca"})
     return fora
+
+
+def _pecas_paradas(character_id: str, actor_folder) -> list:
+    """As peças DESTE ator, no lugar onde ele está, que ficaram no meio (US4).
+
+    A CARÊNCIA DO MUNDO, e ela é leitura de campo como a do corpo — só que num
+    arquivo que não é o do corpo. O `trabalho` da peça diz quanto falta; a peça
+    some daqui quando termina (FR-005: a vista é DERIVADA, não é entidade no
+    `world/`, e nada precisa apagá-la).
+
+    POR QUE ESTA, E NÃO A LAREIRA APAGADA. O FR-004 nomeia duas: *"lareira
+    apagada, trabalho parado"*. A segunda é campo — está no `trabalho` da peça, e
+    o mundo tem duas agora mesmo (o martelo do Pip: 199 s de 1800, com o prazo já
+    vencido). A PRIMEIRA NÃO É: uma lareira fria, neste mundo, é PROSA
+    (*"cinzas cobertas de poeira"*) — não há campo que a distinga de um barril, e
+    "há calor aqui?" é nota do Árbitro (`fonte_de_calor`), não leitura. Derivar
+    aquela carência pediria ou um campo novo (Princípio XI diz que não) ou uma
+    chamada de modelo por turno (não é grátis, e o FR-013a escolheu a família
+    grátis de propósito). Fica anotado como o que a fatia NÃO entrega.
+
+    É do PRÓPRIO ator: a peça carrega `ator`, e um compromisso sobre a peça de
+    outro é "ajudar alguém" — outra coisa, com outro dono.
+    """
+    from .. import trabalho
+    paradas = []
+    pasta = actor_folder.parent if actor_folder else None
+    if pasta is None or not pasta.exists():
+        return paradas
+    for child in sorted(pasta.iterdir()):
+        if not child.is_dir():
+            continue
+        arq = trabalho._arquivo_de(child)
+        if arq is None:
+            continue
+        fm, _ = read_doc(arq)
+        bloco = fm.get(trabalho.BLOCO)
+        if not bloco or bloco.get("ator") != character_id:
+            continue
+        if not trabalho.por_esforco(bloco) or trabalho.concluido(bloco):
+            continue
+        paradas.append({"id": fm.get("id"), "nome": fm.get("name") or fm.get("id")})
+    return paradas
+
+
+def _rotulo_da_peca(paradas: list) -> str:
+    """O trabalho parado em RÓTULO, nunca em número (Princípio V).
+
+    "199 de 1800 segundos" é medida interna. O que desce é a leitura — a mesma
+    forma de `hunger_label`, e o mesmo vocabulário que `criterio_cumprido` confere.
+    """
+    return "parada no meio" if paradas else "nenhuma parada"
 
 
 def get_context(character_id: str) -> dict:
@@ -993,7 +1055,8 @@ def get_context(character_id: str) -> dict:
             #
             # Aqui ela chega como carência, com o critério que a encerraria — que é o
             # que `set_intention` precisa em `pronto_quando`.
-            "carencias": _carencias_do_corpo(self_fm),
+            "carencias": _carencias_do_corpo(
+                self_fm, _pecas_paradas(character_id, char_folder)),
             # DERIVADO e BOOLEANO: o sinal que o CONECTOR lê para não acionar A Mente em
             # sono profundo. Separado do rótulo de propósito — o rótulo é prosa para o
             # personagem ler, isto é estado para a máquina decidir, e casar decisão com

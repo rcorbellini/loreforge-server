@@ -170,12 +170,17 @@ def _fechar_compromissos(character_id: str) -> list[dict]:
     perdido, e o `needs` é lido de arquivo que pode estar em qualquer estado.
     """
     try:
-        from .percepcao.consultas import (fatigue_label, hunger_label, sono_label,
+        from .percepcao.consultas import (_pecas_paradas, _rotulo_da_peca,
+                                          fatigue_label, hunger_label, sono_label,
                                           thirst_label)
         pasta = find_character_folder(character_id)
         fm, _ = read_doc(pasta / "character.md")
         needs = {"hunger": hunger_label(fm), "thirst": thirst_label(fm),
-                 "fatigue": fatigue_label(fm), "sleep": sono_label(fm)}
+                 "fatigue": fatigue_label(fm), "sleep": sono_label(fm),
+                 # US4: a carência do MUNDO fecha pela mesma porta que a do corpo —
+                 # é o que faz o compromisso sobre a peça encerrar quando ela fica
+                 # pronta, inclusive se alguém a terminou por outro caminho.
+                 "peca": _rotulo_da_peca(_pecas_paradas(character_id, pasta))}
         return intencoes.fechar_por_criterio(pasta, needs)
     except Exception:
         return []

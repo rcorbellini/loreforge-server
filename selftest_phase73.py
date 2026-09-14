@@ -490,6 +490,62 @@ ok(P.passos_sem_verbo("Comer.\n- retaken o pao", VERBOS) ==
    "`take` DENTRO de outra palavra nao conta como verbo")
 
 
+# --------------------------------------------------------------------------- #
+# US4 / FR-004 e FR-005 — a carencia do MUNDO desce pela MESMA vista
+# --------------------------------------------------------------------------- #
+
+print("\n--- a carencia do mundo (US4) ---")
+
+from motor.percepcao.consultas import (_carencias_do_corpo, _pecas_paradas,  # noqa: E402
+                                       _rotulo_da_peca)
+from motor import trabalho  # noqa: E402
+
+# uma peca DELE, no meio do caminho, no lugar onde ele esta
+PECA = RAIZ / "lugar" / "peca-de-teste"
+PECA.mkdir(parents=True, exist_ok=True)
+motor.write_doc(PECA / "object.md",
+                {"type": "object", "id": "peca-de-teste",
+                 "name": "Martelo de Teste (em processo)", "origin": "emergente",
+                 trabalho.BLOCO: {"tool": "craft", "tipo": "object",
+                                  "tempo_necessario_s": 1800,
+                                  "tempo_trabalhado_s": 200,
+                                  "ator": "beltrano"}},
+                "Um martelo pela metade.")
+
+paradas = _pecas_paradas("beltrano", VIZINHO)
+ok(len(paradas) == 1 and paradas[0]["id"] == "peca-de-teste",
+   "a peca parada DELE e vista")
+ok(_pecas_paradas("fulano", RAIZ / "lugar" / "fulano") == [],
+   "a peca de OUTRO nao vira carencia sua — um compromisso sobre ela e ajudar "
+   "alguem, que e outra coisa com outro dono")
+
+# FR-004: a MESMA vista, o corpo e o mundo juntos
+faminto_fm = {"status": {"hunger": "faminto"}}
+vista = _carencias_do_corpo(faminto_fm, paradas)
+criterios = [c["pronto_quando"] for c in vista]
+ok("hunger" in criterios and "peca" in criterios,
+   "corpo e mundo descem pela MESMA lista (FR-004) — separa-los faria a Mente "
+   "tratar uma como urgencia e a outra como enfeite")
+ok(all("porque" in c and "o_que" in c and "pronto_quando" in c for c in vista),
+   "toda carencia, do corpo ou do mundo, tem a mesma forma")
+peca_v = [c for c in vista if c["pronto_quando"] == "peca"][0]
+ok("Martelo de Teste" in peca_v["o_que"],
+   "a carencia do mundo NOMEIA a peca — sem o nome o plano nao teria alvo")
+bruto = json.dumps(vista, ensure_ascii=False)
+ok(not any(ch.isdigit() for ch in bruto),
+   "NENHUM digito: '200 de 1800 segundos' e medida interna (Principio V)")
+
+# FR-005: a vista e DERIVADA — some quando a carencia e atendida, e nada a apaga
+trabalho.atualizar(PECA, tempo_trabalhado_s=1800)
+ok(_pecas_paradas("beltrano", VIZINHO) == [],
+   "peca terminada SOME da vista — ela e derivada, nao entidade no world/")
+ok(_rotulo_da_peca([]) == "nenhuma parada"
+   and P.criterio_cumprido({"peca": _rotulo_da_peca([])}, "peca") is True,
+   "e o compromisso sobre a peca FECHA pelo mesmo criterio de leitura de campo")
+ok(P.criterio_cumprido({"peca": "parada no meio"}, "peca") is False,
+   "peca ainda no meio NAO fecha")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

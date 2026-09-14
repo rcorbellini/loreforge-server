@@ -11,7 +11,19 @@ from ..registro import ToolSpec, tool_spec
 # Os critérios que o mundo sabe conferir NESTA FATIA — leitura de campo, só.
 # As outras três famílias (posse, lugar, fato lembrado) estão desenhadas em
 # `specs/073-intention-cycle/research.md` §R2.
-_CRITERIOS = ("hunger", "thirst", "sleep")
+# UMA LISTA SÓ, e ela mora na PRIMITIVA que confere o critério.
+#
+# Isto nasceu duplicado — a tupla aqui e o `_CRITERIO_POR_CAMPO` em `primitivas.py`
+# — e as duas ficaram iguais por um commit. É exatamente a segunda via do Princípio
+# I: quem acrescentasse a quarta família editaria uma e esqueceria a outra, e o
+# sintoma seria um critério que a tool oferece e o mundo não sabe conferir (ou o
+# contrário) — em silêncio, com a suíte verde.
+#
+# US4 acrescentou `peca`: a carência do MUNDO entra pelo mesmo enum que a do corpo,
+# porque é a mesma família — leitura de campo, só que num arquivo que não é o do
+# corpo. As outras três (posse, lugar, fato lembrado) seguem desenhadas em
+# `specs/073-intention-cycle/research.md` §R2, sem leitor.
+from .primitivas import _CRITERIO_POR_CAMPO as _CRITERIOS
 
 
 def _verbos_do_mundo() -> set:

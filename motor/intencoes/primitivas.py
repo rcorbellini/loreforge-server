@@ -46,12 +46,20 @@ _CRITERIO_POR_CAMPO = {
     "hunger": "hunger",
     "thirst": "thirst",
     "sleep": "fatigue",     # o campo se chama `fatigue`; a Mente diz "sleep"
+    # US4: a carência do MUNDO entra pela mesma porta, e por isso pelo mesmo enum.
+    # `peca` = "a peça que eu deixei no meio está terminada". É leitura de campo
+    # como as outras três — o `trabalho` do objeto diz quanto falta —, só que num
+    # arquivo que não é o do corpo. A família não muda; o arquivo, sim.
+    "peca": "peca",
 }
 
 # Quando a necessidade DEIXOU de apertar. O rótulo é o do mundo (`hunger_label` e
 # irmãos); estes são os que contam como "ainda aperta".
 _AINDA_APERTA = ("faminto", "com fome", "sedento", "com sede",
-                 "exausto", "muito cansado", "caindo de sono")
+                 "exausto", "muito cansado", "caindo de sono",
+                 # US4: o rótulo do trabalho parado. Mesma forma dos do corpo — o
+                 # que desce é a LEITURA, nunca "199 de 1800 segundos".
+                 "parada no meio")
 
 
 def criterio_cumprido(needs: dict | None, pronto_quando: str | None) -> bool:

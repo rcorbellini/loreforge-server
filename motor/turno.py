@@ -170,9 +170,9 @@ def _fechar_compromissos(character_id: str) -> list[dict]:
     perdido, e o `needs` é lido de arquivo que pode estar em qualquer estado.
     """
     try:
-        from .percepcao.consultas import (_pecas_paradas, _rotulo_da_peca,
-                                          fatigue_label, hunger_label, sono_label,
-                                          thirst_label)
+        from .percepcao.consultas import (_carregados_prontos, _pecas_paradas,
+                                          _rotulo_da_peca, fatigue_label,
+                                          hunger_label, sono_label, thirst_label)
         pasta = find_character_folder(character_id)
         fm, _ = read_doc(pasta / "character.md")
         needs = {"hunger": hunger_label(fm), "thirst": thirst_label(fm),
@@ -181,7 +181,11 @@ def _fechar_compromissos(character_id: str) -> list[dict]:
                  # é o que faz o compromisso sobre a peça encerrar quando ela fica
                  # pronta, inclusive se alguém a terminou por outro caminho.
                  "peca": _rotulo_da_peca(_pecas_paradas(character_id, pasta))}
-        return intencoes.fechar_por_criterio(pasta, needs)
+        # A FAMÍLIA POSSE lê o que ele carrega AGORA, por NOME. Roda todo turno como
+        # as outras — e é o que faz o compromisso de ter algo fechar inclusive
+        # quando a coisa chegou por um caminho que ninguém planejou (alguém deu).
+        carregados = _carregados_prontos(character_id, pasta)
+        return intencoes.fechar_por_criterio(pasta, needs, carregados)
     except Exception:
         return []
 

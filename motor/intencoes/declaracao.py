@@ -26,6 +26,16 @@ from ..registro import ToolSpec, tool_spec
 from .primitivas import _CRITERIO_POR_CAMPO as _CRITERIOS
 
 
+def _carregados(ctx) -> list:
+    """Os NOMES do que o ator carrega — a leitura da família POSSE.
+
+    Nomes, não ids: o que se promete ter muitas vezes ainda não existe (o remédio a
+    preparar), e um id de cena não nomeia o que ninguém criou.
+    """
+    inv = ((ctx.context.get("self") or {}).get("inventory")) or []
+    return [i.get("name") for i in inv if isinstance(i, dict) and i.get("name")]
+
+
 def _verbos_do_mundo() -> set:
     """Os verbos que EXISTEM e estão ativos neste mundo (FR-007).
 
@@ -45,6 +55,7 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
     status = args.get("status") or "ativa"
     intention_id = args.get("intention_id")
     pronto_quando = (args.get("pronto_quando") or "").strip() or None
+    pronto_quando_alvo = (args.get("pronto_quando_alvo") or "").strip() or None
     if not content:
         return ctx.err("informe 'content' (o compromisso, em prosa)"), False
     if status not in ctx.INTENTION_STATUSES:
@@ -66,7 +77,8 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
     if not intention_id:
         from ..intencoes.primitivas import travas_do_nascimento
         eu = (ctx.context.get("self") or {}).get("name")
-        trava = travas_do_nascimento(content, pronto_quando, eu)
+        trava = travas_do_nascimento(content, pronto_quando, eu,
+                                     pronto_quando_alvo)
         if trava:
             regra, valores = trava
             # ERRO CORRIGÍVEL x RECUSA DE MÉRITO — e a diferença custou uma corrida
@@ -86,8 +98,13 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
             # que é o que convida o retry. As outras são recusa de mérito (o
             # compromisso não devia nascer), e essas seguem sem lista: não há o que
             # corrigir num "isso já é verdade agora".
-            campo = "pronto_quando" if regra in (
-                "intencao_sem_criterio", "intencao_criterio_desconhecido") else "content"
+            if regra == "intencao_posse_sem_alvo":
+                campo = "pronto_quando_alvo"
+            elif regra in ("intencao_sem_criterio",
+                           "intencao_criterio_desconhecido"):
+                campo = "pronto_quando"
+            else:
+                campo = "content"
             validos = [{"id": v, "nome": v} for v in (valores or {}).get("validos") or []]
             if not validos and campo == "pronto_quando":
                 validos = [{"id": v, "nome": v} for v in sorted(_CRITERIOS)]
@@ -97,7 +114,8 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
         # que evita criar lixo que fecha no mesmo instante.
         from ..intencoes.primitivas import criterio_cumprido
         if criterio_cumprido((ctx.context.get("self") or {}).get("needs"),
-                             pronto_quando):
+                             pronto_quando, pronto_quando_alvo,
+                             _carregados(ctx)):
             return ctx.err(_FRASE["intencao_ja_cumprida"], "pronto_quando"), False
         # E A TRAVA DO PASSO SEM VERBO (FR-007). O caso do Tobias: "fazer um
         # inventário completo dos frascos de vidro" não nomeia ato nenhum que o
@@ -114,7 +132,8 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
 
     ctx.queue["intentions"].append({"intention_id": intention_id,
                                     "content": content, "status": status,
-                                    "pronto_quando": pronto_quando})
+                                    "pronto_quando": pronto_quando,
+                                    "pronto_quando_alvo": pronto_quando_alvo})
     return {"ok": True, "aplicado": {"intention_id": intention_id or "(nova)"}}, False
 
 
@@ -128,11 +147,19 @@ SET_INTENTION = tool_spec(ToolSpec(
         "comum que se esgota neste turno. Sem intention_id, cria um compromisso "
         "novo. Com intention_id (um dos ativos, vem no contexto), atualiza ou "
         "encerra (status: concluida/abandonada) — reescreva content por "
-        "inteiro, nunca um trecho."
+        "inteiro, nunca um trecho.\n"
+        "pronto_quando é o FATO que encerra o compromisso, e quem confere é o "
+        "mundo — nunca você. Se o que encerra é TER algo em mãos, use "
+        "pronto_quando='posse' e diga em pronto_quando_alvo o NOME da coisa "
+        "(vale o que ainda não existe: o remédio que você vai preparar, a lâmina "
+        "que vai forjar)."
     ),
     params={"intention_id": {"type": "string"}, "content": {"type": "string"},
             "status": {"type": "string"},
-            "pronto_quando": {"type": "string"}},
+            "pronto_quando": {"type": "string"},
+            # NOME, e por isso sem enum de cena: o que se promete ter muitas vezes
+            # ainda não existe, e um id não nomeia o que ninguém criou.
+            "pronto_quando_alvo": {"type": "string"}},
     required=("content",),
     enum_sources={"intention_id": lambda s: s.active_intention_ids,
                   "status": lambda s: sorted(s.INTENTION_STATUSES),

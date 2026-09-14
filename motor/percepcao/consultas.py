@@ -763,6 +763,31 @@ def _pecas_paradas(character_id: str, actor_folder) -> list:
     return paradas
 
 
+def _carregados_prontos(character_id: str, pasta) -> list:
+    """Os NOMES do que ele carrega e que está PRONTO — a leitura da família POSSE.
+
+    O FILTRO NÃO É ZELO: a sondagem (§15.6, depois da posse) mostrou a Mente
+    escolhendo `posse(martelo)` para "terminar o martelo que deixei no meio". Sem
+    filtro, o próprio "Martelo de Sucata (EM PROCESSO)" na mão satisfaz o critério —
+    e o compromisso de TERMINAR fecharia por carregar a coisa inacabada. Um falso
+    fechamento que o SC-002 contaria como acerto, que é exatamente o defeito que a
+    família POSSE veio consertar.
+
+    O mundo já sabe distinguir: a peça inacabada carrega um bloco `trabalho` que
+    ainda não concluiu. Nada de campo novo, nada de ler o nome.
+    """
+    from .. import trabalho
+    out = []
+    for child, fm in _walk_open_items(pasta):
+        if not _is_valid(fm) or not fm.get("name"):
+            continue
+        bloco = fm.get(trabalho.BLOCO)
+        if bloco and not trabalho.concluido(bloco):
+            continue           # está no meio; ter não é ter pronto
+        out.append(fm["name"])
+    return out
+
+
 def _rotulo_da_peca(paradas: list) -> str:
     """O trabalho parado em RÓTULO, nunca em número (Princípio V).
 

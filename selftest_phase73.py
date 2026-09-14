@@ -841,6 +841,125 @@ ok(ctx3.ultimo["validos"] is None,
    "recusa de MERITO nao devolve lista — ela nao e um erro a corrigir")
 
 
+# --------------------------------------------------------------------------- #
+# A FAMILIA POSSE (research.md §R2) — a quinta, e a primeira com ALVO
+# --------------------------------------------------------------------------- #
+#
+# Entrou depois da corrida de 14/09 (§15.6): sem ela, um compromisso de FAZER um
+# remedio recebia `pronto_quando: hunger` — 3/3 — porque nenhum criterio servia e o
+# modelo escolhe o primeiro que nao e absurdo. O compromisso fecharia no instante em
+# que o personagem comesse: um FALSO FECHAMENTO que o SC-002 contaria como acerto.
+# Vocabulario pequeno demais nao recusa: ele VAZA.
+
+print("\n--- a familia POSSE (R2) ---")
+
+INV = ["Remedio de Raiz Torta", "Moeda de Cobre"]
+ok(P.criterio_cumprido(None, "posse", "raiz torta", INV) is True,
+   "carregar 'Remedio de Raiz Torta' cumpre 'raiz torta'")
+ok(P.criterio_cumprido(None, "posse", "garra de lobo", INV) is False,
+   "o que nao se carrega NAO cumpre")
+ok(P.criterio_cumprido(None, "posse", "raiz seca", INV) is False,
+   "meia coincidencia nao basta: todo pedaco do alvo tem de aparecer")
+ok(P.criterio_cumprido(None, "posse", None, INV) is False,
+   "posse SEM alvo nunca cumpre — e por isso a trava existe")
+ok(P.criterio_cumprido(None, "posse", "raiz torta", []) is False,
+   "de maos vazias, nao cumpre")
+
+# A TRAVA: prometer TER sem dizer o que
+ok(P.travas_do_nascimento("Fazer um remedio.\n- brew raiz", "posse", None, None)
+   == ("intencao_posse_sem_alvo", {}),
+   "posse sem alvo e barrada no nascimento")
+ok(P.travas_do_nascimento("Fazer um remedio.\n- brew raiz", "posse", None,
+                          "remedio de raiz torta") is None,
+   "com o alvo, nasce")
+
+# O ALVO SOBREVIVE ao arquivo, e desce no contexto
+pid = P.create_intention(VIZINHO, "Fazer o remedio.\n- brew raiz torta",
+                         pronto_quando="posse",
+                         pronto_quando_alvo="remedio de raiz torta")
+fm, _ = motor.read_doc(VIZINHO / "intentions" / f"{pid}.md")
+ok(fm.get("pronto_quando_alvo") == "remedio de raiz torta",
+   "o alvo e gravado no arquivo da intencao")
+ctx_int = [i for i in P.get_active_intentions(VIZINHO) if i["id"] == pid]
+ok(ctx_int and ctx_int[0].get("pronto_quando_alvo") == "remedio de raiz torta",
+   "e DESCE no contexto — sem ele a Mente nao sabe o que estava perseguindo")
+
+# so a POSSE ganha a chave: guardar `alvo` numa intencao de fome convidaria a
+# proxima leitura a perguntar "alvo de que?"
+fid = P.create_intention(VIZINHO, "Matar a fome.\n- eat pao", pronto_quando="hunger")
+fm2, _ = motor.read_doc(VIZINHO / "intentions" / f"{fid}.md")
+ok("pronto_quando_alvo" not in fm2,
+   "intencao sem alvo nao ganha a chave vazia")
+
+# O FIO INTEIRO: o compromisso de posse fecha quando a coisa chega — inclusive por
+# um caminho que ninguem planejou.
+ok(P.fechar_por_criterio(VIZINHO, {"hunger": "faminto"}, []) == [],
+   "de maos vazias, o compromisso de posse NAO fecha")
+fechadas = P.fechar_por_criterio(VIZINHO, {"hunger": "faminto"},
+                                 ["Remedio de Raiz Torta"])
+ok([f for f in fechadas if f["id"] == pid],
+   "com a coisa em maos, FECHA — e fecha por leitura de campo, como as outras")
+fm3, _ = motor.read_doc(VIZINHO / "intentions" / f"{pid}.md")
+ok(fm3.get("status") == "concluida", "e o arquivo registra `concluida`")
+
+# E A GUARDA DO JA-CUMPRIDO vale para a posse: quem ja tem nao promete conseguir.
+ok(P.criterio_cumprido(None, "posse", "remedio de raiz torta",
+                       ["Remedio de Raiz Torta"]) is True,
+   "quem ja carrega a coisa ja cumpriu — a guarda do FR-013b barra o nascimento")
+
+
+# O FIO REAL DA POSSE: pela tool, nao pela primitiva.
+#
+# `apply_resolution` -> `_h_intentions` -> `create_intention`. Se o
+# `pronto_quando_alvo` cair em qualquer emenda desse caminho, a intencao nasce com
+# um criterio que nunca vira verdade — e nada grita, porque o arquivo existe e a
+# suite da primitiva fica verde. Ja aconteceu duas vezes nesta spec.
+motor.apply_resolution("beltrano", {"intentions": [
+    {"content": "Conseguir a garra.\n- take garra de lobo",
+     "status": "ativa", "pronto_quando": "posse",
+     "pronto_quando_alvo": "garra de lobo"}]})
+nascidas = [i for i in P.get_active_intentions(VIZINHO)
+            if "garra" in i["content"].lower()]
+ok(nascidas and nascidas[0].get("pronto_quando_alvo") == "garra de lobo",
+   "o alvo atravessa o TURNO INTEIRO — nao so a primitiva")
+
+
+# A PECA INACABADA NA MAO NAO CUMPRE "ter o martelo".
+#
+# Achado pela sondagem depois da posse: a Mente escolheu `posse(martelo)` para
+# "terminar o martelo que deixei no meio". Sem filtro, o proprio "Martelo de Sucata
+# (em processo)" na mao satisfaz — e o compromisso de TERMINAR fecharia por carregar
+# a coisa inacabada. Falso fechamento, o mesmo defeito que a posse veio consertar.
+from motor.percepcao.consultas import _carregados_prontos  # noqa: E402
+
+MAO = VIZINHO / "martelo-no-meio"
+MAO.mkdir(parents=True, exist_ok=True)
+motor.write_doc(MAO / "item.md",
+                {"type": "item", "id": "martelo-no-meio",
+                 "name": "Martelo de Sucata (em processo)", "origin": "emergente",
+                 "weight_kg": 1.0,
+                 trabalho.BLOCO: {"tool": "craft", "tipo": "object",
+                                  "tempo_necessario_s": 1800,
+                                  "tempo_trabalhado_s": 200,
+                                  "ator": "beltrano"}},
+                "Um martelo pela metade, na mao.")
+prontos = _carregados_prontos("beltrano", VIZINHO)
+ok(not any("Martelo" in n for n in prontos),
+   "a peca INACABADA na mao nao conta como posse — ter nao e ter pronto")
+ok(P.criterio_cumprido(None, "posse", "martelo", prontos) is False,
+   "e por isso 'ter o martelo' NAO fecha enquanto ele esta no meio")
+
+# terminada, passa a contar
+bloco_ok = dict(motor.read_doc(MAO / "item.md")[0][trabalho.BLOCO])
+bloco_ok["tempo_trabalhado_s"] = 1800
+fm_m, corpo_m = motor.read_doc(MAO / "item.md")
+fm_m[trabalho.BLOCO] = bloco_ok
+motor.write_doc(MAO / "item.md", fm_m, corpo_m)
+prontos2 = _carregados_prontos("beltrano", VIZINHO)
+ok(any("Martelo" in n for n in prontos2),
+   "terminada, a peca passa a contar como posse")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

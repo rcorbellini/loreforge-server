@@ -43,8 +43,11 @@ SYSTEM = (
     '  erro: "você não saberia dizer quando isso estaria cumprido"\n'
     f'  campo: "pronto_quando"\n'
     f'  validos: {json.dumps(VOCAB)}\n\n'
+    "Se o que encerra é TER algo em mãos, use \"posse\" e diga em "
+    "`pronto_quando_alvo` o NOME da coisa (vale o que ainda não existe: o remédio "
+    "que você vai preparar).\n\n"
     "Responda APENAS um objeto JSON, sem texto antes ou depois:\n"
-    '{"pronto_quando": "<um dos validos>"}'
+    '{"pronto_quando": "<um dos validos>", "pronto_quando_alvo": "<o nome, ou null>"}'
 )
 
 CENAS = [
@@ -53,6 +56,7 @@ CENAS = [
     ("exausto", "Você está exausto, de pé há muitas horas. Firmou: 'Dormir.'"),
     ("peça parada", "Você deixou um martelo pela metade na forja. "
                     "Firmou: 'Terminar o martelo que deixei no meio.'"),
+    ("ter a garra", "Você firmou: 'Conseguir a garra de lobo que o Verro guarda.'"),
     # e a cena que CAUSOU o defeito, literal
     ("o caso da Nerissa", "Você firmou: 'Fazer um remédio de raiz torta para ajudar "
                           "os outros, com Odila, a Aguadeira.' Sua primeira resposta "
@@ -76,12 +80,16 @@ def ask(user: str) -> str:
 
 
 def escolha(texto: str):
+    """Devolve (criterio, alvo) — o alvo importa: `posse` sem ele é inútil."""
     try:
         i, f = texto.index("{"), texto.rindex("}") + 1
-        v = json.loads(texto[i:f]).get("pronto_quando")
-        return str(v).strip() if v else None
+        d = json.loads(texto[i:f])
+        v = d.get("pronto_quando")
+        a = d.get("pronto_quando_alvo")
+        return (str(v).strip() if v else None,
+                str(a).strip() if a and str(a).lower() != "null" else None)
     except Exception:
-        return None
+        return (None, None)
 
 
 print("=" * 74)
@@ -93,12 +101,14 @@ dentro = fora = mudo = 0
 for rot, cena in CENAS:
     obtidas = []
     for _ in range(RODADAS):
-        e = escolha(ask(cena))
+        e, alvo = escolha(ask(cena))
         if e is None:
             mudo += 1
         elif e in VOCAB:
             dentro += 1
-            obtidas.append(e)
+            # `posse` SEM alvo é o mesmo que critério nenhum: a trava o barra, e
+            # contar como acerto esconderia o buraco.
+            obtidas.append(f"{e}({alvo})" if e == "posse" else e)
         else:
             fora += 1
             obtidas.append(f"!{e}")

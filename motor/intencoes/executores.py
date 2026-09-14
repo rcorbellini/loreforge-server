@@ -59,6 +59,7 @@ def _h_intentions(character_id, actor_folder, res, rolls):
         status = op.get("status") or "ativa"
         intention_id = op.get("intention_id")
         pronto_quando = op.get("pronto_quando")
+        pronto_quando_alvo = op.get("pronto_quando_alvo")
         if not content:
             rejected.append({**op, "why": "'content' vazio"})
             continue
@@ -94,6 +95,7 @@ def _h_intentions(character_id, actor_folder, res, rolls):
             applied.append({**op, "intention_id": intention_id})
         else:
             new_iid = create_intention(actor_folder, content, status,
-                                       pronto_quando=pronto_quando)
+                                       pronto_quando=pronto_quando,
+                                       pronto_quando_alvo=pronto_quando_alvo)
             applied.append({**op, "intention_id": new_iid})
     return applied, rejected, []

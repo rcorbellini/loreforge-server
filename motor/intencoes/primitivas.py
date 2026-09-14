@@ -51,7 +51,38 @@ _CRITERIO_POR_CAMPO = {
     # como as outras três — o `trabalho` do objeto diz quanto falta —, só que num
     # arquivo que não é o do corpo. A família não muda; o arquivo, sim.
     "peca": "peca",
+    # A FAMÍLIA POSSE (research.md §R2), e ela é ESTRUTURALMENTE diferente das
+    # quatro acima: precisa dizer O QUÊ. "Não estou mais faminto" se confere sozinho;
+    # "a garra está comigo" não diz nada sem a garra.
+    #
+    # POR QUE ELA ENTROU AGORA. Medido (§15.6): sem ela, um compromisso de FAZER um
+    # remédio recebia `pronto_quando: hunger` — 3/3 —, porque nenhum critério servia
+    # e o modelo escolhe o primeiro que não é absurdo. O compromisso fecharia no
+    # instante em que o personagem comesse: um FALSO FECHAMENTO que o SC-002
+    # contaria como acerto. O vocabulário pequeno demais não recusa: ele VAZA.
+    "posse": "posse",
 }
+
+# O ALVO DA POSSE É NOME, NUNCA ID — e isto é decisão, não descuido.
+#
+# O que se promete ter muitas vezes AINDA NÃO EXISTE: o remédio a preparar, a lâmina
+# a forjar. Um id de cena não pode nomear o que ninguém criou, e exigir id obrigaria
+# a prometer só o que já se vê — que é o oposto de um compromisso.
+#
+# O casamento é o mesmo de `casar_e_riscar`: todo pedaço de >=3 letras do alvo tem de
+# aparecer no nome do que se carrega. "raiz torta" casa "Remédio de Raiz Torta" e não
+# casa "Raiz Seca".
+def _carrega(carregados, alvo: str | None) -> bool:
+    if not alvo:
+        return False
+    pedacos = [p for p in _dobrar(alvo).split() if len(p) >= 3]
+    if not pedacos:
+        return False
+    for nome in (carregados or []):
+        tem = _dobrar(str(nome))
+        if all(f" {p} " in tem for p in pedacos):
+            return True
+    return False
 
 # Quando a necessidade DEIXOU de apertar. O rótulo é o do mundo (`hunger_label` e
 # irmãos); estes são os que contam como "ainda aperta".
@@ -62,7 +93,9 @@ _AINDA_APERTA = ("faminto", "com fome", "sedento", "com sede",
                  "parada no meio")
 
 
-def criterio_cumprido(needs: dict | None, pronto_quando: str | None) -> bool:
+def criterio_cumprido(needs: dict | None, pronto_quando: str | None,
+                      alvo: str | None = None,
+                      carregados: list | None = None) -> bool:
     """O `pronto_quando` já é verdade? (spec 073, FR-013a — família de leitura de campo)
 
     PRIMITIVA, não lógica no handler (Princípio XII): quem confere o critério é o
@@ -75,6 +108,10 @@ def criterio_cumprido(needs: dict | None, pronto_quando: str | None) -> bool:
     campo = _CRITERIO_POR_CAMPO.get(pronto_quando or "")
     if not campo:
         return False
+    # A POSSE não é rótulo: é uma pergunta sobre o que se carrega AGORA. O `alvo`
+    # vem da própria intenção (`pronto_quando_alvo`), porque é dela que ele é.
+    if campo == "posse":
+        return _carrega(carregados, alvo)
     rotulo = str((needs or {}).get(campo) or "").strip().lower()
     if not rotulo:
         return False
@@ -113,7 +150,8 @@ def rotulo_de_parada(parada_desde: int | None, agora: int | None = None) -> str 
 
 def create_intention(folder: Path, content: str, status: str = "ativa",
                      memoria_id: str | None = None,
-                     pronto_quando: str | None = None) -> str:
+                     pronto_quando: str | None = None,
+                     pronto_quando_alvo: str | None = None) -> str:
     """Cria uma intenção nova na pasta de quem a possui. Devolve o id novo.
 
     `memoria_id` (spec 030, opcional): quando a intenção nasce de um
@@ -132,6 +170,10 @@ def create_intention(folder: Path, content: str, status: str = "ativa",
         fm["memoria_id"] = memoria_id
     if pronto_quando:
         fm["pronto_quando"] = pronto_quando
+        # Só a família POSSE tem alvo; guardar a chave nas outras seria convidar a
+        # próxima leitura a perguntar "alvo de quê?" numa intenção de fome.
+        if pronto_quando_alvo:
+            fm["pronto_quando_alvo"] = pronto_quando_alvo
         # O RELÓGIO NASCE PARADO (spec 073, FR-012). Ele conta ESTAGNAÇÃO, e um
         # compromisso recém-firmado ainda não andou — então o contador começa
         # agora e só zera quando um passo for riscado.
@@ -225,7 +267,9 @@ _META = ("analis", "decida o que", "decidir o que", "avalie o contexto",
 
 
 def travas_do_nascimento(content: str, pronto_quando: str | None,
-                         nome_proprio: str | None = None) -> tuple[str, dict] | None:
+                         nome_proprio: str | None = None,
+                         pronto_quando_alvo: str | None = None
+                         ) -> tuple[str, dict] | None:
     """A intenção pode nascer? Devolve `(regra, valores)` da recusa, ou `None`.
 
     TRÊS TRAVAS, e a honestidade sobre a quarta:
@@ -260,6 +304,12 @@ def travas_do_nascimento(content: str, pronto_quando: str | None,
         return ("intencao_criterio_desconhecido",
                 {"pedido": pronto_quando,
                  "validos": sorted(_CRITERIO_POR_CAMPO)})
+    # A POSSE PRECISA DIZER O QUÊ. As outras famílias se conferem sozinhas ("não
+    # estou mais faminto"); "está comigo" não diz nada sem o objeto. Sem o alvo, a
+    # intenção nasceria com um critério que NUNCA vira verdade — pior que sem
+    # critério, porque parece ter um.
+    if pronto_quando == "posse" and not (pronto_quando_alvo or "").strip():
+        return ("intencao_posse_sem_alvo", {})
     # APONTA PARA SI: o personagem citando o próprio nome como se fosse outro.
     # "Vou aprender o caminho com Nerissa" dito PELA Nerissa.
     if nome_proprio:
@@ -460,7 +510,8 @@ def casar_e_riscar(folder: Path, aplicadas: list, ator_id: str) -> dict | None:
     return None
 
 
-def fechar_por_criterio(folder: Path, needs: dict | None) -> list[dict]:
+def fechar_por_criterio(folder: Path, needs: dict | None,
+                        carregados: list | None = None) -> list[dict]:
     """Fecha toda intenção ativa cujo `pronto_quando` virou verdade (FR-013).
 
     Quem fecha é o MUNDO, conferindo o critério — nunca a Mente declarando-se
@@ -475,7 +526,8 @@ def fechar_por_criterio(folder: Path, needs: dict | None) -> list[dict]:
         fm, body = read_doc(path)
         if fm.get("status") != "ativa" or not fm.get("pronto_quando"):
             continue
-        if not criterio_cumprido(needs, fm.get("pronto_quando")):
+        if not criterio_cumprido(needs, fm.get("pronto_quando"),
+                                 fm.get("pronto_quando_alvo"), carregados):
             continue
         fm["status"] = "concluida"
         fm["updated_ts"] = int(time.time())
@@ -543,6 +595,10 @@ def get_active_intentions(folder: Path) -> list[dict]:
         if fm.get("pronto_quando"):
             entrada["pronto_quando"] = fm["pronto_quando"]
             entrada["passos_cumpridos"] = int(fm.get("passos_cumpridos") or 0)
+            # o ALVO da posse desce junto: sem ele o compromisso chega à Mente como
+            # "ter algo", e ela não sabe o que estava perseguindo.
+            if fm.get("pronto_quando_alvo"):
+                entrada["pronto_quando_alvo"] = fm["pronto_quando_alvo"]
         # E A PARADA DESCE EM RÓTULO, NUNCA EM NÚMERO (Princípio V). Chave AUSENTE
         # quando acabou de andar — nunca `null` (spec 067, o contrato é completo por
         # decisão e quem filtra é o conector).

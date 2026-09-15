@@ -59,6 +59,14 @@ def input_schema(cap: dict) -> dict:
     # ramo de baixo faria o schema convidar a Mente a INVENTAR o alvo.
     for param in (cap.get("por_nome") or {}):
         props.setdefault(param, {"type": "string", "description": face.DICA_DE_ALVO})
+    # O OPCIONAL SEM ENUM (spec 073). Sem este laço ele não entrava em lugar nenhum
+    # e sumia do schema — foi o que deixou `pronto_quando_alvo` inalcançável, e com
+    # ele as famílias `posse` e `lugar` inteiras.
+    for livre in (cap.get("livres") or []):
+        props.setdefault(livre["nome"], {
+            "type": livre.get("tipo") or "string",
+            "description": "texto livre — escreva você; não há lista de opções",
+        })
     # o que o mundo EXIGE e não tem lista de opções é texto livre que a Mente escreve
     # (o conteúdo de um plano, o teor de uma promessa, sobre o que se pergunta)
     for exigido in (cap.get("exige") or []):

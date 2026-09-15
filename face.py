@@ -117,6 +117,31 @@ def _sem_enum(props: dict, tool: str) -> dict:
     return fora
 
 
+def _livres(props: dict, alvos: dict, por_nome: dict, exige: list) -> list:
+    """Os parâmetros OPCIONAIS de texto livre — os que a face deixava cair no vão.
+
+    O `input_schema` monta as propriedades de três fontes: `alvos` (tem enum),
+    `por_nome` (era enum de cena) e `exige` (obrigatório). Um parâmetro que não é
+    nenhuma das três **sumia do schema**, e a Mente não tinha como mandá-lo.
+
+    Não é hipótese: `set_intention.pronto_quando_alvo` nasceu assim na spec 073 e
+    ficou INALCANÇÁVEL — as famílias `posse` e `lugar` inteiras, que dependem dele
+    para dizer O QUÊ, não podiam ser usadas. Quem achou foi a bancada, não a suíte:
+    o parâmetro existia na `ToolSpec`, o teste da primitiva passava, e o buraco
+    estava entre os dois.
+
+    `emprestimo` do `give` é o outro caso vivo, e estava no mesmo vão desde a 036.
+    """
+    fora = []
+    for nome, esp in (props or {}).items():
+        if nome in alvos or nome in por_nome or nome in (exige or []):
+            continue
+        if nome == "prosa":
+            continue          # `prosa` tem lugar próprio no schema
+        fora.append({"nome": nome, "tipo": (esp or {}).get("type") or "string"})
+    return fora
+
+
 def build(context: dict) -> list[dict]:
     """A face da cena para A Mente. Lista vazia é resposta legítima (caído/morto).
 
@@ -137,12 +162,18 @@ def build(context: dict) -> list[dict]:
         if spec is not None and spec.interna:
             continue                      # a caneta do mundo não desce (classe 2)
         params = (t.get("parameters") or {}).get("properties") or {}
+        _al = _alvos(params, t["name"])
+        _pn = _sem_enum(params, t["name"])
+        _ex = list((t.get("parameters") or {}).get("required") or [])
         exposta.append({
             "nome": t["name"],
             "descricao": t.get("description") or "",
-            "alvos": _alvos(params, t["name"]),
-            "por_nome": _sem_enum(params, t["name"]),
-            "exige": list((t.get("parameters") or {}).get("required") or []),
+            "alvos": _al,
+            "por_nome": _pn,
+            "exige": _ex,
+            # OPCIONAL SEM ENUM tem canal próprio — sem ele o parâmetro some do
+            # schema e a Mente não pode mandá-lo. Ver `_livres`.
+            "livres": _livres(params, _al, _pn, _ex),
             "consulta": False,
         })
     # QUEM DORME NÃO PERGUNTA. O gate de descanso do manifesto é um early-return que

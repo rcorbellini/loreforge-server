@@ -321,6 +321,45 @@ except Exception as _e:  # noqa: BLE001
     check("todo vocabulário fechado está em face._ENUM_QUE_FICA", False, repr(_e))
 
 
+# --------------------------------------------------------------------------- #
+# TODO PARÂMETRO DECLARADO CHEGA AO SCHEMA (spec 073)
+# --------------------------------------------------------------------------- #
+#
+# `input_schema` montava as propriedades de três fontes — `alvos` (tem enum),
+# `por_nome` (era enum de cena) e `exige` (obrigatório). Um parâmetro OPCIONAL sem
+# enum não era nenhuma das três e SUMIA: a Mente não tinha como mandá-lo.
+#
+# Não é hipótese. `set_intention.pronto_quando_alvo` nasceu assim na spec 073 e ficou
+# inalcançável — com ele, as famílias `posse` e `lugar` inteiras, que dependem dele
+# para dizer O QUÊ. `give.emprestimo` estava no mesmo vão desde a spec 036. Quem
+# achou foi a BANCADA, não a suíte: o parâmetro existia na `ToolSpec`, o teste da
+# primitiva passava, e o buraco estava entre os dois.
+print("\n-- todo parâmetro declarado chega ao schema")
+try:
+    import face as _f2
+    import mcp_core as _m2
+    _ctx2 = motor.get_context("torvin-ferreiro")
+    # A RÉGUA É O MANIFESTO, não a `ToolSpec` crua.
+    #
+    # A `ToolSpec` declara TAMBÉM os campos de JUÍZO (`vantagem`, `saciedade`,
+    # `toxicidade`) e os de autoria do Árbitro (`nome`, `descricao_alta`) — esses
+    # não descem à Mente de propósito, e cobrá-los aqui acusaria 70 falsos.
+    # `arbiter.build_tools` já os deixa de fora: o que sobra ali é o que a Mente
+    # PODE mandar, e é isso que não pode sumir no caminho até o schema.
+    _manifesto = {t["name"]: ((t.get("parameters") or {}).get("properties") or {})
+                  for t in arbiter.build_tools(_ctx2)}
+    _sumiram = []
+    for _cap in _f2.build(_ctx2):
+        _no_schema = set((_m2.input_schema(_cap).get("properties") or {}))
+        for _par in _manifesto.get(_cap["nome"], {}):
+            if _par not in _no_schema:
+                _sumiram.append(f"{_cap['nome']}:{_par}")
+    check("nenhum parâmetro declarado some do inputSchema",
+          not _sumiram, ", ".join(_sumiram))
+except Exception as _e:  # noqa: BLE001
+    check("nenhum parâmetro declarado some do inputSchema", False, repr(_e))
+
+
 # --- resultado ------------------------------------------------------------- #
 print()
 if FAILS:

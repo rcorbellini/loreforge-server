@@ -1060,19 +1060,25 @@ print("\n--- a recusa corrigivel chega inteira (§18) ---")
 
 import mcp_core  # noqa: E402
 
-texto = mcp_core._recusa_em_texto({
+# A API DEVOLVE O DADO, NAO A FRASE. Quem escreve a frase para A Mente e o conector
+# (o BFF) — ver `laco._oQueCorrigir` e o teste em `test/laco.test.js`. Uma versao
+# desta logica viveu aqui, no servidor, preferindo o `id`, e mandou
+# "bram-pescador, coelho-do-cais" ao modelo: presentacao dentro da API, desfazendo
+# pela porta dos fundos o que a spec 060 tirou da face.
+dado = mcp_core._recusa_estruturada({
     "erro": "você não saberia dizer quando isso estaria cumprido",
     "campo": "pronto_quando",
     "validos": [{"id": c, "nome": c} for c in sorted(P._CRITERIO_POR_CAMPO)]})
-ok("pronto_quando" in texto, "a recusa diz QUAL campo corrigir")
-for crit in P._CRITERIO_POR_CAMPO:
-    ok(crit in texto, f"e lista o critério `{crit}`")
+ok(dado and dado.get("campo") == "pronto_quando",
+   "a recusa devolve QUAL campo corrigir")
+ids = {v["id"] for v in (dado or {}).get("validos") or []}
+ok(ids == set(P._CRITERIO_POR_CAMPO),
+   "e o vocabulario inteiro, como DADO — com id e nome, nunca como frase pronta")
 
-# A RECUSA DE MERITO segue sendo so a frase: nao ha o que corrigir.
-so_frase = mcp_core._recusa_em_texto(
-    {"erro": "isso já é verdade agora — não há compromisso a firmar"})
-ok(so_frase == "isso já é verdade agora — não há compromisso a firmar",
-   "recusa de MERITO nao ganha lista nenhuma — ela nao e um erro a corrigir")
+# A RECUSA DE MERITO nao tem o que corrigir, e por isso nao devolve nada.
+ok(mcp_core._recusa_estruturada(
+       {"erro": "isso já é verdade agora — não há compromisso a firmar"}) is None,
+   "recusa de MERITO nao devolve estrutura — ela nao e um erro a corrigir")
 
 # E o FIO INTEIRO, pela porta real do MCP: o que o conector recebe ja traz a lista.
 _visto = {}
@@ -1098,33 +1104,26 @@ else:
              "a entrega)")
 
 
-# A RECUSA DIZ O NOME, NUNCA O ID (spec 060 + §20).
+# A RECUSA DIZ O NOME, NUNCA O ID — e a frase e montada no CONECTOR.
 #
-# O conserto da §18.2 (mandar `validos` junto da recusa) nasceu preferindo o `id`, e
-# o efeito foi exato: numa recusa de `cobrar` A Mente passava a ler
-# "bram-pescador, coelho-do-cais, doncel-bebado". Ids voltando ao modelo pela porta
-# dos fundos, depois de a 060 os ter tirado da face POR MEDIÇÃO.
+# O conserto de mandar `validos` junto da recusa nasceu no servidor preferindo o
+# `id`, e numa recusa de `cobrar` A Mente passava a ler "bram-pescador,
+# coelho-do-cais". Ids voltando ao modelo pela porta dos fundos, depois de a 060 os
+# ter tirado da face POR MEDICAO.
 #
-# A Mente aponta por NOME; o conector resolve. Mensagem de erro não e excecao — e
-# justamente onde a tentacao de "ajudar com o id exato" e maior.
-print("\n--- a recusa diz o NOME, nunca o id (§20) ---")
+# Hoje a API devolve `{campo, validos:[{id,nome}]}` e a frase e do BFF. O que se
+# prende AQUI e o lado da API: o dado desce com NOME, sem o qual o conector nao teria
+# como dizer o nome. O lado da frase esta em `test/laco.test.js`.
+print("\n--- a recusa devolve id E nome (§20/§22) ---")
 
-_cena = mcp_core._recusa_em_texto({
-    "erro": "'x' não é um personagem presente", "campo": "de_quem",
-    "validos": [{"id": "bram-pescador", "nome": "Bram, o Pescador"},
-                {"id": "sorin-correio", "nome": "Sorin, o Correio Ferido"}]})
-ok("Bram, o Pescador" in _cena and "Sorin" in _cena,
-   "a recusa de referencia diz os NOMES da cena")
-ok("bram-pescador" not in _cena and "sorin-correio" not in _cena,
-   "e NAO diz os ids — foi por isso que a 060 os tirou da face")
-
-_voc = mcp_core._recusa_em_texto({
-    "erro": "você não saberia dizer quando isso estaria cumprido",
-    "campo": "pronto_quando",
-    "validos": [{"id": c, "nome": c} for c in sorted(P._CRITERIO_POR_CAMPO)]})
-ok(all(c in _voc for c in P._CRITERIO_POR_CAMPO),
-   "o VOCABULARIO fechado continua descendo inteiro — ali id e nome sao a mesma "
-   "palavra, e nao ha cena para vazar")
+_d = mcp_core._recusa_estruturada({
+    "erro": "'x' nao e um personagem presente", "campo": "de_quem",
+    "validos": [{"id": "bram-pescador", "nome": "Bram, o Pescador"}]})
+ok(_d["validos"][0]["nome"] == "Bram, o Pescador",
+   "o NOME desce — e e por ele que o conector monta a frase")
+ok(_d["validos"][0]["id"] == "bram-pescador",
+   "o ID tambem desce: quem for resolver precisa dele, e a API nao escolhe por "
+   "quem le")
 
 
 print()

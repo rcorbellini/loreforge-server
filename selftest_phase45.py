@@ -91,7 +91,7 @@ def run() -> int:
         vistos.add(id(spec))
         # spec 069: guarda o NOME de cada par, de TODOS os pares. Antes guardava
         # `spec.juizo[0]` — o PAR `("vantagem", "Régua…")` —, e comparava a TUPLA
-        # contra `cap["alvos"]` (dict de chaves string) e `cap["exige"]` (lista de
+        # contra `cap["params"]` (o mapa classificado) e `cap["exige"]` (lista de
         # strings): uma tupla nunca pertence a nenhum dos dois, então `vazando` era
         # SEMPRE vazio e este teste nunca soube reprovar. E lia só o primeiro par,
         # ignorando os seguintes — o caso de `butcher` (4 pares) e, agora, de
@@ -101,7 +101,7 @@ def run() -> int:
     vazando = []
     for cap in f:
         for p in juizo_params:
-            if p in cap["alvos"] or p in cap["exige"]:
+            if p in (cap.get("params") or {}) or p in cap["exige"]:
                 vazando.append(f"{cap['nome']}.{p}")
     check("nenhum parâmetro de JUÍZO desce (nem alvo, nem exigência)",
           not vazando, ", ".join(vazando))
@@ -124,7 +124,9 @@ def run() -> int:
     presentes |= {i["id"] for i in (((ctx.get("self") or {}).get("inventory")) or [])}
     forasteiros = []
     for cap in f:
-        for p, alvos in cap["alvos"].items():
+        for p, alvos in {k: v["candidatos"]
+                         for k, v in (cap.get("params") or {}).items()
+                         if v.get("candidatos")}.items():
             for a in alvos:
                 if isinstance(a, str) and a not in presentes and not a.startswith("mem-"):
                     # ids de rota do mundo e estados/intensidades são enums de

@@ -45,7 +45,12 @@ def check(name, cond, detail=""):
 CENA = {
     "capacidades": [
         {"nome": "take", "descricao": "Pega um item ao alcance.",
-         "alvos": {"item": ["faca-cega", "moeda-cobre-001"]}, "exige": ["item"]},
+         # forma NOVA da face: um mapa `params`, com os candidatos completos
+         # (id e nome). A API entrega o dado; o recorte e do conector.
+         "params": {"item": {"forma": "string", "candidatos": [
+             {"id": "faca-cega", "nome": "Faca Cega"},
+             {"id": "moeda-cobre-001", "nome": "Moeda de Cobre"}]}},
+         "exige": ["item"]},
         {"nome": "ask_directions", "descricao": "Pergunta por onde se vai.",
          "alvos": {"quem": ["torvin-ferreiro"]}, "exige": ["quem"]},
     ]

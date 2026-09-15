@@ -285,60 +285,38 @@ check("nenhuma description usa frase aposentada sem medição própria",
 #
 # Esta checagem fecha a causa: um enum cujos valores NÃO são ids da cena é
 # vocabulário, e vocabulário tem de estar na lista.
-print("\n-- o vocabulário fechado chega à Mente (face._ENUM_QUE_FICA)")
+# A FACE NÃO RECORTA MAIS — quem recorta é o conector (o BFF). O guarda do
+# vocabulário migrou para `loreforge-connector/test/mente.test.js`, onde a decisão
+# passou a morar: "todo parâmetro com candidatos está classificado — sem default
+# mudo". Aqui fica o que é da API: o dado desce COMPLETO.
+print("\n-- a face entrega o dado completo (id E nome)")
 try:
-    import pathlib
-    import face as _face
-    # VOCABULÁRIO é o enum cujos valores NÃO SÃO ID DE NADA no mundo.
-    #
-    # `intensity` é ['trivial','small',...]: nenhum desses é entidade. `give:item` é
-    # ['bolsa-de-couro',...]: todos são. A régua não precisa saber o que é "de cena",
-    # só perguntar ao mundo se aquele id existe — e o mundo sabe responder.
-    #
-    # (Duas tentativas anteriores falharam por régua fraca: uma esqueceu inventário e
-    # rota; a outra comparou duas cenas que eram a MESMA taverna. Fica escrito porque
-    # o proximo a mexer aqui vai ter as mesmas duas ideias.)
-    _ids = set()
-    for _arq in pathlib.Path(os.environ["LOREFORGE_WORLD"]).rglob("*.md"):
-        _fm, _ = motor.read_doc(_arq)
-        if _fm.get("id"):
-            _ids.add(str(_fm["id"]))
-
-    _faltam = []
-    for _t in arbiter.build_tools(motor.get_context("torvin-ferreiro")):
-        for _par, _esp in (((_t.get("parameters") or {}).get("properties")) or {}).items():
-            _vals = [str(v) for v in (_esp.get("enum") or [])]
-            if not _vals or _par.endswith("_id"):
-                continue
-            if any(v in _ids for v in _vals):
-                continue                  # aponta entidade: é referência, e sai
-            _chave = f"{_t['name']}:{_par}"
-            if _chave not in _face._ENUM_QUE_FICA:
-                _faltam.append(f"{_chave}={_vals[:4]}")
-    check("todo vocabulário fechado está em face._ENUM_QUE_FICA",
-          not _faltam, "; ".join(_faltam))
+    import face as _f1
+    _ctx1 = motor.get_context("torvin-ferreiro")
+    _sem_nome, _sem_id = [], []
+    for _cap in _f1.build(_ctx1):
+        for _par, _v in (_cap.get("params") or {}).items():
+            for _c in (_v.get("candidatos") or []):
+                if not _c.get("id"):
+                    _sem_id.append(f"{_cap['nome']}:{_par}")
+                if not _c.get("nome"):
+                    _sem_nome.append(f"{_cap['nome']}:{_par}")
+    check("todo candidato desce com id", not _sem_id, ", ".join(_sem_id[:5]))
+    check("todo candidato desce com nome — quem resolve por nome é o conector, "
+          "e quem mostra na tela é o cliente; nenhum dos dois deve adivinhar",
+          not _sem_nome, ", ".join(_sem_nome[:5]))
 except Exception as _e:  # noqa: BLE001
-    check("todo vocabulário fechado está em face._ENUM_QUE_FICA", False, repr(_e))
+    check("a face entrega o dado completo", False, repr(_e))
 
-
-# --------------------------------------------------------------------------- #
-# TODO PARÂMETRO DECLARADO CHEGA AO SCHEMA (spec 073)
-# --------------------------------------------------------------------------- #
-#
-# `input_schema` montava as propriedades de três fontes — `alvos` (tem enum),
-# `por_nome` (era enum de cena) e `exige` (obrigatório). Um parâmetro OPCIONAL sem
-# enum não era nenhuma das três e SUMIA: a Mente não tinha como mandá-lo.
-#
-# Não é hipótese. `set_intention.pronto_quando_alvo` nasceu assim na spec 073 e ficou
-# inalcançável — com ele, as famílias `posse` e `lugar` inteiras, que dependem dele
-# para dizer O QUÊ. `give.emprestimo` estava no mesmo vão desde a spec 036. Quem
-# achou foi a BANCADA, não a suíte: o parâmetro existia na `ToolSpec`, o teste da
-# primitiva passava, e o buraco estava entre os dois.
 print("\n-- todo parâmetro declarado chega ao schema")
 try:
     import face as _f2
     import mcp_core as _m2
     _ctx2 = motor.get_context("torvin-ferreiro")
+    # MENOS OS CAMPOS DE JUÍZO. Eles estão no manifesto (é o Árbitro quem os
+    # preenche) e NÃO devem descer à Mente — a fase 45 prende isso do outro lado.
+    _juizo = {p for sp in motor.registro.specs().values()
+              for p, _r in (getattr(sp, "juizo", None) or ())}
     # A RÉGUA É O MANIFESTO, não a `ToolSpec` crua.
     #
     # A `ToolSpec` declara TAMBÉM os campos de JUÍZO (`vantagem`, `saciedade`,
@@ -352,6 +330,8 @@ try:
     for _cap in _f2.build(_ctx2):
         _no_schema = set((_m2.input_schema(_cap).get("properties") or {}))
         for _par in _manifesto.get(_cap["nome"], {}):
+            if _par in _juizo or _par == "prosa":
+                continue
             if _par not in _no_schema:
                 _sumiram.append(f"{_cap['nome']}:{_par}")
     check("nenhum parâmetro declarado some do inputSchema",

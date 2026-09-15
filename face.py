@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import arbiter
 import motor
+from motor.io import name_of
 
 
 # OS ENUMS QUE FICAM NA FACE EXPOSTA.
@@ -47,98 +48,79 @@ import motor
 # manifesto de `arbiter.build_tools`, que continua inteiro. É a separação que a
 # própria docstring de `mcp_core.input_schema` já defendia — "o que o schema NÃO
 # entrega é o CONTEÚDO do enum".
-_ENUM_QUE_FICA = frozenset({
-    "heal:alvo", "butcher:alvo",                    # subconjunto calculado
-    "write:instrumento", "sing:instrumento",        # o que dá para empunhar
-    "craft:peca", "forge_weapon:peca", "forge_armor:peca", "cook:peca",
-    "brew:peca",                                    # trabalho em processo
-    "set_intention:status", "set_intention:pronto_quando",
-    "promise:intention_id",                         # vocabulário fechado / intenção
-    # Achados pelo guarda do `selftest.py`, e NÃO são da spec 073 — são a mesma
-    # podridão, de antes: palavras que a tool aceita e que a Mente tinha de
-    # adivinhar. Mostrá-las não abre nada (não são cena, não são id de ninguém);
-    # escondê-las só fazia o modelo chutar.
-    "create_memory:intensity", "create_memory:domain",
-    "travel_to:destino", "ask_about:sobre_lugar",   # lugar que ele sabe alcançar
-    "learn_routes:rotas",                           # rotas do MUNDO, não da cena
-})
+# === A FACE É DADO, NÃO APRESENTAÇÃO ========================================= #
+#
+# A API entrega o que a cena OFERECE, completo, sem se preocupar com onde vai ser
+# usado. Quem recorta para a LLM é o conector — o BFF da Mente —, porque recorte é
+# presentação e presentação se mede contra UM modelo.
+#
+# (A medição da spec 060 — "o enum de id atrapalha" — é fato sobre o `llama3.1` num
+# prompt, não sobre o que uma API deve devolver. Um host MCP de terceiro tem de
+# receber os candidatos inteiros; é ele quem decide o que fazer com eles.)
+#
+# AQUI MORAVA `_ENUM_QUE_FICA`, 17 pares `tool:parâmetro` mantidos à mão. Ela
+# apodreceu duas vezes: no cliente (item 77), e aqui — quando
+# `set_intention:pronto_quando` nasceu e ninguém a atualizou, custando duas corridas
+# A/B de quatro horas. Ela VOLTOU para o conector, onde a decisão é, e lá ganhou o
+# guarda que faltava: classificação EXAUSTIVA, sem default silencioso.
+#
+# TENTEI DERIVÁ-LA, e não dá — fica escrito para ninguém tentar de novo. A ideia era
+# "enum igual a um conjunto que a cena já lista = repetição; subconjunto = a única
+# fonte". Medida contra a lista à mão, deu 75 divergências: quase todo enum de cena é
+# subconjunto estrito de algo (filtrado por física, posse, estado), então o critério
+# classifica quase tudo como "conhecimento". A distinção é um JUÍZO sobre o que a
+# Mente consegue inferir da prosa, e juízo não sai de igualdade de conjuntos.
+#
+# Cada parâmetro sai daqui com o que ele É: os candidatos com `id` E `nome` (quem
+# resolve nome→id é o conector; quem mostra o nome é a tela — nenhum dos dois
+# deveria adivinhar o outro), ou nada, se for texto livre.
 
-# A frase que substitui o enum. Curta de propósito: responde "como eu chamo?", que é
-# a única pergunta que o enum respondia de útil, e nada além disso.
-DICA_DE_ALVO = "o NOME daquilo, como aparece na cena"
 
+def _campos_de_juizo() -> set:
+    """Todo nome que ALGUMA ferramenta declara como campo de juízo.
 
-def _alvos(props: dict, tool: str = "") -> dict:
-    """Os alvos possíveis por parâmetro — só o que EXISTE na cena, agora.
+    Excluí-los não é recorte de apresentação — é modelagem: a face é a vista DA
+    MENTE, e a nota de `vantagem`, o `nome` que o Árbitro dá à peça ou a `urgencia`
+    de um prazo nunca foram dela.
 
-    Vem do enum que o próprio manifesto do turno já monta: a face não recalcula
-    candidatos, senão haveria duas respostas possíveis para "quem está aqui".
+    É GLOBAL, e não por ferramenta, porque o mesmo campo aparece declarado como
+    parâmetro comum em quem o RECEBE: `forge_armor` lista `urgencia` e
+    `descricao_vencida` em `params`, e eles são juízo da família de prazo. Por
+    ferramenta, eles vazavam — e vazaram, no dia em que a face passou a entregar
+    também os opcionais (antes o teste da fase 45 não olhava onde eles caíam).
 
-    Lista de CENA não desce (ver `_ENUM_QUE_FICA`): ela vira `DICA_DE_ALVO` em
-    `mcp_core.input_schema`, e A Mente aponta por nome.
+    Sai das próprias declarações, então uma régua nova não precisa lembrar daqui.
     """
-    out = {}
-    for nome, schema in (props or {}).items():
-        enum = schema.get("enum")
-        if enum is None and schema.get("type") == "array":
-            enum = (schema.get("items") or {}).get("enum")
-        if enum and f"{tool}:{nome}" in _ENUM_QUE_FICA:
-            out[nome] = list(enum)
-    return out
-
-
-def _sem_enum(props: dict, tool: str) -> dict:
-    """Os parâmetros que TINHAM enum de cena, com os ids que o manifesto validou.
-
-    O enum carregava DUAS coisas, e só uma prestava:
-
-      · RESTRINGIR o modelo — medido inútil (spec 060: id fora do enum saiu 4/5),
-        caro (35% do bloco) e nocivo (paralisia no ambíguo, substituição silenciosa).
-      · ALIMENTAR A RESOLUÇÃO no cliente — o que permite A Mente apontar "Nerissa,
-        a Boticária" e o conector converter para o id. Isso presta, e muito: medido
-        em 14 de 15 chamadas reais, inclusive numa em que o modelo abreviou o nome.
-
-    Então elas se separam. A lista sai do `inputSchema` (o modelo não a vê mais) e
-    desce em `annotations.byName`, que é metadado de tool: o conector lê, o runtime
-    de tool-calling não põe no prompt.
-
-    ISSO NÃO É O ENUM DE VOLTA POR OUTRA PORTA. A diferença é quem lê: antes ela ia
-    ao MODELO, competindo com a cena e custando tokens; agora vai ao CONECTOR, que é
-    quem precisava dela desde sempre. E continua sem autoridade — quem valida é o
-    Motor (Princípio III), como a docstring de `mcp_core.input_schema` já dizia.
-    """
-    fora = {}
-    for nome, schema in (props or {}).items():
-        enum = schema.get("enum")
-        if enum is None and schema.get("type") == "array":
-            enum = (schema.get("items") or {}).get("enum")
-        if enum and f"{tool}:{nome}" not in _ENUM_QUE_FICA:
-            fora[nome] = list(enum)
+    fora = set()
+    for spec in motor.registro.specs().values():
+        for par, _regua in (getattr(spec, "juizo", None) or ()):
+            fora.add(par)
     return fora
 
 
-def _livres(props: dict, alvos: dict, por_nome: dict, exige: list) -> list:
-    """Os parâmetros OPCIONAIS de texto livre — os que a face deixava cair no vão.
+def _params_da(props: dict, tool: str = "") -> dict:
+    """Todo parâmetro que a Mente pode mandar, COMPLETO.
 
-    O `input_schema` monta as propriedades de três fontes: `alvos` (tem enum),
-    `por_nome` (era enum de cena) e `exige` (obrigatório). Um parâmetro que não é
-    nenhuma das três **sumia do schema**, e a Mente não tinha como mandá-lo.
+    Um mapa só. Antes eram três listas (`alvos`, `por_nome`, `livres`) e um parâmetro
+    que não caísse em nenhuma SUMIA do schema — foi assim que `pronto_quando_alvo`
+    ficou inalcançável, levando junto as famílias `posse` e `lugar`. Com um mapa,
+    esquecer um parâmetro exige não declará-lo.
 
-    Não é hipótese: `set_intention.pronto_quando_alvo` nasceu assim na spec 073 e
-    ficou INALCANÇÁVEL — as famílias `posse` e `lugar` inteiras, que dependem dele
-    para dizer O QUÊ, não podiam ser usadas. Quem achou foi a bancada, não a suíte:
-    o parâmetro existia na `ToolSpec`, o teste da primitiva passava, e o buraco
-    estava entre os dois.
-
-    `emprestimo` do `give` é o outro caso vivo, e estava no mesmo vão desde a 036.
+    `prosa` fica de fora: tem lugar próprio no schema e não é alvo de nada.
     """
-    fora = []
-    for nome, esp in (props or {}).items():
-        if nome in alvos or nome in por_nome or nome in (exige or []):
+    juizo = _campos_de_juizo()
+    fora = {}
+    for nome, schema in (props or {}).items():
+        if nome == "prosa" or nome in juizo:
             continue
-        if nome == "prosa":
-            continue          # `prosa` tem lugar próprio no schema
-        fora.append({"nome": nome, "tipo": (esp or {}).get("type") or "string"})
+        enum = schema.get("enum")
+        if enum is None and schema.get("type") == "array":
+            enum = (schema.get("items") or {}).get("enum")
+        entrada = {"forma": schema.get("type") or "string"}
+        if enum:
+            entrada["candidatos"] = [{"id": str(v), "nome": name_of(str(v)) or str(v)}
+                                     for v in enum]
+        fora[nome] = entrada
     return fora
 
 
@@ -162,18 +144,16 @@ def build(context: dict) -> list[dict]:
         if spec is not None and spec.interna:
             continue                      # a caneta do mundo não desce (classe 2)
         params = (t.get("parameters") or {}).get("properties") or {}
-        _al = _alvos(params, t["name"])
-        _pn = _sem_enum(params, t["name"])
-        _ex = list((t.get("parameters") or {}).get("required") or [])
         exposta.append({
             "nome": t["name"],
             "descricao": t.get("description") or "",
-            "alvos": _al,
-            "por_nome": _pn,
-            "exige": _ex,
-            # OPCIONAL SEM ENUM tem canal próprio — sem ele o parâmetro some do
-            # schema e a Mente não pode mandá-lo. Ver `_livres`.
-            "livres": _livres(params, _al, _pn, _ex),
+            # UM MAPA SÓ, classificado. Antes eram três listas (`alvos`, `por_nome`,
+            # `livres`) e um parâmetro que não caísse em nenhuma SUMIA do schema —
+            # foi assim que `pronto_quando_alvo` ficou inalcançável, levando junto as
+            # famílias `posse` e `lugar`. Com um mapa, esquecer um parâmetro exige
+            # não declará-lo.
+            "params": _params_da(params, t["name"]),
+            "exige": list((t.get("parameters") or {}).get("required") or []),
             "consulta": False,
         })
     # QUEM DORME NÃO PERGUNTA. O gate de descanso do manifesto é um early-return que
@@ -254,7 +234,9 @@ def _consultas() -> list[dict]:
     return [{
         "nome": spec.name,
         "descricao": spec.description or "",
-        "alvos": {},
+        # uma consulta não tem alvo de cena: tudo que ela declara é texto que a
+        # Mente escreve. Mesmo mapa das outras, para não haver duas formas de face.
+        "params": {p: {"forma": "string"} for p in (spec.params or {})},
         "exige": list(spec.params or {}),
         "consulta": True,
     } for spec in motor.consult_specs().values()]

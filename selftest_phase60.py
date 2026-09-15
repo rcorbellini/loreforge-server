@@ -95,7 +95,12 @@ for cid, ctx in _personagens():
         cap = caps.get(tool)
         if cap is None:
             continue                        # a cena não oferece: nada a conferir
-        alvos = cap.get("alvos") or {}
+        # A face passou a entregar UM MAPA (`params`) em vez de tres listas: ela
+        # nao recorta mais, so declara. O que este check prende segue igual — o
+        # subconjunto CALCULADO tem de vir com candidatos, porque ele e a unica
+        # fonte daquele fato. Quem decide se o MODELO o ve e o conector.
+        alvos = {k: v for k, v in (cap.get("params") or {}).items()
+                 if v.get("candidatos")}
         if param not in alvos:
             faltando.append(f"{cid}/{tool}.{param}")
 check("os subconjuntos CALCULADOS continuam declarando os candidatos",

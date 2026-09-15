@@ -51,29 +51,24 @@ def input_schema(cap: dict) -> dict:
     `consultar_momento` seria cobrar a encenação de um pensamento. O schema fica
     só com os params declarados.
     """
+    # O SCHEMA É COMPLETO — todo parâmetro, todo candidato. Quem recorta para a LLM
+    # é o conector (o BFF): recorte é presentação, e esta é a API.
+    #
+    # Aqui havia três laços (`alvos`/`por_nome`/`exige`) e uma frase de dica no lugar
+    # do enum cortado. O corte mudou de lado; a dica foi junto.
     props: dict = {}
-    for param, alvos in (cap.get("alvos") or {}).items():
-        props[param] = {"type": "string", "enum": list(alvos)}
-    # O ALVO QUE PERDEU O ENUM (spec 060, agora na fonte — `face._ENUM_QUE_FICA`).
-    # Não é "texto livre": tem nome na cena, e a dica diz qual nome usar. Cair no
-    # ramo de baixo faria o schema convidar a Mente a INVENTAR o alvo.
-    for param in (cap.get("por_nome") or {}):
-        props.setdefault(param, {"type": "string", "description": face.DICA_DE_ALVO})
-    # O OPCIONAL SEM ENUM (spec 073). Sem este laço ele não entrava em lugar nenhum
-    # e sumia do schema — foi o que deixou `pronto_quando_alvo` inalcançável, e com
-    # ele as famílias `posse` e `lugar` inteiras.
-    for livre in (cap.get("livres") or []):
-        props.setdefault(livre["nome"], {
-            "type": livre.get("tipo") or "string",
-            "description": "texto livre — escreva você; não há lista de opções",
-        })
-    # o que o mundo EXIGE e não tem lista de opções é texto livre que a Mente escreve
-    # (o conteúdo de um plano, o teor de uma promessa, sobre o que se pergunta)
-    for exigido in (cap.get("exige") or []):
-        props.setdefault(exigido, {
-            "type": "string",
-            "description": "texto livre — escreva você; não há lista de opções",
-        })
+    for nome, p in (cap.get("params") or {}).items():
+        campo = {"type": p.get("forma") or "string"}
+        cands = [c["id"] for c in (p.get("candidatos") or [])]
+        if cands:
+            if campo["type"] == "array":
+                campo["items"] = {"type": "string", "enum": cands}
+            else:
+                campo["enum"] = cands
+        else:
+            campo["description"] = ("texto livre — escreva você; não há lista de "
+                                    "opções")
+        props[nome] = campo
     if cap.get("consulta"):
         return {"type": "object", "properties": props,
                 "required": list(cap.get("exige") or [])}
@@ -120,8 +115,14 @@ class Sessao:
             # A distinção é do MUNDO (é ele quem declara o parâmetro), então desce
             # dele, explícita. Vai em `annotations` porque é metadado da tool, não
             # forma do argumento — o mesmo lugar de `readOnlyHint`.
-            if c.get("por_nome"):
-                tool["annotations"] = {"byName": dict(c["por_nome"])}
+            # OS NOMES DOS CANDIDATOS, para quem for resolver por nome (spec 060) e
+            # para quem for mostrar na tela. É DADO, não recorte: o schema acima já
+            # traz os ids; aqui vai como cada um se chama na cena.
+            nomes = {p: {x["id"]: x["nome"] for x in (v.get("candidatos") or [])}
+                     for p, v in (c.get("params") or {}).items()
+                     if v.get("candidatos")}
+            if nomes:
+                tool["annotations"] = {"byName": nomes}
             if c.get("consulta"):
                 # `readOnlyHint` é o campo do PRÓPRIO MCP para "esta tool não muda
                 # nada". Marcar aqui, e não inventar chave nossa, é o que faz um host
@@ -165,57 +166,32 @@ def _texto(conteudo: str, erro: bool = False) -> dict:
     return {"content": [{"type": "text", "text": conteudo}], "isError": erro}
 
 
-def _recusa_em_texto(out: dict) -> str:
-    """A recusa como A Mente vai lê-la — COM o que corrigir, quando há o que corrigir.
+def _recusa_estruturada(out: dict) -> dict | None:
+    """O que a recusa tem de CORRIGÍVEL, como DADO — nunca como frase pronta.
 
-    AQUI MORRIA A METADE QUE IMPORTA, e custou duas corridas A/B de quatro horas.
-    `arbiter._err` monta `campo` e `validos` justamente para o ERRO CORRIGÍVEL ("o
-    parâmetro está errado, e estes são os aceitos"), e esta linha serializava só a
-    frase. O efeito, medido nas duas rodadas: A Mente firmou um compromisso com
-    `pronto_quando: "odila-aguadeira"` na primeira e `"taverna-do-gancho"` na
-    segunda — nas duas ela QUERIA algo real e nomeou errado —, recebeu de volta
-    "você não saberia dizer quando isso estaria cumprido", e não tentou de novo. Um
-    `set_intention` em duas horas, e o ciclo inteiro da spec morreu ali.
+    Aqui houve uma função que montava o texto ("Para 'de_quem', só valem: …") e o
+    colava na mensagem de erro. Era presentação dentro da API, e deu no que dá:
+    escrita preferindo o `id`, ela mandou "bram-pescador, coelho-do-cais" ao modelo,
+    desfazendo pela porta dos fundos o que a spec 060 tirou da face.
 
-    A distinção é a que `docs/tools.md` já cravava: **recusa de MÉRITO ≠ id a
-    corrigir.** A de mérito segue sendo só a frase de mundo (não há o que corrigir
-    num "isso já é verdade agora"); a corrigível ganha o campo e a lista.
+    A API devolve o FATO — qual campo, quais valores, com id e nome. Quem escreve a
+    frase para A LLM é o conector, que é o BFF dela e sabe contra qual modelo está
+    falando. Um host MCP de terceiro recebe o mesmo dado e escreve a frase dele.
 
-    E isto NÃO fere o isolamento narrativo: os nomes que descem aqui são o
-    VOCABULÁRIO DA PRÓPRIA TOOL, que A Mente já lê no `inputSchema`. Não é estado do
-    mundo, não é segredo de terceiro, não é número. É dizer de volta o que a
-    ferramenta aceita — que é o que qualquer mensagem de erro honesta faz.
+    `None` quando não há o que corrigir: a recusa de MÉRITO ("isso já é verdade
+    agora") não tem campo nem lista, e inventar um convidaria o retry de algo que
+    não é para ser re-tentado.
     """
-    frase = out.get("erro") or out.get("error") or "o mundo recusou."
-    validos = out.get("validos")
-    if not validos:
-        return frase
-    # O NOME, NUNCA O ID — e este é o ponto que quase desfez a spec 060.
-    #
-    # `arbiter._validos` devolve `{id, nome}`: o id é de CENA, o nome é o que se lê
-    # nela. A primeira versão desta função preferia o `id`, e o efeito era exato: a
-    # Mente passava a ler "bram-pescador, coelho-do-cais, doncel-bebado" numa recusa
-    # de `cobrar`. Ids voltando para o modelo pela porta dos fundos, depois de a 060
-    # os ter tirado da face por MEDIÇÃO (o enum não era imposto pelo runtime, o
-    # modelo paralisava no ambíguo e substituía em silêncio no ausente).
-    #
-    # A Mente aponta por NOME; o conector resolve. Uma mensagem de erro não é
-    # exceção a isso — é justamente onde a tentação de "ajudar com o id exato" é
-    # maior. O `id` só entra quando não há nome, que é o caso dos VOCABULÁRIOS
-    # FECHADOS (`hunger`, `posse`, `ativa`), onde id e nome são a mesma palavra e
-    # não existe cena nenhuma para vazar.
-    nomes = []
-    for v in validos:
-        if isinstance(v, dict):
-            nomes.append(str(v.get("nome") or v.get("id") or ""))
-        else:
-            nomes.append(str(v))
-    nomes = [n for n in nomes if n]
-    if not nomes:
-        return frase
-    campo = out.get("campo")
-    alvo = f"'{campo}'" if campo else "esse campo"
-    return f"{frase}. Para {alvo}, só valem: {', '.join(nomes)}."
+    campo, validos = out.get("campo"), out.get("validos")
+    if not campo and not validos:
+        return None
+    fora: dict = {}
+    if campo:
+        fora["campo"] = campo
+    if validos:
+        fora["validos"] = [v if isinstance(v, dict) else {"id": str(v), "nome": str(v)}
+                           for v in validos]
+    return fora
 
 
 def _frase(x) -> str:
@@ -271,7 +247,17 @@ def tratar(msg: dict, sessao: Sessao) -> list:
             # RECUSA IN-WORLD é resposta legítima do mundo, não defeito de
             # transporte: volta como resultado de tool com isError, nunca como erro
             # de protocolo. O host mostra o motivo à Mente, que escolhe outra coisa.
-            msgs = resposta(_texto(_recusa_em_texto(out), erro=True))
+            # A FRASE IN-WORLD no `content` (é ela que o jogador lê), e o que há de
+            # CORRIGÍVEL num canal à parte — dado, não texto. Mesmo padrão de
+            # `_narrativa`/`_sistema`: o que é material de apresentação não se
+            # mistura com o que é fato.
+            _rec = _recusa_estruturada(out)
+            msgs = resposta(_texto(out.get("erro") or out.get("error")
+                                   or "o mundo recusou.", erro=True))
+            if _rec:
+                for _m in msgs:
+                    if isinstance(_m, dict) and isinstance(_m.get("result"), dict):
+                        _m["result"]["_recusa"] = _rec
         else:
             msgs = resposta(_texto(resumo(out)))
             # MATERIAL DE NARRAÇÃO para o client — e SÓ ele. `out` inteiro traz o

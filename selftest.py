@@ -308,6 +308,29 @@ try:
 except Exception as _e:  # noqa: BLE001
     check("a face entrega o dado completo", False, repr(_e))
 
+# REFERÊNCIA SEM CANDIDATO NÃO ENTRA NO SCHEMA — e a distinção que isso exige é
+# `enum: []` (aponta para algo, e não há nada) contra `sem enum` (escreva você).
+# Colapsá-las convida a inventar, e a Mente inventou: sem intenção ativa,
+# `intention_id` virou "texto livre" e ela mandou `tincture_prep`. Duas das quatro
+# tentativas de firmar compromisso da corrida de 15/09 morreram nisso.
+print("\n-- referência sem candidato não vira texto livre")
+try:
+    import face as _f3
+    import mcp_core as _m3
+    _cap3 = {"nome": "t", "descricao": "", "exige": [], "consulta": True,
+             "params": {"vazio": {"forma": "string", "candidatos": []},
+                        "livre": {"forma": "string"},
+                        "cheio": {"forma": "string",
+                                  "candidatos": [{"id": "a", "nome": "A"}]}}}
+    _pr3 = _m3.input_schema(_cap3).get("properties") or {}
+    check("parâmetro de referência SEM candidato some do schema",
+          "vazio" not in _pr3, str(sorted(_pr3)))
+    check("texto livre continua entrando", "livre" in _pr3)
+    check("referência COM candidato entra com o enum",
+          (_pr3.get("cheio") or {}).get("enum") == ["a"])
+except Exception as _e:  # noqa: BLE001
+    check("referência sem candidato não vira texto livre", False, repr(_e))
+
 print("\n-- todo parâmetro declarado chega ao schema")
 try:
     import face as _f2
@@ -329,8 +352,13 @@ try:
     _sumiram = []
     for _cap in _f2.build(_ctx2):
         _no_schema = set((_m2.input_schema(_cap).get("properties") or {}))
-        for _par in _manifesto.get(_cap["nome"], {}):
+        for _par, _esp in _manifesto.get(_cap["nome"], {}).items():
             if _par in _juizo or _par == "prosa":
+                continue
+            # REFERÊNCIA SEM CANDIDATO sai de propósito (ver a checagem acima): não
+            # há o que apontar, e oferecer o campo vazio convida a inventar. Só é
+            # defeito o parâmetro que tem valor possível e mesmo assim some.
+            if isinstance(_esp, dict) and _esp.get("enum") == []:
                 continue
             if _par not in _no_schema:
                 _sumiram.append(f"{_cap['nome']}:{_par}")

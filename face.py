@@ -117,7 +117,13 @@ def _params_da(props: dict, tool: str = "") -> dict:
         if enum is None and schema.get("type") == "array":
             enum = (schema.get("items") or {}).get("enum")
         entrada = {"forma": schema.get("type") or "string"}
-        if enum:
+        # `enum: []` NÃO É `sem enum`. O primeiro é "este parâmetro aponta para algo,
+        # e não há nada agora"; o segundo é "escreva você". Colapsar os dois convida
+        # a Mente a INVENTAR — e ela inventou: sem intenção ativa, `intention_id`
+        # virou "texto livre" e ela mandou `tincture_prep` e `elixir_cicatrizacao`,
+        # ids que não existem em lugar nenhum. Duas das quatro tentativas de firmar
+        # um compromisso na corrida de 15/09 morreram nisso.
+        if enum is not None:
             entrada["candidatos"] = [{"id": str(v), "nome": name_of(str(v)) or str(v)}
                                      for v in enum]
         fora[nome] = entrada

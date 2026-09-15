@@ -58,6 +58,14 @@ def input_schema(cap: dict) -> dict:
     # do enum cortado. O corte mudou de lado; a dica foi junto.
     props: dict = {}
     for nome, p in (cap.get("params") or {}).items():
+        # PARÂMETRO DE REFERÊNCIA SEM NADA A APONTAR NÃO ENTRA NO SCHEMA.
+        #
+        # Oferecê-lo sem opções é pior que omiti-lo: ele aparece como campo válido, e
+        # o modelo preenche com o que inventar. Medido — `intention_id` sem intenção
+        # ativa recebeu `tincture_prep` e `elixir_cicatrizacao`, e as duas tentativas
+        # de firmar compromisso morreram em "não é uma intenção ativa".
+        if "candidatos" in p and not p["candidatos"]:
+            continue
         campo = {"type": p.get("forma") or "string"}
         cands = [c["id"] for c in (p.get("candidatos") or [])]
         if cands:

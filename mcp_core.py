@@ -182,10 +182,24 @@ def _recusa_em_texto(out: dict) -> str:
     validos = out.get("validos")
     if not validos:
         return frase
+    # O NOME, NUNCA O ID — e este é o ponto que quase desfez a spec 060.
+    #
+    # `arbiter._validos` devolve `{id, nome}`: o id é de CENA, o nome é o que se lê
+    # nela. A primeira versão desta função preferia o `id`, e o efeito era exato: a
+    # Mente passava a ler "bram-pescador, coelho-do-cais, doncel-bebado" numa recusa
+    # de `cobrar`. Ids voltando para o modelo pela porta dos fundos, depois de a 060
+    # os ter tirado da face por MEDIÇÃO (o enum não era imposto pelo runtime, o
+    # modelo paralisava no ambíguo e substituía em silêncio no ausente).
+    #
+    # A Mente aponta por NOME; o conector resolve. Uma mensagem de erro não é
+    # exceção a isso — é justamente onde a tentação de "ajudar com o id exato" é
+    # maior. O `id` só entra quando não há nome, que é o caso dos VOCABULÁRIOS
+    # FECHADOS (`hunger`, `posse`, `ativa`), onde id e nome são a mesma palavra e
+    # não existe cena nenhuma para vazar.
     nomes = []
     for v in validos:
         if isinstance(v, dict):
-            nomes.append(str(v.get("id") or v.get("nome") or ""))
+            nomes.append(str(v.get("nome") or v.get("id") or ""))
         else:
             nomes.append(str(v))
     nomes = [n for n in nomes if n]

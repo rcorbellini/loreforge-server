@@ -52,8 +52,13 @@ _ENUM_QUE_FICA = frozenset({
     "write:instrumento", "sing:instrumento",        # o que dá para empunhar
     "craft:peca", "forge_weapon:peca", "forge_armor:peca", "cook:peca",
     "brew:peca",                                    # trabalho em processo
-    "set_intention:status", "give:intention_id", "trade:intention_id",
+    "set_intention:status", "set_intention:pronto_quando",
     "promise:intention_id",                         # vocabulário fechado / intenção
+    # Achados pelo guarda do `selftest.py`, e NÃO são da spec 073 — são a mesma
+    # podridão, de antes: palavras que a tool aceita e que a Mente tinha de
+    # adivinhar. Mostrá-las não abre nada (não são cena, não são id de ninguém);
+    # escondê-las só fazia o modelo chutar.
+    "create_memory:intensity", "create_memory:domain",
     "travel_to:destino", "ask_about:sobre_lugar",   # lugar que ele sabe alcançar
     "learn_routes:rotas",                           # rotas do MUNDO, não da cena
 })

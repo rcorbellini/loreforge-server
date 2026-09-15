@@ -1098,6 +1098,35 @@ else:
              "a entrega)")
 
 
+# A RECUSA DIZ O NOME, NUNCA O ID (spec 060 + §20).
+#
+# O conserto da §18.2 (mandar `validos` junto da recusa) nasceu preferindo o `id`, e
+# o efeito foi exato: numa recusa de `cobrar` A Mente passava a ler
+# "bram-pescador, coelho-do-cais, doncel-bebado". Ids voltando ao modelo pela porta
+# dos fundos, depois de a 060 os ter tirado da face POR MEDIÇÃO.
+#
+# A Mente aponta por NOME; o conector resolve. Mensagem de erro não e excecao — e
+# justamente onde a tentacao de "ajudar com o id exato" e maior.
+print("\n--- a recusa diz o NOME, nunca o id (§20) ---")
+
+_cena = mcp_core._recusa_em_texto({
+    "erro": "'x' não é um personagem presente", "campo": "de_quem",
+    "validos": [{"id": "bram-pescador", "nome": "Bram, o Pescador"},
+                {"id": "sorin-correio", "nome": "Sorin, o Correio Ferido"}]})
+ok("Bram, o Pescador" in _cena and "Sorin" in _cena,
+   "a recusa de referencia diz os NOMES da cena")
+ok("bram-pescador" not in _cena and "sorin-correio" not in _cena,
+   "e NAO diz os ids — foi por isso que a 060 os tirou da face")
+
+_voc = mcp_core._recusa_em_texto({
+    "erro": "você não saberia dizer quando isso estaria cumprido",
+    "campo": "pronto_quando",
+    "validos": [{"id": c, "nome": c} for c in sorted(P._CRITERIO_POR_CAMPO)]})
+ok(all(c in _voc for c in P._CRITERIO_POR_CAMPO),
+   "o VOCABULARIO fechado continua descendo inteiro — ali id e nome sao a mesma "
+   "palavra, e nao ha cena para vazar")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

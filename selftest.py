@@ -266,6 +266,61 @@ check("nenhuma description usa frase aposentada sem medição própria",
 # A garantia que o portal dava NÃO se perdeu: a checagem anti-vazamento migrou para
 # `selftest_phase44.py`, e agora incide sobre a FONTE, não sobre a cópia.
 
+# --------------------------------------------------------------------------- #
+# O VOCABULÁRIO FECHADO TEM DE CHEGAR À MENTE (spec 060 + 073)
+# --------------------------------------------------------------------------- #
+#
+# `face._ENUM_QUE_FICA` decide quais enums sobrevivem até a Mente. Os de CENA são
+# tirados de propósito e por medição (a 060: o enum não era imposto pelo runtime, o
+# modelo paralisava no ambíguo e substituía em silêncio no ausente) — a Mente aponta
+# por NOME e o conector resolve. Mas os VOCABULÁRIOS FECHADOS (`ativa`, `hunger`,
+# `posse`) não são cena: são as palavras que a própria ferramenta aceita, e tirá-las
+# não protege nada — só faz a Mente adivinhar.
+#
+# O comentário daquela lista já avisava que ela "apodrecia calado, e apodreceu". Ela
+# apodreceu DE NOVO na spec 073: `set_intention:pronto_quando` nasceu como
+# vocabulário fechado e ninguém o pôs na lista. O efeito custou DUAS corridas A/B de
+# quatro horas — a Mente firmou compromissos com `pronto_quando: "odila-aguadeira"` e
+# `"taverna-do-gancho"`, ids que ela inventou porque nunca viu as opções.
+#
+# Esta checagem fecha a causa: um enum cujos valores NÃO são ids da cena é
+# vocabulário, e vocabulário tem de estar na lista.
+print("\n-- o vocabulário fechado chega à Mente (face._ENUM_QUE_FICA)")
+try:
+    import pathlib
+    import face as _face
+    # VOCABULÁRIO é o enum cujos valores NÃO SÃO ID DE NADA no mundo.
+    #
+    # `intensity` é ['trivial','small',...]: nenhum desses é entidade. `give:item` é
+    # ['bolsa-de-couro',...]: todos são. A régua não precisa saber o que é "de cena",
+    # só perguntar ao mundo se aquele id existe — e o mundo sabe responder.
+    #
+    # (Duas tentativas anteriores falharam por régua fraca: uma esqueceu inventário e
+    # rota; a outra comparou duas cenas que eram a MESMA taverna. Fica escrito porque
+    # o proximo a mexer aqui vai ter as mesmas duas ideias.)
+    _ids = set()
+    for _arq in pathlib.Path(os.environ["LOREFORGE_WORLD"]).rglob("*.md"):
+        _fm, _ = motor.read_doc(_arq)
+        if _fm.get("id"):
+            _ids.add(str(_fm["id"]))
+
+    _faltam = []
+    for _t in arbiter.build_tools(motor.get_context("torvin-ferreiro")):
+        for _par, _esp in (((_t.get("parameters") or {}).get("properties")) or {}).items():
+            _vals = [str(v) for v in (_esp.get("enum") or [])]
+            if not _vals or _par.endswith("_id"):
+                continue
+            if any(v in _ids for v in _vals):
+                continue                  # aponta entidade: é referência, e sai
+            _chave = f"{_t['name']}:{_par}"
+            if _chave not in _face._ENUM_QUE_FICA:
+                _faltam.append(f"{_chave}={_vals[:4]}")
+    check("todo vocabulário fechado está em face._ENUM_QUE_FICA",
+          not _faltam, "; ".join(_faltam))
+except Exception as _e:  # noqa: BLE001
+    check("todo vocabulário fechado está em face._ENUM_QUE_FICA", False, repr(_e))
+
+
 # --- resultado ------------------------------------------------------------- #
 print()
 if FAILS:

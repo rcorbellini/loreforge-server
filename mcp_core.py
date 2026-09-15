@@ -157,6 +157,45 @@ def _texto(conteudo: str, erro: bool = False) -> dict:
     return {"content": [{"type": "text", "text": conteudo}], "isError": erro}
 
 
+def _recusa_em_texto(out: dict) -> str:
+    """A recusa como A Mente vai lê-la — COM o que corrigir, quando há o que corrigir.
+
+    AQUI MORRIA A METADE QUE IMPORTA, e custou duas corridas A/B de quatro horas.
+    `arbiter._err` monta `campo` e `validos` justamente para o ERRO CORRIGÍVEL ("o
+    parâmetro está errado, e estes são os aceitos"), e esta linha serializava só a
+    frase. O efeito, medido nas duas rodadas: A Mente firmou um compromisso com
+    `pronto_quando: "odila-aguadeira"` na primeira e `"taverna-do-gancho"` na
+    segunda — nas duas ela QUERIA algo real e nomeou errado —, recebeu de volta
+    "você não saberia dizer quando isso estaria cumprido", e não tentou de novo. Um
+    `set_intention` em duas horas, e o ciclo inteiro da spec morreu ali.
+
+    A distinção é a que `docs/tools.md` já cravava: **recusa de MÉRITO ≠ id a
+    corrigir.** A de mérito segue sendo só a frase de mundo (não há o que corrigir
+    num "isso já é verdade agora"); a corrigível ganha o campo e a lista.
+
+    E isto NÃO fere o isolamento narrativo: os nomes que descem aqui são o
+    VOCABULÁRIO DA PRÓPRIA TOOL, que A Mente já lê no `inputSchema`. Não é estado do
+    mundo, não é segredo de terceiro, não é número. É dizer de volta o que a
+    ferramenta aceita — que é o que qualquer mensagem de erro honesta faz.
+    """
+    frase = out.get("erro") or out.get("error") or "o mundo recusou."
+    validos = out.get("validos")
+    if not validos:
+        return frase
+    nomes = []
+    for v in validos:
+        if isinstance(v, dict):
+            nomes.append(str(v.get("id") or v.get("nome") or ""))
+        else:
+            nomes.append(str(v))
+    nomes = [n for n in nomes if n]
+    if not nomes:
+        return frase
+    campo = out.get("campo")
+    alvo = f"'{campo}'" if campo else "esse campo"
+    return f"{frase}. Para {alvo}, só valem: {', '.join(nomes)}."
+
+
 def _frase(x) -> str:
     """Uma linha de mundo, venha ela como texto ou como registro estruturado.
 
@@ -210,8 +249,7 @@ def tratar(msg: dict, sessao: Sessao) -> list:
             # RECUSA IN-WORLD é resposta legítima do mundo, não defeito de
             # transporte: volta como resultado de tool com isError, nunca como erro
             # de protocolo. O host mostra o motivo à Mente, que escolhe outra coisa.
-            msgs = resposta(_texto(out.get("erro") or out.get("error")
-                                   or "o mundo recusou.", erro=True))
+            msgs = resposta(_texto(_recusa_em_texto(out), erro=True))
         else:
             msgs = resposta(_texto(resumo(out)))
             # MATERIAL DE NARRAÇÃO para o client — e SÓ ele. `out` inteiro traz o

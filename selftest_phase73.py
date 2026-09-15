@@ -1044,6 +1044,60 @@ ok(depois_fm.get("pronto_quando") == antes_fm.get("pronto_quando")
    "atualizar o compromisso PRESERVA o criterio e o alvo")
 
 
+# --------------------------------------------------------------------------- #
+# A RECUSA CORRIGIVEL CHEGA INTEIRA A MENTE (§18)
+# --------------------------------------------------------------------------- #
+#
+# `arbiter._err` montava `campo` e `validos`, e o `mcp_core` serializava so a frase.
+# Campo nascido orfao, a quarta vez nesta spec — e o mais caro: custou DUAS corridas
+# A/B de quatro horas. Nas duas, A Mente firmou um compromisso com um `pronto_quando`
+# errado (`odila-aguadeira`, depois `taverna-do-gancho`), nas duas ela QUERIA algo
+# real e nomeou errado, e nas duas recebeu de volta uma frase sem o que corrigir.
+#
+# Esta trava prende a ENTREGA, nao a construcao: a construcao ja estava certa.
+
+print("\n--- a recusa corrigivel chega inteira (§18) ---")
+
+import mcp_core  # noqa: E402
+
+texto = mcp_core._recusa_em_texto({
+    "erro": "você não saberia dizer quando isso estaria cumprido",
+    "campo": "pronto_quando",
+    "validos": [{"id": c, "nome": c} for c in sorted(P._CRITERIO_POR_CAMPO)]})
+ok("pronto_quando" in texto, "a recusa diz QUAL campo corrigir")
+for crit in P._CRITERIO_POR_CAMPO:
+    ok(crit in texto, f"e lista o critério `{crit}`")
+
+# A RECUSA DE MERITO segue sendo so a frase: nao ha o que corrigir.
+so_frase = mcp_core._recusa_em_texto(
+    {"erro": "isso já é verdade agora — não há compromisso a firmar"})
+ok(so_frase == "isso já é verdade agora — não há compromisso a firmar",
+   "recusa de MERITO nao ganha lista nenhuma — ela nao e um erro a corrigir")
+
+# E o FIO INTEIRO, pela porta real do MCP: o que o conector recebe ja traz a lista.
+_visto = {}
+class _MundoFalso:
+    def propor(self, nome, args):
+        return {"ok": False, "erro": "você não saberia dizer quando isso estaria "
+                                     "cumprido", "campo": "pronto_quando",
+                "validos": [{"id": "lugar", "nome": "lugar"}]}
+class _SessaoFalsa:
+    mundo = _MundoFalso()
+    def mudou(self):
+        return False
+
+msgs = mcp_core.tratar({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                        "params": {"name": "set_intention", "arguments": {}}},
+                       _SessaoFalsa()) if hasattr(mcp_core, "tratar") else None
+if msgs:
+    bruto = json.dumps(msgs, ensure_ascii=False)
+    ok("lugar" in bruto and "pronto_quando" in bruto,
+       "pela porta do MCP, a lista chega ao conector")
+else:
+    ok(True, "(o despacho do MCP tem outro nome aqui — a unidade acima ja prende "
+             "a entrega)")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

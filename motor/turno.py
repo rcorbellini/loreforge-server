@@ -138,6 +138,21 @@ def _ensure_actor_touched(character_id: str, resolution: dict, outcome: dict) ->
         "reason": "garantia de consequência (FR-014)"})
 
 
+def _onde_esta(pasta) -> str:
+    """O lugar do ator como "<id> <nome>" — a leitura da família LUGAR.
+
+    Sai da PASTA (a árvore é a verdade sobre onde alguém está), nunca de
+    `status.location`: aquele é texto que pode envelhecer, e já envelheceu no jogo.
+    Os dois, id e nome, porque a Mente escreve ora um ora outro ao firmar.
+    """
+    try:
+        loc = pasta.parent
+        fm, _ = read_doc(loc / "location.md")
+        return f"{fm.get('id') or loc.name} {fm.get('name') or ''}".strip()
+    except Exception:
+        return ""
+
+
 def _riscar_passo_cumprido(character_id: str, outcome: dict) -> dict | None:
     """O ato ACEITO cumpriu o primeiro passo pendente do plano? (spec 073, FR-011).
 
@@ -180,7 +195,11 @@ def _fechar_compromissos(character_id: str) -> list[dict]:
                  # US4: a carência do MUNDO fecha pela mesma porta que a do corpo —
                  # é o que faz o compromisso sobre a peça encerrar quando ela fica
                  # pronta, inclusive se alguém a terminou por outro caminho.
-                 "peca": _rotulo_da_peca(_pecas_paradas(character_id, pasta))}
+                 "peca": _rotulo_da_peca(_pecas_paradas(character_id, pasta)),
+                 # LUGAR: o id E o nome, porque a Mente pode ter escrito qualquer
+                 # um dos dois ao firmar. Sai da PASTA, que é onde o lugar de fato
+                 # está — `status.location` é texto que pode envelhecer.
+                 "lugar": _onde_esta(pasta)}
         # A FAMÍLIA POSSE lê o que ele carrega AGORA, por NOME. Roda todo turno como
         # as outras — e é o que faz o compromisso de ter algo fechar inclusive
         # quando a coisa chegou por um caminho que ninguém planejou (alguém deu).

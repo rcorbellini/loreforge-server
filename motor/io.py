@@ -488,9 +488,12 @@ _WHY_BY_REGRA = {
     # a primeira é IGNORÂNCIA (convida a verificar), a segunda é RELUTÂNCIA DELE
     # (convida a insistir noutra hora, ou a lembrar disso). Nenhuma soa como
     # proibição do sistema — recusa que soa assim faz o modelo teimar.
-    # FR-002/R2, família POSSE: prometer TER algo sem dizer o quê.
-    "intencao_posse_sem_alvo": ("ter o quê? diga a coisa, ou não há como saber "
-                                "que ela está com você"),
+    # FR-002/R2, famílias POSSE e LUGAR: prometer TER algo, ou CHEGAR a algum
+    # lugar, sem dizer o quê nem onde. A frase cobre as duas porque a falta é a
+    # mesma — o critério aponta para nada.
+    "intencao_posse_sem_alvo": ("diga O QUÊ, ou não há como saber que aconteceu — "
+                                "a coisa que há de estar com você, o lugar onde "
+                                "há de chegar"),
     "sem_promessa": "você não lembra de ele ter prometido nada disso",
     "nao_pagou": "ele não paga — e a dívida fica de pé entre vocês",
     "tamanho_excede_container": "o item excede o tamanho que o contêiner aceita",

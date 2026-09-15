@@ -57,6 +57,10 @@ CENAS = [
     ("peça parada", "Você deixou um martelo pela metade na forja. "
                     "Firmou: 'Terminar o martelo que deixei no meio.'"),
     ("ter a garra", "Você firmou: 'Conseguir a garra de lobo que o Verro guarda.'"),
+    ("chegar lá", "Você está na Praça do Mercado e não sabe o caminho. "
+                  "Firmou: 'Chegar à Forja de Ferro.'"),
+    ("chegar, e fazer", "Você firmou: 'Ir até a Forja de Ferro e forjar uma lâmina "
+                        "nova.' O compromisso acaba quando a lâmina for sua."),
     # e a cena que CAUSOU o defeito, literal
     ("o caso da Nerissa", "Você firmou: 'Fazer um remédio de raiz torta para ajudar "
                           "os outros, com Odila, a Aguadeira.' Sua primeira resposta "
@@ -108,7 +112,7 @@ for rot, cena in CENAS:
             dentro += 1
             # `posse` SEM alvo é o mesmo que critério nenhum: a trava o barra, e
             # contar como acerto esconderia o buraco.
-            obtidas.append(f"{e}({alvo})" if e == "posse" else e)
+            obtidas.append(f"{e}({alvo})" if e in ("posse", "lugar") else e)
         else:
             fora += 1
             obtidas.append(f"!{e}")

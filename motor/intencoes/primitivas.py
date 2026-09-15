@@ -61,6 +61,19 @@ _CRITERIO_POR_CAMPO = {
     # instante em que o personagem comesse: um FALSO FECHAMENTO que o SC-002
     # contaria como acerto. O vocabulário pequeno demais não recusa: ele VAZA.
     "posse": "posse",
+    # A FAMÍLIA LUGAR (research.md §R2), a quarta e mais barata de todas: é leitura
+    # do lugar ONDE ELE ESTÁ, e o mundo já a tem na cena.
+    #
+    # Ela entra porque "chegar lá" é metade do que a Mente escreve — o FR-007 foi
+    # corrigido justamente por isso: um plano de mais de um passo atravessa cenas de
+    # propósito ("ir à forja", depois "forjar"). Sem `lugar`, o compromisso de ir a
+    # algum lugar não tinha como fechar, e vazava para a família mais próxima —
+    # o mesmo defeito que a §15.6 mediu com o remédio caindo em `hunger`.
+    #
+    # Usa o MESMO `pronto_quando_alvo` da posse: o campo é genérico ("o que o
+    # critério aponta"), e um segundo campo para dizer a mesma coisa seria a segunda
+    # via que o Princípio I proíbe.
+    "lugar": "lugar",
 }
 
 # O ALVO DA POSSE É NOME, NUNCA ID — e isto é decisão, não descuido.
@@ -72,6 +85,12 @@ _CRITERIO_POR_CAMPO = {
 # O casamento é o mesmo de `casar_e_riscar`: todo pedaço de >=3 letras do alvo tem de
 # aparecer no nome do que se carrega. "raiz torta" casa "Remédio de Raiz Torta" e não
 # casa "Raiz Seca".
+# As famílias que não se conferem sozinhas: ter O QUÊ, estar ONDE. Nasce como
+# conjunto e não como `== "posse"` porque a segunda chegou uma hora depois da
+# primeira, e a terceira chegará — a lista é o lugar de acrescentar.
+_PRECISAM_DE_ALVO = ("posse", "lugar")
+
+
 def _carrega(carregados, alvo: str | None) -> bool:
     if not alvo:
         return False
@@ -112,6 +131,11 @@ def criterio_cumprido(needs: dict | None, pronto_quando: str | None,
     # vem da própria intenção (`pronto_quando_alvo`), porque é dela que ele é.
     if campo == "posse":
         return _carrega(carregados, alvo)
+    # O LUGAR é a mesma pergunta de forma: o alvo casa com onde ele está? O `needs`
+    # traz `lugar` como "<id> <nome>" — os dois, porque a Mente pode ter escrito
+    # qualquer um dos dois ao firmar.
+    if campo == "lugar":
+        return _carrega([(needs or {}).get("lugar") or ""], alvo)
     rotulo = str((needs or {}).get(campo) or "").strip().lower()
     if not rotulo:
         return False
@@ -308,7 +332,7 @@ def travas_do_nascimento(content: str, pronto_quando: str | None,
     # estou mais faminto"); "está comigo" não diz nada sem o objeto. Sem o alvo, a
     # intenção nasceria com um critério que NUNCA vira verdade — pior que sem
     # critério, porque parece ter um.
-    if pronto_quando == "posse" and not (pronto_quando_alvo or "").strip():
+    if pronto_quando in _PRECISAM_DE_ALVO and not (pronto_quando_alvo or "").strip():
         return ("intencao_posse_sem_alvo", {})
     # APONTA PARA SI: o personagem citando o próprio nome como se fosse outro.
     # "Vou aprender o caminho com Nerissa" dito PELA Nerissa.

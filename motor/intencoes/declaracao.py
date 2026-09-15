@@ -113,8 +113,13 @@ def _set_intention(name: str, args: dict, ctx) -> tuple[dict, bool]:
         # cumprida. Um saciado não firma compromisso de matar a fome — recusar é o
         # que evita criar lixo que fecha no mesmo instante.
         from ..intencoes.primitivas import criterio_cumprido
-        if criterio_cumprido((ctx.context.get("self") or {}).get("needs"),
-                             pronto_quando, pronto_quando_alvo,
+        # o `needs` do contexto não traz `lugar` — ele é da CENA. Acrescentar aqui
+        # é o que faz a guarda do FR-013b valer para a família também: quem já está
+        # na forja não promete chegar nela.
+        _needs = dict((ctx.context.get("self") or {}).get("needs") or {})
+        _place = ((ctx.context.get("scene") or {}).get("place")) or {}
+        _needs["lugar"] = f"{_place.get('id') or ''} {_place.get('name') or ''}".strip()
+        if criterio_cumprido(_needs, pronto_quando, pronto_quando_alvo,
                              _carregados(ctx)):
             return ctx.err(_FRASE["intencao_ja_cumprida"], "pronto_quando"), False
         # E A TRAVA DO PASSO SEM VERBO (FR-007). O caso do Tobias: "fazer um
@@ -150,9 +155,10 @@ SET_INTENTION = tool_spec(ToolSpec(
         "inteiro, nunca um trecho.\n"
         "pronto_quando é o FATO que encerra o compromisso, e quem confere é o "
         "mundo — nunca você. Se o que encerra é TER algo em mãos, use "
-        "pronto_quando='posse' e diga em pronto_quando_alvo o NOME da coisa "
-        "(vale o que ainda não existe: o remédio que você vai preparar, a lâmina "
-        "que vai forjar)."
+        "pronto_quando='posse'; se é CHEGAR a algum lugar, 'lugar'. Nos dois, diga "
+        "em pronto_quando_alvo o NOME — da coisa ou do lugar. Vale o que ainda não "
+        "existe (o remédio que você vai preparar) e o lugar cujo caminho você ainda "
+        "não sabe (é justamente o que o compromisso persegue)."
     ),
     params={"intention_id": {"type": "string"}, "content": {"type": "string"},
             "status": {"type": "string"},

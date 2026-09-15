@@ -960,6 +960,70 @@ ok(any("Martelo" in n for n in prontos2),
    "terminada, a peca passa a contar como posse")
 
 
+# --------------------------------------------------------------------------- #
+# A FAMILIA LUGAR (research.md §R2) — a mais barata das cinco
+# --------------------------------------------------------------------------- #
+#
+# "Chegar la" e metade do que a Mente escreve: o FR-007 foi corrigido justamente
+# porque um plano de mais de um passo atravessa cenas de proposito. Sem `lugar`, um
+# compromisso de ir a algum lugar nao tinha como fechar, e vazava para a familia mais
+# proxima — o mesmo defeito que a §15.6 mediu com o remedio caindo em `hunger`.
+
+print("\n--- a familia LUGAR (R2) ---")
+
+ONDE = {"lugar": "forja-de-ferro Forja de Ferro"}
+ok(P.criterio_cumprido(ONDE, "lugar", "Forja de Ferro") is True,
+   "estar la cumpre, pelo NOME")
+ok(P.criterio_cumprido(ONDE, "lugar", "forja-de-ferro") is True,
+   "e pelo ID — a Mente escreve ora um, ora outro")
+ok(P.criterio_cumprido(ONDE, "lugar", "Praca do Mercado") is False,
+   "estar em OUTRO lugar nao cumpre")
+ok(P.criterio_cumprido(ONDE, "lugar", None) is False,
+   "lugar sem alvo nunca cumpre")
+ok(P.criterio_cumprido({"lugar": ""}, "lugar", "Forja de Ferro") is False,
+   "sem saber onde ele esta, nao se fecha por engano")
+
+ok(P.travas_do_nascimento("Chegar la.\n- travel_to forja", "lugar", None, None)
+   == ("intencao_posse_sem_alvo", {}),
+   "lugar sem alvo e barrado no nascimento, como a posse")
+ok(P.travas_do_nascimento("Chegar la.\n- travel_to forja", "lugar", None,
+                          "Forja de Ferro") is None,
+   "com o alvo, nasce")
+
+# O FIO REAL: nasce pela tool, e FECHA quando ele chega.
+motor.apply_resolution("beltrano", {"intentions": [
+    {"content": "Chegar a Forja de Ferro.\n- travel_to Forja de Ferro",
+     "status": "ativa", "pronto_quando": "lugar",
+     "pronto_quando_alvo": "Forja de Ferro"}]})
+viagem = [i for i in P.get_active_intentions(VIZINHO)
+          if "Forja" in i["content"]]
+ok(viagem and viagem[0].get("pronto_quando_alvo") == "Forja de Ferro",
+   "o compromisso de chegar nasce com o alvo, pelo turno inteiro")
+ok(P.fechar_por_criterio(VIZINHO, {"lugar": "porto Porto"}, []) == []
+   or not any("Forja" in f["content"] for f in
+              P.fechar_por_criterio(VIZINHO, {"lugar": "porto Porto"}, [])),
+   "longe dali, NAO fecha")
+chegou = P.fechar_por_criterio(VIZINHO, {"lugar": "forja-de-ferro Forja de Ferro"}, [])
+ok(any("Forja" in f["content"] for f in chegou),
+   "chegando, FECHA — e fecha por leitura de campo, como as outras quatro")
+
+
+# E O LUGAR SAI DA PASTA, nao de `status.location`.
+#
+# A arvore e a verdade sobre onde alguem esta; `status.location` e texto que pode
+# envelhecer, e ja envelheceu no jogo. Esta trava prende a LEITURA real — sem ela, o
+# `needs["lugar"]` acima e fixture minha confirmando a si mesma
+# (`[[fixture-de-teste-certifica-o-bug]]`).
+from motor.turno import _onde_esta  # noqa: E402
+
+lido = _onde_esta(VIZINHO)      # o Beltrano mora em RAIZ/lugar/, id `lugar`
+ok(lido.split()[0] == "lugar" and "Lugar" in lido,
+   f"o lugar real sai da pasta, com id E nome: {lido!r}")
+ok(P.criterio_cumprido({"lugar": lido}, "lugar", "Lugar") is True,
+   "e o que a leitura real devolve CASA com o criterio — a ponta que a fixture "
+   "sozinha nao prova")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

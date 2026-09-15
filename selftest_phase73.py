@@ -1024,6 +1024,26 @@ ok(P.criterio_cumprido({"lugar": lido}, "lugar", "Lugar") is True,
    "sozinha nao prova")
 
 
+upd = P.create_intention(VIZINHO, "Fazer o remedio.\n- brew raiz torta",
+                         pronto_quando="posse",
+                         pronto_quando_alvo="remedio de raiz torta")
+
+# ATUALIZAR NAO PODE APAGAR O CRITERIO.
+#
+# A Mente reescreve o `content` inteiro ao atualizar (e a tool manda fazer assim), e
+# nao reenvia o `pronto_quando` — o conector nem o desce ao prompt. Se `update`
+# perdesse o criterio, a intencao viraria uma que NUNCA fecha, em silencio: o
+# arquivo existe, o status e `ativa`, e `fechar_por_criterio` simplesmente a ignora
+# para sempre. E o unico jeito de perceber seria estranhar que ela nunca acaba.
+antes_fm, _ = motor.read_doc(VIZINHO / "intentions" / f"{upd}.md")
+P.update_intention(VIZINHO, upd, "Fazer o remedio, com calma.\n- brew raiz torta",
+                   "ativa")
+depois_fm, _ = motor.read_doc(VIZINHO / "intentions" / f"{upd}.md")
+ok(depois_fm.get("pronto_quando") == antes_fm.get("pronto_quando")
+   and depois_fm.get("pronto_quando_alvo") == antes_fm.get("pronto_quando_alvo"),
+   "atualizar o compromisso PRESERVA o criterio e o alvo")
+
+
 print()
 if _falhas:
     print(f"{len(_falhas)} FALHA(S):")

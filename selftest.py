@@ -292,8 +292,28 @@ check("nenhuma description usa frase aposentada sem medição própria",
 print("\n-- a face entrega o dado completo (id E nome)")
 try:
     import face as _f1
+    # UMA MEMÓRIA PLANTADA, e sem ela esta seção inteira media o vazio.
+    #
+    # O mundo de teste não tem memória nenhuma, então `sing/accuse/write:memoria_id`
+    # não apareciam na face — e a guarda "o nome do candidato não pode ser o próprio
+    # id" passava por não ter contra quem cobrar. Verificado quebrando o rótulo de
+    # propósito: a suíte continuou verde. Guarda que não pode falhar não é guarda.
+    motor._write_memory(motor.find_character_folder("torvin-ferreiro"),
+                        "Vi Elga esconder um fardo atras do balcao.",
+                        intensity="small", involved=["elga-taverneira"],
+                        evento="witness_theft")
     _ctx1 = motor.get_context("torvin-ferreiro")
-    _sem_nome, _sem_id = [], []
+    _sem_nome, _sem_id, _nome_eh_id = [], [], []
+
+    def _vocab_de(_nome_da_cap):
+        """Os params cujo enum é VOCABULÁRIO — ali o id É o nome, e está certo.
+
+        Lido da declaração da tool, nunca de uma lista escrita aqui: foi uma lista
+        escrita à mão, longe de onde o parâmetro nasce, que apodreceu duas vezes
+        (itens 77 e 84)."""
+        _sp = motor.registro.get_spec(_nome_da_cap)
+        return set(getattr(_sp, "vocabulario", None) or ()) if _sp else set()
+
     for _cap in _f1.build(_ctx1):
         for _par, _v in (_cap.get("params") or {}).items():
             for _c in (_v.get("candidatos") or []):
@@ -301,10 +321,33 @@ try:
                     _sem_id.append(f"{_cap['nome']}:{_par}")
                 if not _c.get("nome"):
                     _sem_nome.append(f"{_cap['nome']}:{_par}")
+                # NOME IGUAL AO ID NÃO É NOME (16/09). A guarda de cima media
+                # PRESENÇA, e o id é um texto não-vazio: `sing:memoria_id` descia com
+                # `byName` mapeando `mem-1786…` para `mem-1786…`, passava aqui, e o
+                # resolvedor do conector ficava sem nada contra o que casar. Foi por
+                # isso que o enum de 506 ids sobreviveu à spec 060 — ninguém mediu o
+                # SENTIDO do que a guarda deixava passar.
+                if (_c.get("id") and _c.get("nome") == _c.get("id")
+                        and _par not in _vocab_de(_cap["nome"])):
+                    _nome_eh_id.append(f"{_cap['nome']}:{_par}")
     check("todo candidato desce com id", not _sem_id, ", ".join(_sem_id[:5]))
     check("todo candidato desce com nome — quem resolve por nome é o conector, "
           "e quem mostra na tela é o cliente; nenhum dos dois deve adivinhar",
           not _sem_nome, ", ".join(_sem_nome[:5]))
+    check("e o nome NÃO é o próprio id — senão não há por que resolver",
+          not _nome_eh_id, ", ".join(sorted(set(_nome_eh_id))[:5]))
+    # A GUARDA DA GUARDA: se nenhum candidato de MEMÓRIA desceu, as checagens acima
+    # passaram sem olhar para nada. É o caso que motivou a seção.
+    _cands_mem = [(_cap["nome"], _par, _c)
+                  for _cap in _f1.build(_ctx1)
+                  for _par, _v in (_cap.get("params") or {}).items()
+                  if "memoria" in _par
+                  for _c in (_v.get("candidatos") or [])]
+    check("a face de teste DE FATO traz candidato de memória — sem isso as checagens "
+          "acima medem o vazio", bool(_cands_mem))
+    check("e o candidato de memória desce com o RESUMO, não com o id",
+          all(_c["nome"] != _c["id"] for _n, _p, _c in _cands_mem),
+          str(_cands_mem[:1]))
 except Exception as _e:  # noqa: BLE001
     check("a face entrega o dado completo", False, repr(_e))
 

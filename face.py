@@ -98,7 +98,7 @@ def _campos_de_juizo() -> set:
     return fora
 
 
-def _params_da(props: dict, tool: str = "") -> dict:
+def _params_da(props: dict, tool: str = "", rotulos: dict | None = None) -> dict:
     """Todo parâmetro que a Mente pode mandar, COMPLETO.
 
     Um mapa só. Antes eram três listas (`alvos`, `por_nome`, `livres`) e um parâmetro
@@ -124,8 +124,22 @@ def _params_da(props: dict, tool: str = "") -> dict:
         # ids que não existem em lugar nenhum. Duas das quatro tentativas de firmar
         # um compromisso na corrida de 15/09 morreram nisso.
         if enum is not None:
-            entrada["candidatos"] = [{"id": str(v), "nome": name_of(str(v)) or str(v)}
-                                     for v in enum]
+            # O NOME VEM DO RÓTULO PRIMEIRO, do `name_of` depois (16/09).
+            #
+            # `name_of` procura no índice de ENTIDADES. Memória não é entidade, então
+            # ele devolvia o próprio id — e `sing:memoria_id` descia com `byName`
+            # mapeando `mem-1786…` para `mem-1786…`. O resolvedor do conector, que
+            # converte NOME em id para todo o resto do projeto, nunca teve contra o
+            # que casar; por isso o enum de 506 ids continuava no prompt, custando 32%
+            # do que vai no fio para um personagem de história longa.
+            #
+            # A guarda que existia para pegar isso — "todo candidato desce com nome" —
+            # passava, porque o id é um nome não-vazio. Ela media PRESENÇA, não
+            # sentido; agora cobra também que o nome não seja o próprio id.
+            entrada["candidatos"] = [
+                {"id": str(v),
+                 "nome": (rotulos or {}).get(str(v)) or name_of(str(v)) or str(v)}
+                for v in enum]
         fora[nome] = entrada
     return fora
 
@@ -145,7 +159,11 @@ def build(context: dict) -> list[dict]:
     if caido is not None:
         return caido
     exposta = []
-    for t in arbiter.build_tools(context):
+    # Os rótulos saem do MESMO cálculo que monta os candidatos — `scene_candidates` já
+    # leu cada memória e guardou o `resumo`. Ler de novo aqui seria abrir 811 arquivos
+    # duas vezes por turno.
+    rotulos: dict = {}
+    for t in arbiter.build_tools(context, rotulos):
         spec = motor.registro.get_spec(t["name"])
         if spec is not None and spec.interna:
             continue                      # a caneta do mundo não desce (classe 2)
@@ -158,7 +176,7 @@ def build(context: dict) -> list[dict]:
             # foi assim que `pronto_quando_alvo` ficou inalcançável, levando junto as
             # famílias `posse` e `lugar`. Com um mapa, esquecer um parâmetro exige
             # não declará-lo.
-            "params": _params_da(params, t["name"]),
+            "params": _params_da(params, t["name"], rotulos),
             "exige": list((t.get("parameters") or {}).get("required") or []),
             "consulta": False,
         })

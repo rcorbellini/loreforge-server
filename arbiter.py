@@ -795,7 +795,7 @@ def scene_candidates(idx: dict) -> dict:
     return cand
 
 
-def build_tools(context: dict) -> list[dict]:
+def build_tools(context: dict, rotulos: dict | None = None) -> list[dict]:
     """Manifest neutro do turno, com enums da cena — uma tool por verbo físico
     (contracts/equip-tools.md). Tools sem candidato válido são omitidas.
 
@@ -823,6 +823,34 @@ def build_tools(context: dict) -> list[dict]:
     cozinhando = bool((context.get("self") or {}).get("is_busy"))
     idx = _scene_index(context)
     cand = scene_candidates(idx)
+    # OS RÓTULOS, PARA QUEM MONTA A FACE (16/09). `rotulos` é um dicionário de SAÍDA:
+    # quem passa um recebe `{id: como isso se chama}` de tudo o que virou candidato.
+    #
+    # POR QUE AQUI E NÃO NA `face.py`. Ela monta os candidatos com
+    # `name_of(id) or id`, e `name_of` procura no índice de ENTIDADES — memória não é
+    # entidade, então ele devolve o próprio id. O efeito: `sing:memoria_id` descia com
+    # `byName` mapeando id → id, e o resolvedor do conector nunca teve contra o que
+    # casar. O enum de 506 ids ficou no prompt por falta desta linha, e custa 32% do
+    # que vai no fio para um personagem de história longa.
+    #
+    # O rótulo não é recalculado: `scene_candidates` JÁ leu cada memória e guardou o
+    # `resumo`. Refazer a leitura na face seria ler 811 arquivos duas vezes por turno.
+    #
+    # Dicionário de saída, e não valor de retorno, porque o retorno desta função é o
+    # MANIFESTO — compartilhado com a engine. Pendurar rótulo nele seria mudar um
+    # contrato de que a engine depende para conseguir uma informação de apresentação.
+    if rotulos is not None:
+        for mapa in cand.values():
+            if not isinstance(mapa, dict):
+                continue
+            for cid, info in mapa.items():
+                if not isinstance(info, dict) or cid in rotulos:
+                    continue
+                # `resumo` é o rótulo da memória; `nome`, o de entidade. Quem não tem
+                # nenhum dos dois fica de fora e cai no `name_of` da face, como antes.
+                rot = (info.get("resumo") or info.get("nome") or "").strip()
+                if rot:
+                    rotulos[cid] = rot
     chars = sorted(idx["chars"])
     objects = sorted(idx["objects"])
     items = sorted(idx["items"])

@@ -172,6 +172,12 @@ SET_INTENTION = tool_spec(ToolSpec(
                   # VOCABULARIO FECHADO, nao lista de cena — por isso SOBREVIVE ao
                   # corte de `face._ENUM_QUE_FICA`, como `status` ja sobrevivia.
                   "pronto_quando": lambda s: sorted(_CRITERIOS)},
+    # PALAVRA, NÃO REFERÊNCIA (item 84). `status: ativa` e `pronto_quando: hunger` não
+    # apontam para nada no mundo — o valor É o que ele diz. Declarar isto aqui é o que
+    # dispensa o conector de re-derivar a classificação à mão, e o que faz a guarda do
+    # `selftest` ("o nome do candidato não pode ser o próprio id") saber que destes
+    # dois ela não cobra: ali o id é o nome, e está certo que seja.
+    vocabulario=("status", "pronto_quando"),
     apply=_set_intention,
 ))
 

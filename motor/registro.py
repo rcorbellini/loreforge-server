@@ -59,6 +59,19 @@ class ToolSpec:
     required: tuple[str, ...] = ()
     enum_sources: dict = field(default_factory=dict)   # {param: key-str | callable}
     omit_if_empty: tuple[str, ...] = ()                # param OPCIONAL some se enum vazio
+    # spec 060 / item 84 — O PARÂMETRO CUJO ENUM É VOCABULÁRIO, não referência.
+    #
+    # `pronto_quando: hunger` e `status: ativa` são PALAVRAS: o valor não aponta para
+    # nada no mundo, ele É o que diz. `item: frasco-de-oleo` é REFERÊNCIA: aponta para
+    # uma coisa que tem nome próprio, e o conector resolve nome -> id.
+    #
+    # A distinção existia só na cabeça de quem leu a 060, e o item 84 registra o
+    # estrago: ela foi re-derivada do zero no conector (`_ENUM_FICA`/`_ENUM_SAI`), à
+    # mão, num arquivo que não sabe quando um parâmetro nasce. Declará-la AQUI, ao
+    # lado do parâmetro, é o que o item 77 já pedira para a lista irmã — e o que faz
+    # a guarda "o nome do candidato não pode ser o próprio id" saber de quem cobrar:
+    # de referência, sempre; de vocabulário, nunca, porque ali o id É o nome.
+    vocabulario: tuple[str, ...] = ()                  # params cujo enum é palavra, não id
     apply: object = None                               # callable(name, args, ctx)
     # spec 043 — O JUÍZO: tupla de (param, régua-em-prosa). Declarar isto diz DUAS
     # coisas de uma vez por par, e é por isso que cada par é UM elemento e não dois:

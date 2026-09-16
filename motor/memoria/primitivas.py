@@ -487,6 +487,7 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
                         about: str, involved: list[str],
                         intensity: str = "small", summary: str = "",
                         frag: str = "",
+                        texto_com_mais_gente: str = "",
                         valence: dict[str, str] | None = None,
                         ouvido_de: str | None = None,
                         ) -> tuple[str | None, int]:
@@ -523,6 +524,18 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
     `timestamp_end`, `involved`, `valence` crescem) — é isso que faz "nunca
     eleva" ser garantia estrutural, não vigilância manual do chamador.
 
+    `texto_com_mais_gente` (rodada 16/09, P3) é o texto de quando o assunto deixou
+    de ser sobre UMA pessoa. Existe porque o `about` pode agrupar por ASSUNTO, e aí
+    o texto da criação ("Perguntei sobre X a Elga") vira MENTIRA na sexta renovação
+    com o sexto informante — ele diria que se insistiu com a Elga, quando se
+    perguntou a seis pessoas uma vez cada. Memória que mente é pior que memória que
+    repete: é ela a bússola do tick autônomo.
+
+    A condição é `involved` ter mais de um OUTRO além de quem lembra — derivada, não
+    declarada: `involved` já cresce a cada renovação, e é por isso que a distinção
+    não precisa de campo novo nem de o chamador vigiar nada. Chamador que não passe
+    o texto alternativo continua exatamente como antes.
+
     Devolve (id, vezes).
     """
     mem_dir = character_folder / "memories"
@@ -553,7 +566,13 @@ def _remember_recurring(character_folder: Path, texto: str, *, evento: str,
             # `frag` vazio = o consumidor histórico (`unanswered`), cuja prosa
             # de insistência é afinada para pergunta e está travada em teste.
             cauda = _reincidencia(vezes, frag) if frag else _insistencia(vezes)
-            corpo = texto + cauda
+            # MAIS DE UM OUTRO envolvido = o fato deixou de ser sobre uma pessoa.
+            # `juntos` já traz quem lembra mais todos os informantes acumulados; a
+            # pasta se chama pelo id do dono, e é assim que ele sai da conta.
+            outros = [i for i in juntos if i != character_folder.name]
+            base = (texto_com_mais_gente
+                    if texto_com_mais_gente and len(outros) > 1 else texto)
+            corpo = base + cauda
             fm["summary"] = (summary.strip() or _short_summary(corpo)) + cauda
             if ouvido_de is not None:
                 fm["ouvido_de"] = ouvido_de
@@ -1217,7 +1236,8 @@ def _rec(created: list, quem: str, texto: str, evento: str, involved: list,
 
 
 def _rec_unico(created: list, quem: str, texto: str, evento: str, involved: list,
-               *, about: str, intensity: str = "small", frag: str = "") -> None:
+               *, about: str, intensity: str = "small", frag: str = "",
+               texto_com_mais_gente: str = "") -> None:
     """Como `_rec`, mas para o fato que SE REPETE: renova em vez de duplicar.
 
     A chave é o `about` — quem chama decide o que conta como "o mesmo assunto"
@@ -1236,7 +1256,8 @@ def _rec_unico(created: list, quem: str, texto: str, evento: str, involved: list
         return
     mem_id, vezes = _remember_recurring(folder, texto, evento=evento, about=about,
                                         involved=involved, intensity=intensity,
-                                        frag=frag)
+                                        frag=frag,
+                                        texto_com_mais_gente=texto_com_mais_gente)
     if mem_id is not None:
         created.append({"target": quem, "id": mem_id, "event": evento,
                         "vezes": vezes})

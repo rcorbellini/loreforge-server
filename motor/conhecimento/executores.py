@@ -350,6 +350,22 @@ def _texto_sem_resposta(motivo: str, assunto: str, rota: str | None):
             f"{{quem}} me perguntou {onde} — eu não soube dizer.")
 
 
+def _texto_perguntei_a_varios(assunto: str, rota: str | None) -> str:
+    """A frase de quem já levou o MESMO assunto a mais de uma pessoa (rodada 16/09, P3).
+
+    Sem informante e sem motivo, de propósito. Quando o assunto passou por várias
+    bocas, o que sobrou de comum não é O QUE cada uma respondeu — é que nenhuma
+    resolveu. Nomear a última seria contar a menor parte do que aconteceu, e a cauda
+    de insistência ("já insisti algumas vezes, sempre em vão") diria que se insistiu
+    COM ELA, quando se perguntou a seis pessoas uma vez cada.
+
+    Sem número (Princípio V), pela mesma razão que `_insistencia` não conta: o
+    personagem sabe que perguntou a muita gente, não a quantas.
+    """
+    onde = f"o caminho de {rota}" if rota else (f"sobre {assunto}" if assunto else "algo")
+    return f"Perguntei {onde} a mais de uma pessoa — ninguém soube dizer."
+
+
 def _apply_unanswered_ops(character_id: str, actor_folder: Path, resolution: dict,
                           rolls: list | None = None) -> tuple[list, list, list]:
     """A PERGUNTA QUE NÃO RENDEU, gravada nos DOIS lados (item 52.2).
@@ -389,7 +405,30 @@ def _apply_unanswered_ops(character_id: str, actor_folder: Path, resolution: dic
         # fato, mais insistente. Ver `_remember_recurring` para o estrago que a
         # duplicação fez (35 das 40 memórias vivas do Tobias eram esta recusa, e
         # eram elas que o faziam perguntar de novo).
-        chave = f"{informante}\u0000{assunto or rota or ''}"
+        #
+        # E A CHAVE DE QUEM PERGUNTOU É O ASSUNTO, NÃO O PAR INFORMANTE+ASSUNTO
+        # (rodada 16/09, P3). MEDIDO no controle B de 15/09: das 12 memórias que
+        # desciam à Nerissa, NOVE eram "Perguntei sobre X — não soube dizer", e SEIS
+        # delas o mesmo assunto com informantes DIFERENTES. Chaveando pelo par, seis
+        # bocas viram seis linhas — e a dedup por texto exato do conector
+        # (`_limparMemorias`) não pega nenhuma, porque o nome do informante difere em
+        # cada uma.
+        #
+        # É o estrago de 13/08 de novo, por outra porta: a memória de trabalho vira
+        # um monumento ao que não rendeu, e é ela a bússola do tick autônomo — ele
+        # pergunta porque lembra de ter perguntado. Só que desta vez ninguém repetia
+        # a mesma pergunta. A insistência estava no ASSUNTO, que é justamente o que a
+        # chave não via.
+        #
+        # O informante NÃO se perde: continua em `involved`, que cresce a cada
+        # renovação, e é de lá que `arquivos_envolvendo`/`remembered_about` puxam a
+        # relação quando um pensa no outro. O que sai é a linha repetida, não o
+        # vínculo.
+        #
+        # O LADO DE QUEM RESPONDEU NÃO MUDA, e é de propósito: lá a chave é (quem
+        # perguntou, assunto). Duas pessoas procurando você sobre a mesma coisa são
+        # dois fatos sociais, não um fato repetido.
+        chave = assunto or rota or ""
         # O VERBO É DE CADA LADO. A assimetria das duas frases (quem perguntou
         # guarda O QUE OUVIU; quem respondeu guarda O QUE FEZ) já existia no
         # `_texto_sem_resposta` — mas a CAUDA de reincidência não a acompanhava, e
@@ -404,7 +443,8 @@ def _apply_unanswered_ops(character_id: str, actor_folder: Path, resolution: dic
         # não é motivo para piorar o que já estava bom.
         _rec_unico(created, character_id,
                    t_perguntou.format(quem=name_of(informante)),
-                   "unanswered", envolvidos, about=f"perguntei\u0000{chave}")
+                   "unanswered", envolvidos, about=f"perguntei\u0000{chave}",
+                   texto_com_mais_gente=_texto_perguntei_a_varios(assunto, rota))
         _rec_unico(created, informante,
                    t_respondeu.format(quem=name_of(character_id)),
                    "unanswered", envolvidos,

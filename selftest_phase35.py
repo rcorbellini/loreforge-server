@@ -624,6 +624,63 @@ _ex52._apply_unanswered_ops(
 check("53.4: outro assunto NÃO se funde com o primeiro",
       len([p for p in _mems.glob("*.md") if p.name not in _antes2]) == 1)
 
+# ---- P3 (rodada 16/09): o MESMO assunto com informantes DIFERENTES também funde --
+# O que a 53.4 não pegava: a chave era (informante, assunto), então perguntar a
+# SEIS pessoas sobre a mesma coisa deixava seis memórias. Medido no controle B de
+# 15/09 — das 12 memórias que desciam à Nerissa, nove eram "perguntei e ninguém
+# soube", e seis delas o mesmo assunto com informantes diferentes. A dedup por
+# texto exato do conector não pega nenhuma: o nome do informante difere em cada uma.
+_P3 = [f"informante-p3-{i}" for i in range(6)]
+for _cid in _P3:
+    _mk_char(TAVERNA, _cid, _cid.upper())
+_antes3 = {p.name for p in _mems.glob("*.md")}
+for _cid in _P3:
+    _ex52._apply_unanswered_ops(
+        _A52, _f52, {"unanswered_ops": [{"informante": _cid, "sobre": "a moça sumida",
+                                         "motivo": "nao_soube"}]})
+_novos3 = [p for p in _mems.glob("*.md") if p.name not in _antes3]
+check("P3: seis informantes sobre o MESMO assunto deixam UMA memória",
+      len(_novos3) == 1, f"{len(_novos3)} arquivos")
+if _novos3:
+    _fm3, _corpo3 = motor.read_doc(_novos3[0])
+    # O TEXTO NÃO PODE MENTIR. Nomear o último informante diria que se insistiu COM
+    # ELE, quando se perguntou a seis pessoas uma vez cada.
+    check("P3: o texto para de nomear um informante e diz que foram vários",
+          "mais de uma pessoa" in _corpo3
+          and not any(c.upper() in _corpo3 for c in _P3), _corpo3)
+    check("P3: e continua sem número de sistema (Princípio V)",
+          not any(d in _corpo3 for d in "0123456789"), _corpo3)
+    check("P3: o VÍNCULO com cada informante sobrevive em `involved` — é por ele "
+          "que `remembered_about` acha isto quando um pensa no outro",
+          all(c in (_fm3.get("involved") or []) for c in _P3),
+          str(_fm3.get("involved")))
+    check("P3: renova o prazo e conta as vezes",
+          _fm3.get("state") == "active" and _fm3.get("vezes") == 6,
+          f"state={_fm3.get('state')} vezes={_fm3.get('vezes')}")
+# UMA pessoa só continua nomeada: o caso de uma pergunta insistente à MESMA pessoa
+# não perdeu nada — seria trocar uma memória boa por uma genérica.
+_antes3b = {p.name for p in _mems.glob("*.md")}
+for _ in range(3):
+    _ex52._apply_unanswered_ops(
+        _A52, _f52, {"unanswered_ops": [{"informante": _B52, "sobre": "o sino rachado",
+                                         "motivo": "nao_soube"}]})
+_novos3b = [p for p in _mems.glob("*.md") if p.name not in _antes3b]
+if _novos3b:
+    _fm3b, _corpo3b = motor.read_doc(_novos3b[0])
+    check("P3: insistir com UMA pessoa continua nomeando ela",
+          "TestemunhaL" in _corpo3b and "mais de uma pessoa" not in _corpo3b, _corpo3b)
+# E O LADO DE QUEM RESPONDEU NÃO MUDOU: lá a chave é (quem perguntou, assunto), e
+# duas pessoas procurando você sobre a mesma coisa são dois fatos, não um repetido.
+_f3c = motor.find_character_folder(_P3[0])
+_mems3c = _f3c / "memories"
+_antes3c = {p.name for p in _mems3c.glob("*.md")}
+_ex52._apply_unanswered_ops(
+    _B52, motor.find_character_folder(_B52),
+    {"unanswered_ops": [{"informante": _P3[0], "sobre": "a moça sumida",
+                         "motivo": "nao_soube"}]})
+check("P3: quem RESPONDEU guarda um fato por pessoa que o procurou",
+      len([p for p in _mems3c.glob("*.md") if p.name not in _antes3c]) == 1)
+
 
 # ---- 2026-08-20: a MESMA renovação para a RECUSA re-tentada ------------------
 # `_remember_recurring` teve UM consumidor só (`unanswered`) por semanas, e o

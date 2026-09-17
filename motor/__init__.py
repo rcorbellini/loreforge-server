@@ -271,6 +271,7 @@ from .memoria import (  # noqa: F401
     familiarity_label,
     familiarity_with,
     get_active_memories,
+    memorias_ao_alcance,
     memory_about,
     memory_involved,
     memory_kind,

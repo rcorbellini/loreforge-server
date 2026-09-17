@@ -994,10 +994,18 @@ def get_context(character_id: str) -> dict:
     routes = [] if in_transit else _available_routes(place_fm.get("id"))
     # a cena EVOCA: quem está presente e onde se está decidem o que volta à
     # mente, junto com o que está vívido por si (spec 013)
+    # AINDA USADO, e só para uma coisa: `_conhecidos_por_memoria`, logo abaixo, deriva
+    # QUEM ele sabe nomear. Alargar aquilo para o alcance inteiro mudaria a tabela de
+    # resolução de alvos, que é outra decisão com outro risco — e medir duas de uma vez
+    # é o que esta série inteira ensinou a não fazer.
+    # UMA LEITURA, DUAS VISTAS. O alcance inteiro sai do disco uma vez; o que está
+    # presente agora é um filtro sobre ele. Ler duas vezes custava 400 ms por turno.
+    _ao_alcance = memoria.memorias_ao_alcance(char_folder)
     memorias_ativas = get_active_memories(
         char_folder,
         evoked_by={c["id"] for c in characters_present if c.get("id")}
         | ({place_fm.get("id")} if place_fm.get("id") else set()),
+        de=_ao_alcance,
     )
     # spec 062, US4: mesmo conjunto que `_conhecidos_por_memoria` já usava,
     # nomeado para também alimentar os destinos alcançáveis sem memória.
@@ -1120,7 +1128,23 @@ def get_context(character_id: str) -> dict:
             },
             # a cena EVOCA: quem está presente e onde se está decidem o que volta à
             # mente, junto com o que está vívido por si (spec 013)
-            "memories": memorias_ativas,
+            # O QUE ELE PODERIA LEMBRAR, não o que está gritando na cabeça dele
+            # (2026-09-17, `docs/fluxo-do-contrato.md` § "O princípio, afiado").
+            #
+            # Aqui ia `memorias_ativas`: vivas, evocadas pela cena, com teto de 40.
+            # Três decisões, e duas delas são de APRESENTAÇÃO — quanto cabe e o que
+            # está presente agora dependem do modelo, e quem sabe isso é o BFF. A
+            # `mira-vigia-da-praca` tinha 811 em disco, 515 vivas, e saíam 40: o
+            # servidor retinha 475 memórias VIVAS que são dela.
+            #
+            # O alcance é o de `consultar_memoria` (spec 064): viva ou vencida, nunca
+            # `esquecida`. "Parar para lembrar" e "o que eu teria como lembrar" são a
+            # mesma pergunta, e a resposta tem de ser a mesma — senão o conector não
+            # conseguiria responder a consulta sem voltar ao mundo.
+            #
+            # O `estado` de cada uma desce junto: entregar a vencida sem dizer que
+            # venceu seria entregá-la como viva, que é pior que não entregar.
+            "memories": _ao_alcance,
             # o que o personagem PRETENDE — nunca o que viveu (spec 026)
             "intentions": intencoes.get_active_intentions(char_folder),
             # QUEM ELE SABE NOMEAR, mesmo não estando aqui (spec 060/062).

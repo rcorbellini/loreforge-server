@@ -2357,7 +2357,8 @@ def _short_summary(text: str, limit: int = 60) -> str:
 
 
 def get_active_memories(entity_folder: Path,
-                        evoked_by: set[str] | None = None) -> list[dict]:
+                        evoked_by: set[str] | None = None,
+                        de: list[dict] | None = None) -> list[dict]:
     """Memórias que a Mente recebe para narrar — vivas, evocadas e com teto.
 
     Cada memória traz `salience` (vivida|latente) e `recency`, derivados do relógio
@@ -2375,12 +2376,27 @@ def get_active_memories(entity_folder: Path,
     que a memória humana faz. E vale repetir: este corte é de NARRAÇÃO. O que o
     mundo SABE continua inteiro em `knows_route`/`familiarity_with`.
     """
+    evoked_by = evoked_by or set()
+    now = time.time()
+    # `de` — FILTRA O QUE JÁ FOI LIDO, em vez de reler o disco (2026-09-17).
+    #
+    # Desde que o contexto passou a entregar o ALCANCE inteiro, esta função e a
+    # `memorias_ao_alcance` liam as mesmas 809 memórias da `mira` na mesma chamada de
+    # `get_context` — 165 ms viraram 567 ms, no caminho crítico de todo turno.
+    #
+    # O recorte continua sendo o MESMO (vivas, evocadas, com teto): o que muda é a
+    # fonte das linhas. Quem passa `de` recebe as entradas SEM `content` — o corpo não
+    # viaja no alcance, e quem chama assim (o `conhecidos`) só precisa de `involved`.
+    if de is not None:
+        vivas = [m for m in de if m.get("estado") == "viva"]
+        mantidas = [m for m in vivas
+                    if not evoked_by or m.get("salience") == "vivida"
+                    or (set(m.get("involved") or []) & evoked_by)]
+        return mantidas[:_MEMORY_CONTEXT_CAP]
     mem_dir = entity_folder / "memories"
     if not mem_dir.exists():
         return []
     _expire_memories(entity_folder)  # preguiçoso, no escopo de quem está sendo lido
-    evoked_by = evoked_by or set()
-    now = time.time()
     memories = []
     for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
@@ -2419,6 +2435,77 @@ def get_active_memories(entity_folder: Path,
         -(m.get("timestamp_start") or 0),
     ))
     return memories[:_MEMORY_CONTEXT_CAP]
+
+
+def memorias_ao_alcance(entity_folder: Path) -> list[dict]:
+    """TUDO o que ele conseguiria lembrar se parasse para tentar — sem evocação, sem
+    teto (2026-09-17, `docs/fluxo-do-contrato.md` § "O princípio, afiado").
+
+    A IRMÃ de `get_active_memories`, e a diferença entre as duas é a fronteira que o
+    conector redesenhou ao ganhar harness:
+
+      `get_active_memories`  o que está NA CABEÇA agora — viva, evocada pela cena, com
+                             teto. É apresentação, e o nome da docstring dela sempre
+                             disse isso: *"memórias que a Mente recebe para NARRAR"*.
+      `memorias_ao_alcance`  o que é DELE e ele PODERIA puxar. Viva ou vencida.
+
+    O alcance é o mesmo de `consultar_memoria` (`alcance_consulta`, spec 064), e é de
+    propósito: "parar para lembrar" e "o que eu teria como lembrar" são a mesma
+    pergunta feita de dois jeitos. A `esquecida` fica fora nas duas — ela é justamente
+    o que não se consegue mais evocar, e é o que mantém o custo da cura (spec 032) mais
+    definitivo que a expiração natural.
+
+    POR QUE ENTREGAR O QUE NÃO VAI AO PROMPT. Porque a decisão de o que está GRITANDO
+    na cabeça dele agora é do conector, e ele não pode tomá-la sobre o que nunca
+    recebeu. Enquanto este corte morou aqui, a `mira-vigia-da-praca` tinha 811 memórias
+    em disco, 515 vivas, e o contexto entregava 40 — o BFF sendo feito dentro da API.
+
+    NÃO CARREGA O `content`. O corpo inteiro é o que faz este conjunto pesar (185 KB
+    contra 56 KB do contexto inteiro), e para decidir o que evocar bastam o resumo e os
+    envolvidos. Quem precisa do corpo — a narração, a régua — já o puxa por outro
+    caminho, com um id em mãos.
+
+    `salience` e `recency` vêm daqui e NÃO se movem: derivam do relógio e da
+    intensidade (spec 013), são FATO. O que muda de lado é a REGRA que os usa.
+    """
+    mem_dir = entity_folder / "memories"
+    if not mem_dir.exists():
+        return []
+    _expire_memories(entity_folder)   # preguiçoso, no escopo de quem está sendo lido
+    now = time.time()
+    out = []
+    for path in arquivos_em(mem_dir):
+        fm, body = read_doc(path)
+        if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
+            continue                  # rota é maquinaria de viagem, não lembrança
+        if not alcance_consulta(fm, now):
+            continue
+        intensity = fm.get("intensity")
+        ts_start = fm.get("timestamp_start") or now
+        age = max(0.0, now - ts_start)
+        out.append({
+            "id": fm.get("id"),
+            # O ESTADO DESCE, e é ele que deixa o conector distinguir "está na cabeça"
+            # de "dá para puxar". Sem esta chave, entregar a vencida seria entregá-la
+            # como se fosse viva — que é pior que não entregar.
+            "estado": "vencida" if fm.get("state") == "expired" else "viva",
+            "intensity": intensity,
+            "involved": memory_involved(fm),
+            "summary": (fm.get("summary") or "").strip() or _short_summary(body),
+            "timestamp_start": ts_start,
+            # `timestamp_end` NÃO desce. É o relógio da expiração, e expirar é do
+            # mundo — o conector já recebe o veredito pronto em `estado`. Mandar os
+            # dois seria dar a ele o número para recalcular o que já vem decidido, e é
+            # assim que nasce uma segunda fonte de verdade sobre o mesmo fato.
+            "recency": _recency_label(age),
+            "salience": _memory_salience(intensity, age),
+        })
+    out.sort(key=lambda m: (
+        0 if m.get("salience") == "vivida" else 1,
+        _INTENSITY_ORDER.get(m.get("intensity"), 99),
+        -(m.get("timestamp_start") or 0),
+    ))
+    return out
 
 
 def _expire_memories(entity_folder: Path) -> None:

@@ -276,9 +276,25 @@ for i in range(300):
         f"aconteceu algo sem importância, número {i}")
 
 ctx = motor.get_context(ELGA)
-check("SC-008: contexto continua utilizável com 300+ memórias",
-      len(ctx["self"]["memories"]) <= motor._MEMORY_CONTEXT_CAP,
-      f"{len(ctx['self']['memories'])} memórias")
+# A FRONTEIRA MUDOU EM 17/09 — `docs/fluxo-do-contrato.md` § "O princípio, afiado".
+#
+# Aqui se cobrava `len(memories) <= _MEMORY_CONTEXT_CAP`: o servidor entregava 40 e
+# cortava o resto. Dois dos três cortes daquele corte eram APRESENTAÇÃO — quanto cabe
+# e o que está presente agora dependem do modelo, e quem sabe isso é o conector. A
+# `mira-vigia-da-praca` tinha 811 memórias em disco, 515 vivas, e recebia 40: o
+# servidor retinha 475 que são dela.
+#
+# O SC-008 não morreu, mudou de dono: "o contexto continua utilizável" passou a ser
+# medido no conector (`test/mente.test.js`, "o TETO de 12 continua"). O que se cobra
+# AQUI é a metade do servidor — entregar o ALCANCE inteiro, e entregá-lo com o que o
+# conector precisa para cortar.
+check("SC-008: o contexto entrega o ALCANCE inteiro, sem teto do servidor",
+      len(ctx["self"]["memories"]) > motor._MEMORY_CONTEXT_CAP,
+      f"{len(ctx['self']['memories'])} memórias — se estiver em {motor._MEMORY_CONTEXT_CAP} "
+      f"o teto voltou para o lado errado")
+check("e cada uma diz se está VIVA ou VENCIDA — sem isso o conector não tem como cortar",
+      all("estado" in m for m in ctx["self"]["memories"]),
+      str([m for m in ctx["self"]["memories"] if "estado" not in m][:1]))
 
 # evocação: quem está presente puxa a lembrança de volta, mesmo antiga
 motor.write_doc(
@@ -293,14 +309,26 @@ ctx = motor.get_context(ELGA)
 ids = {m["id"] for m in ctx["self"]["memories"]}
 check("memória antiga que envolve alguém PRESENTE sobrevive ao corte",
       "mem-evocada" in ids)
-check("enquanto as banais que ninguém evoca ficam de fora",
-      not any(i.startswith("mem-volume-") for i in ids))
+# A EVOCAÇÃO TAMBÉM MUDOU DE LADO. As banais CHEGAM agora, marcadas `viva`, e quem
+# decide que elas não estão gritando na cabeça dele é o conector (`_limparMemorias`,
+# testado em `test/mente.test.js`: "o vívido volta sozinho, o latente só se a cena o
+# chamar"). A regra é a mesma da spec 013; o que muda é onde ela roda.
+check("as banais CHEGAM ao conector — é ele que decide o que está presente",
+      any(i.startswith("mem-volume-") for i in ids),
+      "o servidor voltou a evocar por conta própria")
 
 # vencida some da narração
 vencer(ELGA, "mem-evocada")
 ctx = motor.get_context(ELGA)
-check("memória VENCIDA não desce ao client",
-      "mem-evocada" not in {m["id"] for m in ctx["self"]["memories"]})
+# A VENCIDA PASSOU A DESCER, e é o coração da fronteira nova: ela é DELE, ele pode
+# parar e lembrar — então o conector tem de tê-la, mesmo que ela nunca vá ao prompt.
+# É o mesmo alcance de `consultar_memoria` (spec 064), e é o que permite responder a
+# consulta sem voltar ao mundo. O que ela NÃO pode é descer disfarçada de viva.
+_venc = next((m for m in ctx["self"]["memories"] if m["id"] == "mem-evocada"), None)
+check("memória VENCIDA DESCE — é dele, e parar para lembrar é possível",
+      _venc is not None)
+check("mas desce MARCADA como vencida — entregá-la como viva seria pior que não entregar",
+      bool(_venc) and _venc.get("estado") == "vencida", str(_venc)[:90])
 check("mas o arquivo continua no mundo — nada é apagado",
       (elga_folder / "memories" / "mem-evocada.md").exists())
 

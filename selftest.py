@@ -292,16 +292,6 @@ check("nenhuma description usa frase aposentada sem medição própria",
 print("\n-- a face entrega o dado completo (id E nome)")
 try:
     import face as _f1
-    # UMA MEMÓRIA PLANTADA, e sem ela esta seção inteira media o vazio.
-    #
-    # O mundo de teste não tem memória nenhuma, então `sing/accuse/write:memoria_id`
-    # não apareciam na face — e a guarda "o nome do candidato não pode ser o próprio
-    # id" passava por não ter contra quem cobrar. Verificado quebrando o rótulo de
-    # propósito: a suíte continuou verde. Guarda que não pode falhar não é guarda.
-    motor._write_memory(motor.find_character_folder("torvin-ferreiro"),
-                        "Vi Elga esconder um fardo atras do balcao.",
-                        intensity="small", involved=["elga-taverneira"],
-                        evento="witness_theft")
     _ctx1 = motor.get_context("torvin-ferreiro")
     _sem_nome, _sem_id, _nome_eh_id = [], [], []
 
@@ -336,18 +326,14 @@ try:
           not _sem_nome, ", ".join(_sem_nome[:5]))
     check("e o nome NÃO é o próprio id — senão não há por que resolver",
           not _nome_eh_id, ", ".join(sorted(set(_nome_eh_id))[:5]))
-    # A GUARDA DA GUARDA: se nenhum candidato de MEMÓRIA desceu, as checagens acima
-    # passaram sem olhar para nada. É o caso que motivou a seção.
-    _cands_mem = [(_cap["nome"], _par, _c)
-                  for _cap in _f1.build(_ctx1)
-                  for _par, _v in (_cap.get("params") or {}).items()
-                  if "memoria" in _par
-                  for _c in (_v.get("candidatos") or [])]
-    check("a face de teste DE FATO traz candidato de memória — sem isso as checagens "
-          "acima medem o vazio", bool(_cands_mem))
-    check("e o candidato de memória desce com o RESUMO, não com o id",
-          all(_c["nome"] != _c["id"] for _n, _p, _c in _cands_mem),
-          str(_cands_mem[:1]))
+    # AS CHECAGENS DE CANDIDATO DE MEMÓRIA VIVEM NA FASE 35, não aqui.
+    #
+    # Elas exigem que exista uma memória — e este arquivo aponta `LOREFORGE_WORLD`
+    # para o fixture, que o cabeçalho chama de IMUTÁVEL. Plantar aqui deixava um
+    # arquivo por execução: sete se acumularam, e as fases 15, 30 e 32 começaram a
+    # falhar porque contam memórias num mundo que crescia sozinho. A fase 35 copia o
+    # mundo para um temporário antes de escrever, que é o lugar de quem precisa
+    # plantar.
 except Exception as _e:  # noqa: BLE001
     check("a face entrega o dado completo", False, repr(_e))
 

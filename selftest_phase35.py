@@ -712,3 +712,47 @@ if FAILS:
     print(f"{len(FAILS)} FALHA(S): " + ", ".join(FAILS))
     sys.exit(1)
 print("todos os checks da Fase 35 (spec 034) passaram.")
+
+
+# =========================================================================== #
+# O CANDIDATO DE MEMÓRIA DESCE COM NOME (17/09, item 91 / spec 060)
+#
+# Mora AQUI, e não no `selftest.py`, por um motivo que custou cinco checagens: a
+# guarda exige que exista uma memória, e o `selftest.py` aponta `LOREFORGE_WORLD`
+# para o fixture — que o cabeçalho dele chama de IMUTÁVEL. Plantar lá deixava um
+# arquivo por execução; sete se acumularam antes de alguém notar, e as fases 15, 30 e
+# 32 passaram a falhar porque CONTAM memórias num mundo que crescia sozinho. Esta fase
+# copia o mundo para um temporário antes de escrever, que é o lugar de quem planta.
+#
+# O QUE ELA GUARDA: `name_of` procura no índice de ENTIDADES, e memória não é entidade
+# — ele devolvia o próprio id. `sing:memoria_id` descia com `byName` mapeando
+# `mem-1786…` para `mem-1786…`, e o resolvedor do conector, que converte NOME em id
+# para todo o resto do projeto, não tinha contra o que casar. O enum de 506 ids ficou
+# no prompt por falta disso.
+#
+# E a guarda anterior ("todo candidato desce com nome") passava, porque o id é um
+# texto não-vazio: ela media PRESENÇA, não sentido.
+# =========================================================================== #
+
+print("\n--- o candidato de MEMÓRIA desce com o resumo, não com o id ---------")
+import face as _face35                                            # noqa: E402
+
+_mk_char(TAVERNA, "dono-de-memoria-p35", "DonoDeMemoria")
+_mk_char(TAVERNA, "lembrado-p35", "LembradoP35")
+motor._write_memory(pasta("dono-de-memoria-p35"),
+                    "Vi LembradoP35 esconder um fardo atras do balcao.",
+                    intensity="small", involved=["lembrado-p35"],
+                    evento="witness_theft")
+_caps35 = _face35.build(motor.get_context("dono-de-memoria-p35"))
+_cands35 = [(c["nome"], p, x)
+            for c in _caps35
+            for p, v in (c.get("params") or {}).items() if "memoria" in p
+            for x in (v.get("candidatos") or [])]
+check("a face traz candidato de memória — sem isto a checagem abaixo mede o vazio",
+      bool(_cands35), str([c["nome"] for c in _caps35])[:120])
+check("e o candidato de memória desce com o RESUMO, não com o próprio id",
+      all(x["nome"] != x["id"] for _n, _p, x in _cands35),
+      str(_cands35[:1]))
+check("o resumo que desce é o texto da lembrança, não um rótulo genérico",
+      any("LembradoP35" in x["nome"] for _n, _p, x in _cands35),
+      str([x["nome"][:40] for _n, _p, x in _cands35][:2]))

@@ -4,12 +4,14 @@ Parte do pacote em níveis. Ver research.md (T001) para o grafo de dependências
 """
 from __future__ import annotations
 
+import collections
 import os
 import random
 import re
 import threading
 import time
 import uuid
+import unicodedata
 import unicodedata
 from pathlib import Path
 
@@ -84,6 +86,7 @@ from ..memoria import (
     familiarity_label,
     familiarity_with,
     get_active_memories,
+    memory_about,
     memory_involved,
     memory_kind,
     sentiment_toward,
@@ -1709,76 +1712,183 @@ def own_memories(character_id: str, require_sobre: bool = True) -> list[dict]:
 _THEME_EVENTS = ("witness_theft", "theft", "steal")
 
 
+def _de_quem_ele_lembra(folder, now: float) -> dict:
+    """{id -> nome} das entidades que aparecem no `involved` das memórias DELE.
+
+    É o índice de quem ele tem o que lembrar — pequeno (28 entidades para a
+    `mira-vigia-da-praca`, que tem 809 memórias) e distinto, porque são nomes
+    próprios. É contra ESTE conjunto que a pergunta se resolve.
+    """
+    de = {}
+    for path in arquivos_em(folder / "memories"):
+        fm, _ = read_doc(path)
+        if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
+            continue
+        if not alcance_consulta(fm, now):
+            continue
+        for eid in memory_involved(fm):
+            if eid and eid not in de:
+                nome = io.name_of(eid)
+                de[eid] = nome if nome and nome != eid else eid
+    return de
+
+
+def _casa_entidade(sobre: str, de_quem: dict) -> list[str]:
+    """Os ids cujo NOME a pergunta cita. Mesma regra da camada literal do conector:
+    normaliza e casa por contenção nos dois sentidos.
+
+    Funciona aqui porque o conjunto é pequeno e os nomes são próprios — foi
+    justamente o regime em que a contenção literal mede 116/118 em jogo. Casar PROSA
+    contra o TEXTO das memórias é que não funciona, e era o que se fazia antes.
+    """
+    alvo = _normal(sobre)
+    if not alvo:
+        return []
+    # O PRIMEIRO NOME TAMBÉM CONTA, e esquecê-lo custou a primeira versão desta
+    # função: "o que eu sei sobre a Sarga" não casava com "Sarga, a Contrabandista"
+    # por contenção — nenhum dos dois contém o outro —, e a consulta dizia que ela
+    # não guardava nada sobre alguém de quem tem 68 lembranças.
+    #
+    # Primeiro nome AMBÍGUO é descartado (`Torvin` é duas pessoas): casar o errado
+    # devolveria a memória de outro, que é pior que não devolver.
+    primeiros = {}
+    for eid, nome in de_quem.items():
+        p = _normal(str(nome).split(",")[0])
+        if len(p) >= 3:
+            primeiros.setdefault(p, set()).add(eid)
+    achados = []
+    for eid, nome in de_quem.items():
+        for campo in (nome, eid):
+            n = _normal(campo)
+            if n and (n == alvo or n in alvo or (len(n) >= 4 and alvo in n)):
+                achados.append(eid)
+                break
+        else:
+            p = _normal(str(nome).split(",")[0])
+            if len(primeiros.get(p, ())) == 1 and re.search(
+                    r"(?<![a-z0-9])" + re.escape(p) + r"(?![a-z0-9])", alvo):
+                achados.append(eid)
+    return achados
+
+
+def _normal(t: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ",
+                  unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore")
+                  .decode().lower()).strip()
+
+
 def _recall_com_ids(character_id: str, args: dict | None = None) -> tuple[dict, list]:
-    """O que o personagem lembra a respeito de `sobre` (prosa livre). Filtra as
-    PRÓPRIAS memórias vivas por SUJEITO (id/nome citado em `sobre`) e por TEMA
-    (domínio/evento — ex.: furto→crime). Devolve `{sobre, lembra}` em prosa;
-    ausência é reportada como ausência, nunca inventada."""
+    """O que o personagem lembra A RESPEITO DE ALGUÉM OU DE ALGO (17/09).
+
+    ERA PROSA LIVRE, e a prosa livre não funcionava. Medido nas DUAS únicas chamadas
+    que a corrida de controle produziu em duas horas: a primeira devolveu QUINZE linhas
+    num bloco só — sete delas "Irmão Tobias me perguntou/acusou", duas de deslocamento,
+    uma "Mudou em mim: action" — e a segunda devolveu "você não guarda nenhuma
+    lembrança sobre isso". Ruído ou nada, e a tool custando token em todo prompt.
+
+    A causa era o casamento POR TEXTO: duas palavras de quatro letras bastavam, e num
+    acervo em que "perguntei/acusou/Tobias" se repete às centenas, qualquer pergunta
+    casava o mesmo balaio. É a mesma lição do item 90 — casar prosa contra prosa num
+    corpus estilisticamente uniforme mede estilo, não conteúdo.
+
+    Agora a pergunta se resolve contra UM CONJUNTO PEQUENO E PRÓPRIO: as entidades que
+    aparecem no `involved` das memórias dele (28 para a `mira`, com 809 lembranças).
+    Nome próprio, conjunto fechado — o regime em que a contenção literal acerta 116 de
+    118 no jogo real.
+
+    E QUANDO NÃO CASA, ele não diz mais só "não guardo nada": diz DE QUEM ele teria o
+    que lembrar. Beco sem saída vira lista de portas — a Mente reformula em vez de
+    desistir, e o turno não morre numa negativa muda.
+
+    Isto depende do índice: memória que cita alguém e não o indexa fica invisível aqui.
+    Eram 23% do acervo da `mira` até a migração do item 91 (`migra_involved.py`); hoje
+    são 1%."""
     sobre = ((args or {}).get("sobre") or "").strip()
-    low = sobre.lower()
-    ausencia = {"sobre": sobre, "lembra": "Você não guarda nenhuma lembrança sobre isso."}
     try:
         folder = find_character_folder(character_id)
     except MotorError:
-        return ausencia, []
+        return {"sobre": sobre, "lembra": "Você não guarda nenhuma lembrança sobre isso."}, []
     mem_dir = folder / "memories"
     if not mem_dir.is_dir():
-        return ausencia, []
+        return {"sobre": sobre, "lembra": "Você não guarda nenhuma lembrança sobre isso."}, []
     _expire_memories(folder)
     now = time.time()
-    quer_tema = any(k in low for k in ("furt", "roub", "ladr", "crime"))
+
+    de_quem = _de_quem_ele_lembra(folder, now)
+    alvos = set(_casa_entidade(sobre, de_quem))
+    # A LANE DE TEMA SOBREVIVE, e de propósito: ela casa por `domain`/`evento`, que são
+    # campos ESTRUTURADOS do mundo — não é o casamento por texto solto que esta função
+    # acabou de perder. E a própria description promete ("se houve furto num lugar").
+    quer_tema = any(k in sobre.lower() for k in ("furt", "roub", "ladr", "crime"))
+    # O ASSUNTO QUE NÃO É ENTIDADE, e ele tem um lugar ESTRUTURADO (item 52.2).
+    #
+    # "Perguntei sobre o poço velho a Fulano — não soube dizer": o poço não é entidade
+    # nenhuma, então não está em `involved`. O comentário daquele item já avisava — "o
+    # ASSUNTO não é entidade, ele mora no texto" — e a primeira versão desta função,
+    # ao trocar texto por entidade, perdeu o caso inteiro. Duas checagens da fase 35
+    # caíram, e elas estavam certas.
+    #
+    # Mas ele não mora SÓ no texto: mora no `about`, que a memória recorrente grava
+    # (`perguntei\0<assunto>`). Casar contra o `about` é casamento ESTRUTURADO — um
+    # campo que o mundo escreveu de propósito —, não a busca solta no corpo que fazia
+    # qualquer pergunta casar o mesmo balaio.
+    alvo_txt = _normal(sobre)
+    def _casa_assunto(fm) -> bool:
+        a = memory_about(fm)
+        if not a or not alvo_txt:
+            return False
+        assunto = _normal(a.replace("\x00", " "))
+        # os dois sentidos, como a camada literal: "o poço velho" acha
+        # `perguntei o poco velho`, e "poço" acha o mesmo.
+        return bool(assunto) and (assunto in alvo_txt
+                                  or (len(alvo_txt) >= 4 and alvo_txt in assunto))
+    tem_assunto = False
+    if not alvos and not quer_tema:
+        for path in arquivos_em(mem_dir):
+            fm, _ = read_doc(path)
+            if fm.get("type") == "memory" and alcance_consulta(fm, now) and _casa_assunto(fm):
+                tem_assunto = True
+                break
+    if not alvos and not quer_tema and not tem_assunto:
+        # A LISTA DE PORTAS. Dizer só "não guardo nada" mata o turno: a Mente não tem
+        # como saber se errou o nome, se a pessoa é desconhecida, ou se não há o que
+        # lembrar. Dizendo DE QUEM ele lembra, ela reformula — e a lista é curta
+        # porque é o índice, não o acervo.
+        # ORDENADA POR QUANTO ELE LEMBRA, não por alfabeto. A primeira versão cortava
+        # em 12 nomes por ordem alfabética e escondia justamente a Sarga, de quem a
+        # `mira` tem 68 lembranças — a lista de portas mostrando as menos usadas.
+        peso = collections.Counter()
+        for path in arquivos_em(mem_dir):
+            fm, _ = read_doc(path)
+            if fm.get("type") != "memory" or not alcance_consulta(fm, now):
+                continue
+            for eid in memory_involved(fm):
+                if eid in de_quem:
+                    peso[eid] += 1
+        nomes = [de_quem[e] for e, _ in peso.most_common(12) if de_quem.get(e)]
+        if not nomes:
+            return ({"sobre": sobre,
+                     "lembra": "Você não guarda lembrança de ninguém nem de nada."}, [])
+        return ({"sobre": sobre,
+                 "lembra": ("Você não guarda nada sobre isso. Do que você tem "
+                            "lembrança: " + ", ".join(nomes) + ".")}, [])
+
     hits = []
     for path in arquivos_em(mem_dir):
         fm, body = read_doc(path)
         if fm.get("type") != "memory" or memory_kind(fm) == ROTA:
             continue
-        # spec 064 — O ALCANCE DA CONSULTA, e é a maior mudança desta feature.
-        #
-        # Era `_is_alive`: EXATAMENTE o alcance de `get_context`. "Parar para lembrar"
-        # não alcançava nada além do que já estava na cabeça — medido, 1.106 de 2.692
-        # memórias, e as outras 1.585 (59%) eram inconsultáveis. O mantenedor nomeou o
-        # buraco antes de eu medi-lo: "se eu parar pra lembrar, eu vou lembrar".
-        #
-        # Agora alcança a VENCIDA — "não está na minha cabeça" não é "não consigo
-        # puxar". A `esquecida` segue de fora: é justamente o que não se consegue mais
-        # evocar, e é o que mantém o custo da cura (spec 032) definitivo.
-        #
-        # As OUTRAS duas leituras deste arquivo (`remembered_about` na 1016,
-        # `own_memories` na 1077) continuam em `_is_alive`, e isso é desenho: elas são
-        # CONTEXTO — o que o Árbitro lê para julgar no momento do ato.
         if not alcance_consulta(fm, now):
             continue
-        sujeito = False
-        for inv in memory_involved(fm):
-            for tok in str(inv).lower().split("-"):
-                if len(tok) >= 3 and tok in low:
-                    sujeito = True
-                    break
-            if sujeito:
-                break
         tema = quer_tema and (fm.get("domain") == "crime"
                               or str(fm.get("evento") or "") in _THEME_EVENTS)
-        # PELO TEXTO também (item 52.2). Antes só `involved` (ids) e tema casavam — e
-        # aí o que a memória diz EM PALAVRAS era inconsultável. Ficou evidente com a
-        # memória de pergunta-sem-resposta: o ASSUNTO ("o deus do santuário") não é
-        # entidade, então não pode estar em `involved`; ele mora no texto. Sem isto o
-        # personagem gravava "já perguntei isso" e não conseguia achar de volta —
-        # metade do conserto do laço, e a metade que faltava.
-        #
-        # Piso de 4 letras e no mínimo DUAS palavras casando: com 3 letras, "que"/
-        # "com"/"uma" faziam qualquer pergunta casar qualquer memória, e um recall que
-        # devolve tudo é igual a um que devolve nada.
-        texto_mem = ((fm.get("summary") or "") + " " + (body or "")).lower()
-        palavras = {w for w in re.findall(r"[a-záàâãéêíóôõúç]{4,}", low)}
-        casadas = sum(1 for w in palavras if w in texto_mem)
-        pelo_texto = casadas >= 2
-        if not (sujeito or tema or pelo_texto):
+        if (not (set(memory_involved(fm)) & alvos) and not tema
+                and not _casa_assunto(fm)):
             continue
         ts_start = fm.get("timestamp_start") or now
         age = max(0.0, now - ts_start)
         hits.append({
-            "id": fm.get("id"),          # spec 064: o handler da lane precisa saber o
-                                         # que foi evocado, para renovar só isso
+            "id": fm.get("id"),
             "salience": _memory_salience(fm.get("intensity"), age),
             "recency": _recency_label(age),
             "intensity": fm.get("intensity"),
@@ -1786,15 +1896,22 @@ def _recall_com_ids(character_id: str, args: dict | None = None) -> tuple[dict, 
             "text": (fm.get("summary") or "").strip() or _short_summary(body) or body.strip(),
         })
     if not hits:
-        return ausencia, []
+        return ({"sobre": sobre,
+                 "lembra": "Você não guarda nenhuma lembrança sobre isso."}, [])
     hits.sort(key=lambda m: (
         0 if m["salience"] == "vivida" else 1,
         _INTENSITY_ORDER.get(m["intensity"], 99),
         -(m["timestamp_start"] or 0),
     ))
-    mostrados = hits[:_MEMORY_CONTEXT_CAP]
+    # O TETO DA RESPOSTA é MUITO menor que o do contexto (40). Quem pergunta quer uma
+    # resposta, não o acervo: a chamada medida devolveu quinze linhas num bloco e a
+    # Mente não fez nada com elas. Oito é o que cabe numa leitura.
+    mostrados = hits[:8]
     linhas = "\n".join(f"- ({m['recency']}) {m['text']}" for m in mostrados)
-    return ({"sobre": sobre, "lembra": "Sobre isso, você lembra:\n" + linhas},
+    quantas = len(hits)
+    cauda = (f"\n(são {quantas} ao todo; estas são as que voltam primeiro)"
+             if quantas > len(mostrados) else "")
+    return ({"sobre": sobre, "lembra": "Sobre isso, você lembra:\n" + linhas + cauda},
             [m["id"] for m in mostrados if m.get("id")])
 
 
@@ -1859,10 +1976,11 @@ registro.consult_spec(registro.ConsultSpec(
 registro.consult_spec(registro.ConsultSpec(
     name="consultar_memoria",
     description=(
-        "Consulta a SUA MEMÓRIA sobre um fato — o que você viu, viveu ou soube. "
-        "Chame quando precisar confirmar algo antes de decidir: se alguém roubou, se "
-        "houve furto num lugar, o que você sabe de uma pessoa. Passe 'sobre' com a "
-        "pergunta em prosa."
+        "Para de agir e LEMBRA — alcança o que não está na sua cabeça agora, "
+        "inclusive o antigo. Diga em 'sobre' DE QUEM ou DE QUE você quer lembrar: o "
+        "nome de uma pessoa, de um lugar ou de uma coisa. Também responde a 'houve "
+        "furto/roubo por aqui?'. Se você não tiver lembrança daquilo, ela diz de quem "
+        "você TEM — e aí você pergunta de novo, por outro nome."
     ),
     params={"sobre": {"type": "string"}},
     query=_consultar_memoria,

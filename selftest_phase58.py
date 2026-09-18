@@ -377,10 +377,23 @@ check("6b. cantar OUTRO episódio no MESMO turno PASSA",
 
 manifest = arbiter.build_tools(motor.get_context(DEDUP))
 face_sing = next((t for t in manifest if t["name"] == "sing"), None)
-check("6c. a FACE de 'sing' lista as lembranças com resumo (medido, research M1)",
-      face_sing is not None
-      and mem_dedup_a in face_sing["description"]
-      and mem_dedup_b in face_sing["description"], str(face_sing))
+# 6c. A LISTAGEM SAIU NA 073 — e este check guardava a medição que ela desfez.
+#
+# A spec 058 mediu que listar as lembranças COM RESUMO na `description` levava o
+# falso-negativo de 7/10 para 1/10. A 073 tirou a listagem para cortar token
+# (`8ae4fff`), trocando-a pela ponte "use `consultar_memoria` — ela devolve o
+# `memoria_id`". A ponte NUNCA devolveu id nenhum, e `sing`/`accuse`/`write` foram
+# chamadas ZERO vezes em duas horas de corrida: o enum diz quais lembranças existem e
+# não o que são; a consulta diz o que são e não quais são.
+#
+# Ver item 93 do backlog, com as três saídas. Enquanto ele não for decidido, o que se
+# cobra aqui é o estado REAL — a face aponta para a ponte — e, junto, que a ponte
+# EXISTE. Deixar o check antigo vermelho por meses foi o que fez ninguém reparar.
+check("6c. a face de 'sing' aponta para `consultar_memoria` (decisão da 073)",
+      face_sing is not None and "consultar_memoria" in face_sing["description"],
+      str(face_sing)[:120])
+check("6c-bis. e `consultar_memoria` existe de fato no registro de consultas",
+      "consultar_memoria" in motor.registro.consult_specs())
 check("6d. a nota/DC/proficiência NÃO aparecem na face (Princípio IX)",
       face_sing is not None
       and "letra" not in face_sing["parameters"]["properties"]

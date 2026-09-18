@@ -116,8 +116,22 @@ try:
     check("memórias ordenadas por intensidade",
           intensities == sorted(intensities, key=lambda x: order.get(x, 9)), str(intensities))
     check("giant vem antes de small", intensities and intensities[0] == "giant")
-    contents = [m["content"] for m in ctx["self"]["memories"]]
-    check("memória vencida excluída do contexto", "já passou" not in contents)
+    # A FRONTEIRA MUDOU EM 17/09 (`docs/fluxo-do-contrato.md` § "O princípio,
+    # afiado"): a VENCIDA desce, marcada, porque é dele e parar para lembrar é
+    # possível. Quem decide que ela não está na cabeça dele agora é o conector.
+    #
+    # E `content` saiu do contrato: o alcance carrega `summary`, não o corpo inteiro
+    # — era ele que fazia o conjunto pesar. Ler `m["content"]` aqui estourava com
+    # `KeyError`, e o meu `grep -c FALHA` lia o estouro como ZERO falhas. É o defeito
+    # que fez nascer o `testar.py`.
+    textos = [m.get("summary") or "" for m in ctx["self"]["memories"]]
+    vencidas = [m for m in ctx["self"]["memories"] if m.get("estado") == "vencida"]
+    check("memória vencida DESCE ao alcance, marcada como vencida",
+          any("já passou" in (m.get("summary") or "") for m in vencidas),
+          str([m.get("summary") for m in vencidas])[:90])
+    check("e a viva continua descendo como viva",
+          all(m.get("estado") == "viva"
+              for m in ctx["self"]["memories"] if "já passou" not in (m.get("summary") or "")))
 
     # --- saliência: recente e/ou forte = vívida; antiga = latente ---------- #
     salient_now = int(time.time())
@@ -130,11 +144,23 @@ try:
                  "timestamp_end": salient_now + 10 ** 9, "intensity": "giant", "state": "active"}
     motor.write_doc(elga_folder / "memories" / "mem-antiga.md", fm_antiga, "luto de anos atrás")
 
-    # o CONTEXTO passa por evocação (spec 013): latente que a cena não evoca não
-    # desce. A saliência em si se lê da pasta, sem o filtro.
-    ctx_ids = {m["id"] for m in motor.get_context("elga-taverneira")["self"]["memories"]}
-    check("evocação: vívida desce sempre", "mem-recente" in ctx_ids)
-    check("evocação: latente que ninguém evoca NÃO desce", "mem-antiga" not in ctx_ids)
+    # A EVOCAÇÃO MUDOU DE LADO (17/09). Ela continua sendo a regra da spec 013 — o
+    # vívido volta sozinho, o antigo só se o contexto o chamar —, mas roda no CONECTOR,
+    # que é onde a decisão de "o que está gritando na cabeça dele agora" pertence. O
+    # contexto entrega o ALCANCE: as duas descem, e é lá que a latente é cortada
+    # (`mente.js::_limparMemorias`, testado em `test/mente.test.js`).
+    #
+    # O que se cobra AQUI é a metade do servidor: entregar as duas, com os INSUMOS da
+    # regra (`salience`), que continuam sendo fato do mundo — derivados do relógio e da
+    # intensidade.
+    ctx_mem = motor.get_context("elga-taverneira")["self"]["memories"]
+    ctx_ids = {m["id"] for m in ctx_mem}
+    check("o alcance entrega a vívida", "mem-recente" in ctx_ids)
+    check("e entrega também a latente — quem a corta é o conector",
+          "mem-antiga" in ctx_ids)
+    check("com o insumo da evocação junto: `salience` é fato do mundo",
+          all(m.get("salience") in ("vivida", "latente") for m in ctx_mem),
+          str([m.get("salience") for m in ctx_mem][:4]))
 
     by_id = {m["id"]: m for m in motor.get_active_memories(elga_folder)}
     check("saliência: memória recente é vívida", by_id["mem-recente"]["salience"] == "vivida")

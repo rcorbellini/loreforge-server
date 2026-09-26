@@ -13,6 +13,7 @@ Roda sobre uma CÓPIA temporária do mundo. Uso:  python3 server/selftest_phase3
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -172,6 +173,34 @@ try:
     check("arquivo da memória vencida ainda existe", vfile.exists())
     fm_v, _ = motor.read_doc(vfile)
     check("memória vencida foi marcada 'expired'", fm_v.get("state") == "expired")
+
+    # --- o QUE a lembrança é, e de QUEM ele ouviu (harness por objetivos · B7) --- #
+    # Sem `event`, o conector não separa "aprendi algo" de "lembro do que fiz": toda
+    # ação aceita grava uma memória do próprio ato. O teste é de LIGAÇÃO: o valor
+    # atravessa o `get_context` E o fio JSON do `/api/context`, e fica AUSENTE (não
+    # `None`) quando não se aplica — a invariante 2 do contrato.
+    t0 = int(time.time())
+    motor.write_doc(elga_folder / "memories" / "mem-ouvida.md",
+                    {"type": "memory", "id": "mem-ouvida", "timestamp_start": t0,
+                     "timestamp_end": t0 + 10 ** 9, "intensity": "small", "state": "active",
+                     "evento": "hearsay_reconto", "ouvido_de": "bram-pescador"},
+                    "Bram me contou do barco.")
+    motor.write_doc(elga_folder / "memories" / "mem-feita.md",
+                    {"type": "memory", "id": "mem-feita", "timestamp_start": t0,
+                     "timestamp_end": t0 + 10 ** 9, "intensity": "small", "state": "active",
+                     "evento": "eat"},
+                    "Comi o pão.")
+    fio = json.loads(json.dumps(motor.get_context("elga-taverneira")))
+    mems = {m["id"]: m for m in fio["self"]["memories"]}
+    check("memória OUVIDA desce com `event` e `heard_from`",
+          mems.get("mem-ouvida", {}).get("event") == "hearsay_reconto"
+          and mems.get("mem-ouvida", {}).get("heard_from") == "bram-pescador",
+          str(mems.get("mem-ouvida"))[:120])
+    check("memória do PRÓPRIO ato desce com `event` e SEM `heard_from`",
+          mems.get("mem-feita", {}).get("event") == "eat" and "heard_from" not in mems.get("mem-feita", {}),
+          str(mems.get("mem-feita"))[:120])
+    check("memória sem `evento` no disco não ganha `event: None`",
+          all("event" not in m for m in fio["self"]["memories"] if m["id"] == "mem-antiga"))
 
 finally:
     shutil.rmtree(_tmp, ignore_errors=True)

@@ -2499,6 +2499,16 @@ def memorias_ao_alcance(entity_folder: Path) -> list[dict]:
             # assim que nasce uma segunda fonte de verdade sobre o mesmo fato.
             "recency": _recency_label(age),
             "salience": _memory_salience(intensity, age),
+            # O QUE A LEMBRANÇA É, e DE QUEM ELE OUVIU (2026-09-26, harness por
+            # objetivos · B7). Toda ação aceita grava uma memória do próprio ato
+            # (`eat`, `transfer`, `unanswered`…), e sem o `event` o conector não
+            # separa "aprendi algo" de "lembro do que fiz": o progresso do harness
+            # contava três "não sei" como saber novo. São FATO e são DELE — ele sabe
+            # que ouviu do Obadiah; o corpo da memória já diz isso. O que continua
+            # segredo é a proveniência ao REPASSAR a outro (`ask_about` a sanitiza).
+            # Opcionais: ausentes quando não se aplicam (contrato, invariante 2).
+            **({"event": fm["evento"]} if fm.get("evento") else {}),
+            **({"heard_from": fm["ouvido_de"]} if fm.get("ouvido_de") else {}),
         })
     out.sort(key=lambda m: (
         0 if m.get("salience") == "vivida" else 1,

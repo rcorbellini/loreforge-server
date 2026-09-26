@@ -347,8 +347,19 @@ check("US5: a peça acumula a passagem de CADA ferreiro que trabalhou nela",
       len(mems_peca) >= 3, f"{len(mems_peca)} memórias")
 ctx_cena = motor.get_context(CAT)
 _texto_cena = str(ctx_cena)
-check("FR-037: a procedência NÃO aparece no contexto de cena de quem está ali",
-      "forge_session" not in _texto_cena and "forge_start" not in _texto_cena)
+# A INTENÇÃO, não o texto (2026-09-26). Esta checagem era `"forge_session" not in
+# str(contexto)` — uma aproximação que valia enquanto o `get_context` não expunha o
+# `event` das memórias. Agora o contexto do PRÓPRIO ferreiro traz a lembrança do ato
+# dele de forjar (`event: forge_session`), e isso não é procedência: é a memória dele,
+# na pasta dele. O que a FR-037 protege é o registro que a PEÇA guarda — e é isso que se
+# cobra aqui, pelo id e pelo texto de cada memória da peça.
+_ids_peca = {motor.read_doc(m)[0].get("id") for m in mems_peca} if mems_peca and hasattr(mems_peca[0], "read_text") \
+    else {(m.get("id") if isinstance(m, dict) else None) for m in mems_peca}
+_ids_peca.discard(None)
+_ctx_ids = {m.get("id") for m in ctx_cena["self"].get("memories") or []}
+check("FR-037: a procedência (as memórias da PEÇA) NÃO aparece no contexto de cena de quem está ali",
+      bool(_ids_peca) and not (_ids_peca & _ctx_ids) and not any(i in _texto_cena for i in _ids_peca),
+      f"ids da peça {sorted(_ids_peca)[:3]} · no contexto {sorted(_ids_peca & _ctx_ids)}")
 
 # --------------------------------------------------------------------------- #
 # US6 — `cook` migrado, e o retrofit de `fate_twists`

@@ -435,7 +435,7 @@ def _validate_intention(fm: dict) -> list[str]:
     memoria_id = fm.get("memoria_id")
     if memoria_id is not None and not isinstance(memoria_id, str):
         errors.append("intention: 'memoria_id' deve ser o id de uma memória.")
-    # spec 073: o CRITÉRIO DE FIM e o RELÓGIO DA ESTAGNAÇÃO.
+    # spec 073: o CRITÉRIO DE FIM (o relógio da estagnação saiu na spec 075).
     #
     # Os dois sao campo, e nao prosa, pelo teste do Princípio XI: `pronto_quando`
     # porque o MUNDO tem de conferi-lo (prosa nao se confere — foi o defeito de
@@ -452,10 +452,9 @@ def _validate_intention(fm: dict) -> list[str]:
                 f"intention: 'pronto_quando' inválido: '{pq}' "
                 f"(permitidos: {', '.join(sorted(_CRITERIO_POR_CAMPO))})."
             )
-    for campo in ("parada_desde", "passos_cumpridos"):
-        val = fm.get(campo)
-        if val is not None and (isinstance(val, bool) or not isinstance(val, int)):
-            errors.append(f"intention: '{campo}' deve ser inteiro.")
+    # `parada_desde` e `passos_cumpridos` são LEGADO desde a spec 075: o relógio de
+    # estagnação e a contagem de passos passaram ao harness do conector (opção 2). As
+    # intenções antigas que os têm continuam válidas — o campo é ignorado, não rejeitado.
     return errors
 
 

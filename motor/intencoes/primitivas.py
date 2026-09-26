@@ -142,36 +142,6 @@ def criterio_cumprido(needs: dict | None, pronto_quando: str | None,
     return not any(a in rotulo for a in _AINDA_APERTA)
 
 
-# As faixas do rótulo de parada. Nascem AQUI e configuráveis de propósito: a §8 mediu
-# 4/8 de abandono aos 24 voltas e 8/8 aos 60 — o corte é calibragem, não constante de
-# papel, e o número certo sai de medição em jogo.
-_PARADA_ALGUMAS = 8
-_PARADA_MUITAS = 24
-
-
-def rotulo_de_parada(parada_desde: int | None, agora: int | None = None) -> str | None:
-    """Há quanto tempo o compromisso não anda — em RÓTULO, nunca em número.
-
-    Princípio V: o contador é medida interna. O que desce à Mente é a leitura dele, no
-    molde de `needs`, que já entrega "faminto" e nunca `hunger: 8`.
-
-    Devolve `None` quando acabou de andar — e quem monta o contrato OMITE a chave em
-    vez de mandar `null` (spec 067: campo ausente, nunca nulo).
-
-    MEDIDO (§8): sem esta informação o abandono é 0/32 — o personagem nunca larga
-    nada. Com ela, 8/8 no extremo e 0/8 no controle (a intenção velha que AVANÇOU).
-    O relógio conta ESTAGNAÇÃO, não idade: um ofício não morre por ser antigo.
-    """
-    if not parada_desde:
-        return None
-    voltas = int(((agora or int(time.time())) - int(parada_desde)) / 60)
-    if voltas >= _PARADA_MUITAS:
-        return "há muitas voltas sem andar, e não rendeu nada"
-    if voltas >= _PARADA_ALGUMAS:
-        return "há algumas voltas sem andar"
-    return None
-
-
 def create_intention(folder: Path, content: str, status: str = "ativa",
                      memoria_id: str | None = None,
                      pronto_quando: str | None = None,
@@ -198,10 +168,6 @@ def create_intention(folder: Path, content: str, status: str = "ativa",
         # próxima leitura a perguntar "alvo de quê?" numa intenção de fome.
         if pronto_quando_alvo:
             fm["pronto_quando_alvo"] = pronto_quando_alvo
-        # O RELÓGIO NASCE PARADO (spec 073, FR-012). Ele conta ESTAGNAÇÃO, e um
-        # compromisso recém-firmado ainda não andou — então o contador começa
-        # agora e só zera quando um passo for riscado.
-        fm["parada_desde"] = now
     write_doc(folder / "intentions" / f"{iid}.md", fm, content)
     return iid
 
@@ -344,70 +310,6 @@ def travas_do_nascimento(content: str, pronto_quando: str | None,
     return None
 
 
-def riscar_passo(folder: Path, intention_id: str) -> bool:
-    """Um passo do plano foi cumprido: conta +1 e ZERA o relógio (FR-011, FR-012).
-
-    QUEM CHAMA ISTO É O MUNDO, depois de o Motor ACEITAR o ato — nunca a Mente
-    declarando ter cumprido. Declarar seria pontuar o próprio desfecho (Princípio IX),
-    o mesmo motivo que aposenta o `give.intention_id`.
-
-    O zerar é o coração do mecanismo: o relógio só corre na estagnação, então cada
-    passo dado devolve o compromisso à vida. É o que faz um ofício — uma intenção que
-    dura — não morrer por ser antigo.
-    """
-    path = folder / "intentions" / f"{intention_id}.md"
-    if not path.exists():
-        return False
-    fm, body = read_doc(path)
-    if fm.get("status") != "ativa":
-        return False
-    now = int(time.time())
-    fm["passos_cumpridos"] = int(fm.get("passos_cumpridos") or 0) + 1
-    fm["parada_desde"] = now          # o REFRESH
-    fm["updated_ts"] = now
-    write_doc(path, fm, body)
-    return True
-
-
-# === O CASAMENTO DO PASSO (spec 073, FR-011/FR-012) ========================== #
-#
-# QUEM RISCA O PASSO É O MUNDO — depois de o Motor ACEITAR o ato. A Mente nunca
-# declara ter cumprido: declarar é pontuar o próprio desfecho (Princípio IX), o
-# mesmo motivo que aposenta o `give.intention_id`.
-#
-# ONDE ISTO MORA, e por que NÃO no conector (desvio consciente do FR-011, que
-# dizia `laco.js::_porPropostas`): a ÚNICA porta de escrita do conector é
-# `chamarCapacidade`, e toda capacidade aparece em `tools/list`. Uma capacidade
-# "risque o passo" seria, literalmente, a Mente declarando ter cumprido — o
-# buraco que o próprio FR-011 existe para fechar. Aqui, no instante em que o ato
-# é aceito, não há superfície nova e não há como a Mente chamar.
-#
-# O CASAMENTO É POR ALVO RESOLVIDO, e começa RÍGIDO por decisão.
-#
-# O passo é PROSA escrita pelo modelo ("ir ao Cais Velho"); o ato aceito carrega
-# IDS resolvidos (`cais-velho`). Os ids deste mundo são o nome slugificado, então
-# o casamento é mecânico: todo pedaço do id de >=3 letras tem de aparecer no
-# texto do passo. Exigir TODOS é o que separa `cais-velho` de "pegar o pão na
-# padaria" — e o verbo sozinho seria frouxo demais (qualquer `travel_to`
-# riscaria "ir ao Cais Velho", que é o aviso escrito na própria spec).
-#
-# O preço de ser rígido é o falso NEGATIVO: "ir até o cais" não risca. Isso é
-# deliberado — um passo não riscado só adia o relógio de estagnação, enquanto um
-# passo riscado à toa mantém viva para sempre uma intenção que não anda, que é
-# exatamente a doença que a 073 veio curar. Afrouxar só com medição que mostre
-# trava (`medicoes.md` §13).
-# Um id deste mundo é o nome slugificado: `cais-velho`, `pao-de-centeio`, `fulano`.
-# Uma só palavra TAMBÉM é id (nem todo nome é composto), então o hífen não pode ser
-# exigido — o que separa id de prosa é não ter espaço e ter corpo (>=4 letras).
-_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-
-# Os campos que carregam PROSA, nunca referência. `reason` e `narrative_hint` são
-# frase de mundo; e o `value` de `status.action`/`status.mood` é a ação escrita —
-# "espera", "cansado" — que casaria com um passo por coincidência de vocabulário.
-_CAMPOS_DE_PROSA = ("reason", "prosa", "narrative_hint", "summary", "texto")
-_PATHS_DE_PROSA = ("action", "mood", "summary")
-
-
 def _dobrar(texto: str) -> str:
     """minúsculas, sem acento, só letras e dígitos separados por espaço."""
     plano = unicodedata.normalize("NFKD", texto or "")
@@ -428,32 +330,6 @@ def passos_do_plano(body: str) -> list[str]:
         if limpa.startswith(("- ", "* ")):
             passos.append(limpa[2:].strip())
     return passos
-
-
-def _referencias(aplicadas: list, ator_id: str) -> list[str]:
-    """Os ids resolvidos que aparecem nas ops aceitas, menos o do próprio ator.
-
-    O ator sai porque ele está em TODA op (é o alvo de `status.*`), e um passo que
-    cite o próprio nome casaria com qualquer coisa que ele fizesse. O que fica é o
-    que o ato TOCOU: o destino da viagem, o item movido, a pessoa abordada.
-    """
-    vistos, out = set(), []
-    for op in aplicadas or []:
-        if not isinstance(op, dict):
-            continue
-        path = op.get("path")
-        prosa_no_value = isinstance(path, str) \
-            and path.rsplit(".", 1)[-1] in _PATHS_DE_PROSA
-        for campo, valor in op.items():
-            if campo in _CAMPOS_DE_PROSA or (campo == "value" and prosa_no_value):
-                continue
-            if not isinstance(valor, str) or valor == ator_id:
-                continue
-            if valor in vistos or len(valor) < 4 or not _SLUG.match(valor):
-                continue
-            vistos.add(valor)
-            out.append(valor)
-    return out
 
 
 # === O PASSO SEM VERBO (spec 073, FR-007) ==================================== #
@@ -499,66 +375,10 @@ def passos_sem_verbo(content: str, verbos) -> list[str]:
     return ruins
 
 
-def casar_e_riscar(folder: Path, aplicadas: list, ator_id: str) -> dict | None:
-    """O ato aceito cumpriu o primeiro passo pendente? Se sim, risca (FR-011).
-
-    RISCA NO MÁXIMO UM por chamada, mesmo que várias ops casem: o plano avança um
-    passo por vez, e é o que a medição do prompt de executar assume (§6). Devolve
-    `{id, passo}` do que foi riscado, ou `None`.
-
-    Nunca derruba o turno — vale a mesma regra de `fechar_por_criterio`: um passo
-    não riscado é bem menos grave que um turno perdido.
-    """
-    dir_ = folder / "intentions"
-    if not dir_.exists():
-        return None
-    refs = _referencias(aplicadas, ator_id)
-    if not refs:
-        return None
-    for path in arquivos_em(dir_):
-        fm, body = read_doc(path)
-        if fm.get("status") != "ativa":
-            continue
-        passos = passos_do_plano(body)
-        feitos = int(fm.get("passos_cumpridos") or 0)
-        if feitos >= len(passos):
-            continue                       # sem plano, ou plano todo riscado
-        alvo = _dobrar(passos[feitos])
-        for ref in refs:
-            pedacos = [p for p in ref.split("-") if len(p) >= 3]
-            if not pedacos:
-                continue
-            if all(f" {p} " in alvo for p in pedacos):
-                if riscar_passo(folder, fm.get("id")):
-                    return {"id": fm.get("id"), "passo": passos[feitos]}
-    return None
-
-
-def fechar_por_criterio(folder: Path, needs: dict | None,
-                        carregados: list | None = None) -> list[dict]:
-    """Fecha toda intenção ativa cujo `pronto_quando` virou verdade (FR-013).
-
-    Quem fecha é o MUNDO, conferindo o critério — nunca a Mente declarando-se
-    satisfeita. Devolve o que foi fechado, para a narração RELATAR: fechamento
-    silencioso é incompleto (Princípio X, obrigação 2).
-    """
-    dir_ = folder / "intentions"
-    if not dir_.exists():
-        return []
-    fechadas = []
-    for path in arquivos_em(dir_):
-        fm, body = read_doc(path)
-        if fm.get("status") != "ativa" or not fm.get("pronto_quando"):
-            continue
-        if not criterio_cumprido(needs, fm.get("pronto_quando"),
-                                 fm.get("pronto_quando_alvo"), carregados):
-            continue
-        fm["status"] = "concluida"
-        fm["updated_ts"] = int(time.time())
-        write_doc(path, fm, body)
-        fechadas.append({"id": fm.get("id"), "content": body.strip(),
-                         "pronto_quando": fm.get("pronto_quando")})
-    return fechadas
+# O CASAMENTO DO PASSO (`casar_e_riscar`, `riscar_passo`) e o FECHAMENTO POR CRITÉRIO
+# (`fechar_por_criterio`) SAÍRAM DAQUI na spec 075 (opção 2: o world guarda, o harness
+# decide). Quem confere se um passo andou e se o desejo se cumpriu é o harness do
+# conector (C8/C8D), lendo o contexto por regra; o Motor só grava a intenção.
 
 
 def abandonar(folder: Path, intention_id: str, personagem: str) -> dict | None:
@@ -618,17 +438,10 @@ def get_active_intentions(folder: Path) -> list[dict]:
         # executar lê para separar o feito do faltante.
         if fm.get("pronto_quando"):
             entrada["pronto_quando"] = fm["pronto_quando"]
-            entrada["passos_cumpridos"] = int(fm.get("passos_cumpridos") or 0)
             # o ALVO da posse desce junto: sem ele o compromisso chega à Mente como
             # "ter algo", e ela não sabe o que estava perseguindo.
             if fm.get("pronto_quando_alvo"):
                 entrada["pronto_quando_alvo"] = fm["pronto_quando_alvo"]
-        # E A PARADA DESCE EM RÓTULO, NUNCA EM NÚMERO (Princípio V). Chave AUSENTE
-        # quando acabou de andar — nunca `null` (spec 067, o contrato é completo por
-        # decisão e quem filtra é o conector).
-        parada = rotulo_de_parada(fm.get("parada_desde"))
-        if parada:
-            entrada["parada"] = parada
         out.append(entrada)
     if len(out) > _INTENTION_CONTEXT_CAP:
         out = out[-_INTENTION_CONTEXT_CAP:]  # as mais RECENTES ficam

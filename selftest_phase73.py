@@ -72,72 +72,36 @@ ok(P.criterio_cumprido(None, "hunger") is False,
 
 
 # --------------------------------------------------------------------------- #
-# T011 — `parada_desde` zera ao riscar, e SÓ nisso
+# T011/T013 (spec 075) — o relógio e a contagem SAÍRAM do mundo (opção 2)
 # --------------------------------------------------------------------------- #
+#
+# O mundo GUARDA a intenção; quem decide se ela anda, trava ou acaba é o harness do
+# conector (C8/C8D). Então o mundo não grava mais `parada_desde` nem conta passos, e o
+# contexto não desce `parada` nem `passos_cumpridos`. O teste é de LIGAÇÃO: a forma
+# atravessa o `get_active_intentions` e a ida e volta pelo JSON do `/api/context`.
 
-print("\n--- o relógio da estagnação (FR-012) ---")
+print("\n--- o relógio saiu do mundo (spec 075) ---")
 
 iid = P.create_intention(PASTA, "Matar minha fome.\n- take Maçã\n- eat Maçã",
                          pronto_quando="hunger")
-fm, _ = motor.read_doc(PASTA / "intentions" / f"{iid}.md")
-ok(fm.get("pronto_quando") == "hunger", "a intenção nasce com o critério gravado")
-ok(isinstance(fm.get("parada_desde"), int),
-   "o relógio NASCE PARADO — um compromisso recém-firmado ainda não andou")
-
-nascimento = fm["parada_desde"]
-time.sleep(1.1)
-ok(P.riscar_passo(PASTA, iid) is True, "riscar um passo funciona")
-fm, _ = motor.read_doc(PASTA / "intentions" / f"{iid}.md")
-ok(fm.get("passos_cumpridos") == 1, "o passo riscado conta +1")
-ok(fm["parada_desde"] > nascimento,
-   "riscar ZERA o relógio — é o refresh, e é o coração do mecanismo")
-
-depois = fm["parada_desde"]
-time.sleep(1.1)
-fm2, _ = motor.read_doc(PASTA / "intentions" / f"{iid}.md")
-ok(fm2["parada_desde"] == depois,
-   "o mero PASSAR DO TEMPO não zera — o relógio conta estagnação, não idade")
-
-ok(P.rotulo_de_parada(int(time.time())) is None,
-   "acabou de andar: rótulo AUSENTE, nunca 'agora mesmo'")
-agora = int(time.time())
-ok(P.rotulo_de_parada(agora - 30 * 60, agora) is not None,
-   "parada há muito: o rótulo aparece")
-ok("voltas" in (P.rotulo_de_parada(agora - 30 * 60, agora) or ""),
-   "o rótulo fala em VOLTAS, a unidade do jogo")
-
-
-# --------------------------------------------------------------------------- #
-# T013 — NENHUM número de `parada_desde` desce ao client (Princípio V)
-# --------------------------------------------------------------------------- #
-
-print("\n--- o segredo do relógio (Princípio V) ---")
-
-# força a intenção a estar parada há muito, para o rótulo aparecer
 fm, body = motor.read_doc(PASTA / "intentions" / f"{iid}.md")
-fm["parada_desde"] = int(time.time()) - 40 * 60
-motor.write_doc(PASTA / "intentions" / f"{iid}.md", fm, body)
-
-expostas = P.get_active_intentions(PASTA)
+ok(fm.get("pronto_quando") == "hunger", "a intenção nasce com o critério gravado")
+ok("parada_desde" not in fm,
+   "o relógio da estagnação NÃO nasce mais no mundo — é do harness")
+expostas = json.loads(json.dumps(P.get_active_intentions(PASTA)))
 ok(len(expostas) == 1, "a intenção ativa desce ao contexto")
 entrada = expostas[0]
-ok("parada" in entrada, "o RÓTULO de parada desce")
-ok("parada_desde" not in entrada,
-   "o NÚMERO não desce — Princípio V, e é o vazamento que nenhum outro teste pegaria")
-ok(isinstance(entrada.get("parada"), str), "a parada é texto, não número")
-bruto = json.dumps(entrada, ensure_ascii=False)
-ok(str(fm["parada_desde"]) not in bruto,
-   "o timestamp cru não aparece em lugar nenhum do que desce")
-ok(entrada.get("passos_cumpridos") == 1,
-   "a CONTAGEM de passos desce — é o que o prompt de executar lê")
+ok("parada" not in entrada and "passos_cumpridos" not in entrada,
+   "nem `parada` nem `passos_cumpridos` descem — a contagem é do caderno do conector")
 ok(entrada.get("pronto_quando") == "hunger",
-   "o critério desce (é vocabulário fechado, não id de cena)")
-
-# e a chave some quando acabou de andar (spec 067: ausente, nunca `null`)
-P.riscar_passo(PASTA, iid)
-ok("parada" not in P.get_active_intentions(PASTA)[0],
-   "acabou de andar: a chave é AUSENTE, nunca `null` (spec 067)")
-
+   "o critério desce (o harness o lê como fim já declarado)")
+# o LEGADO: uma intenção de antes, com os campos gravados, continua válida e muda
+fm["parada_desde"] = int(time.time()) - 40 * 60
+fm["passos_cumpridos"] = 2
+motor.write_doc(PASTA / "intentions" / f"{iid}.md", fm, body)
+legado = P.get_active_intentions(PASTA)[0]
+ok("parada" not in legado and "passos_cumpridos" not in legado,
+   "a intenção ANTIGA continua válida, e os campos legados não descem")
 
 # --------------------------------------------------------------------------- #
 # T009 — as travas do nascimento (FR-003)
@@ -183,49 +147,6 @@ for regra in ("intencao_vazia", "intencao_meta", "intencao_sem_criterio",
        f"`{regra}` tem frase in-world — recusa nunca é silenciosa (Princípio X)")
     ok("não pode" not in frase,
        f"`{regra}` não soa como proibição de sistema — 'não pode' convida a insistir")
-
-
-# --------------------------------------------------------------------------- #
-# T010b — `fechar_por_criterio` fecha, e só o que devia
-# --------------------------------------------------------------------------- #
-
-print("\n--- o fechamento pelo mundo (FR-013) ---")
-
-outra = P.create_intention(PASTA, "Aprender a forjar.", pronto_quando="thirst")
-fechadas = P.fechar_por_criterio(PASTA, {"hunger": "faminto", "thirst": "sedento"})
-ok(fechadas == [], "com fome e sede, nada fecha")
-
-fechadas = P.fechar_por_criterio(PASTA, {"hunger": "sem fome", "thirst": "sedento"})
-ok(len(fechadas) == 1, "a fome passou: UMA intenção fecha")
-ok(fechadas[0]["id"] == iid, "fecha a CERTA — a de fome, não a de sede")
-fm, _ = motor.read_doc(PASTA / "intentions" / f"{iid}.md")
-ok(fm["status"] == "concluida", "o status vai para `concluida` no disco")
-ok(fechadas[0].get("content"),
-   "o que fechou volta COM o texto — a narração precisa dele para RELATAR "
-   "(Princípio X, obrigação 2: fechamento silencioso é incompleto)")
-
-restantes = P.get_active_intentions(PASTA)
-ok(len(restantes) == 1 and restantes[0]["id"] == outra,
-   "a concluída sai do contexto; a de sede continua")
-
-# uma intenção SEM critério nunca é fechada por este caminho
-velha = P.create_intention(PASTA, "Um compromisso do mundo antigo, sem critério.")
-fechadas = P.fechar_por_criterio(PASTA, {"hunger": "sem fome"})
-ok(all(f["id"] != velha for f in fechadas),
-   "intenção sem `pronto_quando` NUNCA fecha sozinha — compatibilidade com o que "
-   "já está gravado no mundo")
-
-
-# --------------------------------------------------------------------------- #
-# riscar respeita o estado
-# --------------------------------------------------------------------------- #
-
-print("\n--- riscar é do mundo, e respeita o estado ---")
-
-ok(P.riscar_passo(PASTA, iid) is False,
-   "não se risca passo de intenção já concluída")
-ok(P.riscar_passo(PASTA, "int-que-nao-existe") is False,
-   "não se risca passo de intenção inexistente")
 
 
 # --------------------------------------------------------------------------- #
@@ -288,73 +209,14 @@ ok(not any(ch.isdigit() for ch in bruto),
 
 
 # --------------------------------------------------------------------------- #
-# T027 — o CASAMENTO do passo: quem risca é o mundo, e risca rígido
-# --------------------------------------------------------------------------- #
-
-print("\n--- o casamento do passo (FR-011) ---")
-
-ok(P.passos_do_plano("Matar minha fome.\n- ir ao Cais Velho\n- comer") ==
-   ["ir ao Cais Velho", "comer"],
-   "o plano sai do corpo: a 1a linha e o COMPROMISSO, as de traco sao os PASSOS")
-ok(P.passos_do_plano("So o compromisso, sem plano.") == [],
-   "intencao sem plano nao tem passo nenhum")
-
-cid = P.create_intention(
-    PASTA, "Matar minha fome.\n- ir ao Cais Velho\n- comer o pao de centeio",
-    pronto_quando="hunger")
-
-# o ato ACEITO que casa: a viagem resolveu para `cais-velho`, e o passo pendente
-# cita as duas metades do id.
-r = P.casar_e_riscar(PASTA, [{"target": 'fulano', "path": "status.location",
-                              "value": "cais-velho"}], 'fulano')
-ok(r is not None and r["passo"] == "ir ao Cais Velho",
-   "viajar para `cais-velho` risca 'ir ao Cais Velho'")
-fm, _ = motor.read_doc(PASTA / "intentions" / f"{cid}.md")
-ok(fm.get("passos_cumpridos") == 1, "o casamento conta +1 no plano")
-
-# RIGIDEZ: meia referencia NAO risca. E o falso negativo aceito de proposito —
-# um passo riscado a toa mantem viva para sempre a intencao que nao anda.
-ok(P.casar_e_riscar(PASTA, [{"value": "forno-velho"}], 'fulano') is None,
-   "`forno-velho` NAO risca 'comer o pao de centeio' — falta o alvo inteiro")
-ok(P.casar_e_riscar(PASTA, [{"value": "pao-de-centeio-mofado"}], 'fulano') is None,
-   "id com pedaco que o passo nao cita ('mofado') NAO risca")
-ok(P.casar_e_riscar(PASTA, [{"value": "pao-de-centeio"}], 'fulano') is not None,
-   "o id inteiro citado no passo RISCA — o rigor nao e cegueira")
-
-# o ATOR nunca e alvo de casamento: ele esta em toda op.
-P.create_intention(PASTA, "Nada.\n- falar com " + 'fulano', pronto_quando="hunger")
-ok(P.casar_e_riscar(PASTA, [{"target": 'fulano', "path": "status.action",
-                             "value": "reagiu a situacao"}], 'fulano') is None,
-   "o id do PROPRIO ator nunca risca — ele e alvo de toda op")
-
-# A PROSA NUNCA E REFERENCIA. O `value` de `status.action` e a acao escrita, e o
-# `reason` e frase de mundo — casar por eles seria riscar por coincidencia de
-# vocabulario, que e o falso positivo mais barato de cometer.
-P.create_intention(PASTA, "Nada.\n- comer o pao", pronto_quando="hunger")
-ok(P.casar_e_riscar(PASTA, [{"target": "outro", "path": "status.action",
-                             "value": "comer"}], 'fulano') is None,
-   "o `value` de `status.action` e PROSA, nunca referencia")
-ok(P.casar_e_riscar(PASTA, [{"target": "outro", "reason": "comer"}],
-                    'fulano') is None,
-   "`reason` e frase de mundo, nunca referencia")
-
-# o plano todo riscado para de consumir atos
-fm, _ = motor.read_doc(PASTA / "intentions" / f"{cid}.md")
-ok(fm.get("passos_cumpridos") == 2, "os dois passos do plano estao riscados")
-ok(P.casar_e_riscar(PASTA, [{"value": "cais-velho"}], 'fulano') is None,
-   "plano esgotado nao risca mais — nao ha passo pendente")
-
-
-# --------------------------------------------------------------------------- #
-# T027 (fio inteiro) — o risca acontece DE VERDADE no caminho do turno
+# spec 075 (fio inteiro) — o turno do Motor NÃO risca nem fecha mais
 # --------------------------------------------------------------------------- #
 #
-# O teste acima prova a PRIMITIVA. Este prova a LIGAÇÃO, que é onde o defeito
-# caro mora: uma primitiva certa que ninguém chama é exatamente o registro
-# paralelo que morre com a suíte verde. Por isso ele entra por `apply_resolution`
-# — a mesma porta do jogo — e não pela função direto.
+# Opção 2: quem decide sobre a intenção é o harness do conector. A LIGAÇÃO que se
+# prova aqui é a da REMOÇÃO: pela mesma porta do jogo (`apply_resolution`), um ato que
+# antes riscaria o passo e fecharia o compromisso de fome agora não toca a intenção.
 
-print("\n--- o fio inteiro: apply_resolution risca (FR-011) ---")
+print("\n--- o fio inteiro: o Motor não decide sobre a intenção (spec 075) ---")
 
 motor.write_doc(RAIZ / "lugar" / "location.md",
                 {"type": "location", "id": "lugar", "name": "Lugar",
@@ -386,10 +248,10 @@ out = motor.apply_resolution(
     "beltrano", {"mutations": [{"target": "fulano", "path": "status.mood",
                                 "value": "surpreso"}]})
 fm, _ = motor.read_doc(VIZINHO / "intentions" / f"{fio}.md")
-ok(fm.get("passos_cumpridos") == 1,
-   "o turno inteiro risca: `apply_resolution` chama o casamento, nao so o teste")
-ok(isinstance(out.get("passo_riscado"), dict),
-   "o que foi riscado volta no outcome — o mundo relata o que fez")
+ok("passos_cumpridos" not in fm, "o turno NÃO risca passo — isso é do C8 do harness")
+ok(fm.get("status") == "ativa", "o turno NÃO fecha o compromisso — isso é do C8D do harness")
+ok("passo_riscado" not in out and "intencoes_fechadas" not in out,
+   "o outcome não fala mais de riscar nem de fechar")
 
 
 # --------------------------------------------------------------------------- #
@@ -893,14 +755,12 @@ ok("pronto_quando_alvo" not in fm2,
 
 # O FIO INTEIRO: o compromisso de posse fecha quando a coisa chega — inclusive por
 # um caminho que ninguem planejou.
-ok(P.fechar_por_criterio(VIZINHO, {"hunger": "faminto"}, []) == [],
-   "de maos vazias, o compromisso de posse NAO fecha")
-fechadas = P.fechar_por_criterio(VIZINHO, {"hunger": "faminto"},
-                                 ["Remedio de Raiz Torta"])
-ok([f for f in fechadas if f["id"] == pid],
-   "com a coisa em maos, FECHA — e fecha por leitura de campo, como as outras")
-fm3, _ = motor.read_doc(VIZINHO / "intentions" / f"{pid}.md")
-ok(fm3.get("status") == "concluida", "e o arquivo registra `concluida`")
+# (spec 075: quem FECHA é o harness do conector; aqui fica a regra que ele espelha e
+# que a guarda de nascimento da `set_intention` ainda usa)
+ok(P.criterio_cumprido(None, "posse", "remedio de raiz torta", []) is False,
+   "de maos vazias, o criterio de posse NAO esta cumprido")
+ok(P.criterio_cumprido(None, "posse", "remedio de raiz torta", ["Remedio de Raiz Torta"]) is True,
+   "com a coisa em maos, o criterio de posse ESTA cumprido")
 
 # E A GUARDA DO JA-CUMPRIDO vale para a posse: quem ja tem nao promete conseguir.
 ok(P.criterio_cumprido(None, "posse", "remedio de raiz torta",
@@ -999,13 +859,10 @@ viagem = [i for i in P.get_active_intentions(VIZINHO)
           if "Forja" in i["content"]]
 ok(viagem and viagem[0].get("pronto_quando_alvo") == "Forja de Ferro",
    "o compromisso de chegar nasce com o alvo, pelo turno inteiro")
-ok(P.fechar_por_criterio(VIZINHO, {"lugar": "porto Porto"}, []) == []
-   or not any("Forja" in f["content"] for f in
-              P.fechar_por_criterio(VIZINHO, {"lugar": "porto Porto"}, [])),
-   "longe dali, NAO fecha")
-chegou = P.fechar_por_criterio(VIZINHO, {"lugar": "forja-de-ferro Forja de Ferro"}, [])
-ok(any("Forja" in f["content"] for f in chegou),
-   "chegando, FECHA — e fecha por leitura de campo, como as outras quatro")
+ok(P.criterio_cumprido({"lugar": "porto Porto"}, "lugar", "Forja de Ferro") is False,
+   "longe dali, o criterio de lugar NAO esta cumprido")
+ok(P.criterio_cumprido({"lugar": "forja-de-ferro Forja de Ferro"}, "lugar", "Forja de Ferro") is True,
+   "chegando, o criterio de lugar ESTA cumprido")
 
 
 # E O LUGAR SAI DA PASTA, nao de `status.location`.
@@ -1033,7 +890,7 @@ upd = P.create_intention(VIZINHO, "Fazer o remedio.\n- brew raiz torta",
 # A Mente reescreve o `content` inteiro ao atualizar (e a tool manda fazer assim), e
 # nao reenvia o `pronto_quando` — o conector nem o desce ao prompt. Se `update`
 # perdesse o criterio, a intencao viraria uma que NUNCA fecha, em silencio: o
-# arquivo existe, o status e `ativa`, e `fechar_por_criterio` simplesmente a ignora
+# arquivo existe, o status e `ativa`, e o harness nao tem fim conferivel — ignora-a
 # para sempre. E o unico jeito de perceber seria estranhar que ela nunca acaba.
 antes_fm, _ = motor.read_doc(VIZINHO / "intentions" / f"{upd}.md")
 P.update_intention(VIZINHO, upd, "Fazer o remedio, com calma.\n- brew raiz torta",

@@ -297,25 +297,6 @@ def inworld_effects(outcome: dict) -> list[str]:
             dito = frase(op)
             if dito:
                 ditos.append(dito)
-    # O COMPROMISSO QUE FECHOU (spec 073, FR-013 / Princípio X obrigação 2).
-    #
-    # Não passa por `inworld_phrases` de propósito: aquele registro é por CANAL DE OP,
-    # e isto não é uma op — é uma pós-condição do turno, que o mundo descobriu ao
-    # conferir o critério. Vem de `outcome["intencoes_fechadas"]`.
-    #
-    # E FECHAMENTO SILENCIOSO É INCOMPLETO. Um compromisso que se encerra sem uma
-    # palavra chegar ao jogador é exatamente o defeito que este bloco existe para
-    # impedir — o mesmo da Hulda e do gibão de placas, descrito acima.
-    #
-    # A frase diz o FATO, nunca o mecanismo: "a fome passou", jamais "a intenção
-    # int-… mudou para concluida". Quem narra é A Mente; isto é matéria-prima.
-    _FIM = {"hunger": "a fome passou, e o compromisso de matá-la se encerrou",
-            "thirst": "a sede passou, e o compromisso de matá-la se encerrou",
-            "sleep": "o corpo descansou, e o compromisso de dormir se encerrou"}
-    for fechada in outcome.get("intencoes_fechadas") or []:
-        dito = _FIM.get(fechada.get("pronto_quando"))
-        if dito:
-            ditos.append(dito)
     return ditos
 
 
@@ -1018,8 +999,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"ok": True, "id": iid})
 
         if path == "/api/intention/close":
+            # QUEM FECHA DECIDE COMO (spec 075, opção 2: o world guarda, o harness
+            # decide). O jogador pelo client abandona; o harness do conector também
+            # CONCLUI, quando o fim do desejo virou verdade. O padrão continua
+            # `abandonada`, para o client de antes não mudar de comportamento.
+            status = payload.get("status") or "abandonada"
+            if status not in ("concluida", "abandonada"):
+                return self._send_json({"error": "status precisa ser 'concluida' "
+                                                 "ou 'abandonada'"}, 400)
+            # `lembrar`: a DESISTÊNCIA VIRA MEMÓRIA (spec 073, FR-015) — o harness pede
+            # quando é o personagem que larga o desejo; o client não pede, e o fechamento
+            # segue sem lembrança como sempre.
             with motor.WRITE_LOCK:
-                ok = motor.close_intention(folder, iid, status="abandonada")
+                if status == "abandonada" and payload.get("lembrar"):
+                    ok = motor.abandonar(folder, iid, cid) is not None
+                else:
+                    ok = motor.close_intention(folder, iid, status=status)
             if not ok:
                 return self._send_json({"error": "esse compromisso não está "
                                                  "aberto"}, 409)

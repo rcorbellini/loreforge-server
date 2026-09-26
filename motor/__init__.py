@@ -295,15 +295,11 @@ from .intencoes import (  # noqa: F401
     _INTENTION_STATUSES,
     _h_intentions,
     abandonar,
-    casar_e_riscar,
     close_intention,
     create_intention,
     criterio_cumprido,
-    fechar_por_criterio,
     get_active_intentions,
     passos_sem_verbo,
-    riscar_passo,
-    rotulo_de_parada,
     update_intention,
 )
 

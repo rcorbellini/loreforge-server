@@ -179,11 +179,7 @@ def _iw_transfer(op):
     # quem recebe muda a pega para poder receber.
     ac = op.get("acomodou")
     if isinstance(ac, dict):
-        guardado, abrigo = name_of(ac.get("item")), name_of(ac.get("para"))
-        if ac.get("modo") == "liberou_a_mao":
-            frase += f", que guardou {guardado} em {abrigo} para abrir a mão"
-        else:
-            frase += f", que guardou em {abrigo} por não ter mão livre"
+        frase += f", que guardou em {name_of(ac.get('para'))} por não ter mão"
     return frase
 
 

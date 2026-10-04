@@ -216,30 +216,17 @@ def _set_item_slot(item_folder: Path, slot: str | None) -> None:
 
 def _accommodate(dest_root: Path, item_id: str, item_folder: Path,
                  item_fm: dict) -> tuple[Path, str, dict | None]:
-    """ACOMODAR o que chega, quando as mãos de quem recebe estão cheias (item 44).
+    """ACOMODAR o que chega a quem NÃO TEM PEGA (item 44, reduzido em 04/10/2026).
 
-    O caso que abriu os itens 44/45 foi este: dar uma moeda a alguém que segurava uma
-    chave e uma veste, recusado por `maos_ocupadas`. Mecanicamente correto, e o
-    resultado é que NINGUÉM segurando duas coisas recebe nada — nem uma moeda. Numa
-    cena social isso é o gesto mais comum do jogo virando turno perdido. Medido em
-    jogo: o Torvin ficou dois dias sem conseguir entregar uma moeda ao Obadiah, que
-    estava de mãos cheias justamente com o que Torvin queria receber.
+    O caso que abriu os itens 44/45 foi dar uma moeda a alguém que segurava uma chave e
+    uma veste, recusado por `maos_ocupadas`; o item 44 passou a acomodar (a bolsa de
+    quem recebe, ou uma mão liberada). Desde 04/10 a pega NÃO TEM LIMITE DE QUANTIDADE
+    (mantenedor: "tá travando muito o jogo e sem ganho real"), e quem tem mão recebe
+    na mão. Sobra o corpo SEM pega nenhuma: o que chega vai para um contêiner aberto
+    dele, se houver; senão a recusa (`corpo_sem_slot`) segue valendo.
 
-    Duas saídas, nesta ordem — a menos invasiva primeiro:
-
-    (A) O QUE CHEGA vai para um contêiner aberto de quem recebe. Nenhuma mão se
-        mexe; ele só não segura o que ganhou. É o que o COMÉRCIO já fazia desde
-        sempre para poder pagar com três moedas.
-    (B) Se o que chega não cabe em contêiner nenhum (grande demais, tudo lotado),
-        LIBERA uma vaga da pega: guarda algo que já estava na mão, e o recebido
-        ocupa a vaga aberta. Só desloca o que ACHA onde guardar.
-
-    Nunca larga nada no chão, e nunca desloca o próprio item da ação. Se as duas
-    saídas falham, devolve tudo como estava e a recusa `maos_ocupadas` segue valendo —
-    agora honesta: não há mesmo onde pôr.
-
-    Devolve (dest_root, dest_kind, acomodacao|None) — `acomodacao` é o que precisa
-    ser NARRADO (Princípio X: efeito que ninguém pediu não pode ser silencioso).
+    Nunca larga nada no chão. Devolve (dest_root, dest_kind, acomodacao|None) —
+    `acomodacao` é o que precisa ser NARRADO (Princípio X).
     """
     dest_fm, _ = read_doc(dest_root / "character.md")
     pega = grasp_slot_of(dest_fm)
@@ -248,38 +235,15 @@ def _accommodate(dest_root: Path, item_id: str, item_folder: Path,
         return dest_root, "character", None
     if check_mao(dest_fm.get("id"), maos,
                  slot_capacity(dest_fm, pega) if pega else 0) is None:
-        return dest_root, "character", None      # há vaga: nada a acomodar
+        return dest_root, "character", None      # tem pega: segura
 
-    # (A) o recebido cabe numa bolsa dele? Então nenhuma mão precisa se mexer.
     abrigo = open_container_for(dest_root, item_fm, item_folder)
     if abrigo is not None:
         abrigo_fm, _ = read_doc(abrigo / "item.md")
         return abrigo, "container", {
             "modo": "guardou_o_que_recebeu", "quem": dest_fm.get("id"),
             "item": item_id, "para": abrigo_fm.get("id")}
-
-    # (B) abrir uma vaga na pega, guardando o que já estava lá.
-    for ocupado in maos:
-        if ocupado == item_id:
-            continue                              # nunca o item da própria ação
-        preso = _find_item_under(dest_root, ocupado)
-        if preso is None:
-            continue
-        preso_folder, preso_fm = preso
-        abrigo = open_container_for(dest_root, preso_fm, preso_folder)
-        if abrigo is None:
-            continue
-        destino = abrigo / preso_folder.name
-        if destino.exists():
-            continue
-        io.move_entity(preso_folder, destino)
-        _set_item_slot(destino, None)             # guardado não é segurado
-        abrigo_fm, _ = read_doc(abrigo / "item.md")
-        return dest_root, "character", {
-            "modo": "liberou_a_mao", "quem": dest_fm.get("id"),
-            "item": ocupado, "para": abrigo_fm.get("id")}
-
-    return dest_root, "character", None           # sem saída: a recusa segue valendo
+    return dest_root, "character", None           # sem pega e sem bolsa: a recusa segue
 
 
 def bring_to_hand(actor_folder: Path, item_id: str) -> tuple[dict | None, dict | None]:
@@ -297,11 +261,8 @@ def bring_to_hand(actor_folder: Path, item_id: str) -> tuple[dict | None, dict |
     de `take` para pôr na mão o que ele já carrega é a mesma punição que os itens
     44/45 mediram e o mantenedor recusou: "o jogo fica muito punitivo".
 
-    Duas saídas, a MESMA ordem e o MESMO espírito do `_accommodate`:
-
-    (A) Há vaga na pega: o item sobe para a mão, e pronto.
-    (B) A pega está cheia: guarda em contêiner aberto algo que já estava na mão e
-        ocupa a vaga aberta. Nunca o item da própria ação, nunca o chão.
+    Sem limite de quantidade na pega (04/10/2026): o item sobe para a mão, junto do que
+    ela já segura. Só um corpo sem pega nenhuma recusa (`corpo_sem_slot`).
 
     NÃO desempunha o que está VESTIDO: tirar armadura para escrever é decisão do
     personagem, não gesto implícito do mundo — isso é `unequip`, e continua sendo.
@@ -330,34 +291,9 @@ def bring_to_hand(actor_folder: Path, item_id: str) -> tuple[dict | None, dict |
                                 _fail("item_vestido", item=item_id))
 
     maos = list(slots_in_use(actor_folder).get(pega) or [])
-    guardou = None
-    if check_mao(actor_fm.get("id"), maos,
-                 slot_capacity(actor_fm, pega)) is not None:
-        # (B) a pega está cheia: abrir uma vaga guardando o que já estava lá.
-        for ocupado in maos:
-            if ocupado == item_id:
-                continue                      # nunca o item da própria ação
-            preso = _find_item_under(actor_folder, ocupado)
-            if preso is None:
-                continue
-            preso_folder, preso_fm = preso
-            abrigo = open_container_for(actor_folder, preso_fm, preso_folder)
-            if abrigo is None:
-                continue
-            destino = abrigo / preso_folder.name
-            if destino.exists():
-                continue
-            io.move_entity(preso_folder, destino)
-            _set_item_slot(destino, None)     # guardado não é segurado
-            abrigo_fm, _ = read_doc(abrigo / "item.md")
-            guardou = {"item": ocupado, "para": abrigo_fm.get("id")}
-            break
-        else:
-            # sem saída: a recusa segue valendo, agora honesta.
-            return None, _rejection({"item": item_id},
-                                    _fail("maos_ocupadas",
-                                          personagem=actor_fm.get("id"),
-                                          item=item_id))
+    rej = check_mao(actor_fm.get("id"), maos, slot_capacity(actor_fm, pega))
+    if rej is not None:
+        return None, _rejection({"item": item_id}, rej)
 
     # (A) sobe para a mão. Filho direto de personagem <=> state.slot (spec 004).
     destino = actor_folder / item_folder.name
@@ -367,10 +303,7 @@ def bring_to_hand(actor_folder: Path, item_id: str) -> tuple[dict | None, dict |
                                     _fail("item_inacessivel", item=item_id))
         io.move_entity(item_folder, destino)
     _set_item_slot(destino, pega)
-    empunhou = {"item": item_id}
-    if guardou:
-        empunhou["guardou"] = guardou
-    return empunhou, None
+    return {"item": item_id}, None
 
 
 def transfer_item(

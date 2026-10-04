@@ -314,12 +314,18 @@ def open_container_for(portador: Path, item_fm: dict, item_folder: Path,
 
 def check_mao(char_id: str, ocupantes: list, capacidade: int) -> dict | None:
     # spec 019: a capacidade de mão vem do CORPO do personagem, não do global.
-    # Capacidade 0 (um corpo sem mãos, p.ex. um cachorro) é recusa própria.
+    # Capacidade 0 (um corpo sem pega nenhuma) é recusa própria.
+    #
+    # SEM LIMITE DE QUANTIDADE NA PEGA (mantenedor, 04/10/2026): "esse de quantidade
+    # de coisa na mão tá travando muito o jogo e sem ganho real". Medido jogando: a
+    # Elga segurava uma jarra e uma moeda e não pegava o cantil para dar um gole; o
+    # Draven, com o barril na mão, não pegava o cantil e a vez inteira parava antes da
+    # ida ao cais. Quem pega o que quiser segue limitado pelo PESO (`check_carga`), que
+    # é física de verdade; a contagem de mãos era só atrito. `ocupantes` fica na
+    # assinatura porque os chamadores ainda o montam (e o acomodar dos itens 44/45
+    # continua servindo a quem não tem pega).
     if capacidade <= 0:
         return _fail("corpo_sem_slot", personagem=char_id, slot=HAND_SLOT)
-    if len(ocupantes) >= capacidade:
-        return _fail("maos_ocupadas", personagem=char_id,
-                     ocupantes=list(ocupantes), multiplicidade=capacidade)
     return None
 
 

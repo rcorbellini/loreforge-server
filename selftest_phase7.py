@@ -243,28 +243,25 @@ try:
               and r.get("valores", {}).get("atuais") == 4
               for r in out7["rejected"]))
 
-    # 8: mãos ocupadas — ITEM 44: agora ACOMODA em vez de recusar.
-    # Até aqui, quem estivesse com as duas mãos cheias não pegava NADA, nem um seixo.
-    # Torvin segura o atiçador e uma bolsa: o seixo vai PARA A BOLSA que ele segura,
-    # e nenhuma mão se mexe. A recusa `maos_ocupadas` continua existindo — só passou a
-    # valer quando não há mesmo onde pôr (ver 15c).
+    # 8: SEM LIMITE DE QUANTIDADE NA MÃO (mantenedor, 04/10/2026). Era o item 44: de
+    # mãos cheias, o seixo ia para a bolsa, e sem bolsa nada se pegava. "Esse de
+    # quantidade de coisa na mão tá travando muito o jogo e sem ganho real": quem pega
+    # segura, e o limite que sobra é o PESO (ver 9).
     motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "aticador-de-ferro", "to": "torvin-ferreiro"}]))
     motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "bolsa-pequena", "to": "torvin-ferreiro"}]))
     out8 = motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "seixo-preto", "to": "torvin-ferreiro"}]))
-    ac8 = (out8.get("item_transfers_applied") or [{}])[0].get("acomodou") or {}
-    check("8: o desvio é DECLARADO no applied (Princípio X: nada em silêncio)",
-          ac8.get("modo") == "guardou_o_que_recebeu" and ac8.get("para"), str(ac8))
-    # o destino é o que o mundo DISSE ter escolhido — o teste não adivinha qual bolsa,
-    # confere que a coisa está mesmo onde o applied afirma (é o que o jogador leu).
-    check("8: pegar de mãos cheias ACOMODA — o seixo foi para a bolsa anunciada",
-          not out8["rejected"]
-          and (TORVIN / (ac8.get("para") or "?") / "seixo-preto").is_dir(),
-          str(out8["rejected"]) + str(ac8))
-    check("8: e chega narrado ao jogador",
-          any("Bolsa" in f for f in server_app.inworld_effects(out8)),
+    ap8 = (out8.get("item_transfers_applied") or [{}])[0]
+    check("8: pegar com as mãos já ocupadas PEGA — o seixo vai para a mão, sem desvio",
+          not out8["rejected"] and not ap8.get("acomodou")
+          and "seixo-preto" in (motor.slots_in_use(TORVIN).get("mao") or [])
+          and len(motor.slots_in_use(TORVIN).get("mao") or []) >= 3,
+          str(out8["rejected"]) + str(motor.slots_in_use(TORVIN)))
+    check("8: e chega narrado ao jogador, sem bolsa nenhuma no meio",
+          any("Seixo" in f for f in server_app.inworld_effects(out8))
+          and not any("Bolsa" in f for f in server_app.inworld_effects(out8)),
           str(server_app.inworld_effects(out8)))
     # devolve o seixo ao chão: os cenários seguintes contam com ele solto
     motor.apply_resolution("torvin-ferreiro", res(
@@ -355,62 +352,41 @@ try:
           all(len(ids) <= validator.SLOTS[s] for s, ids
               in motor.slots_in_use(TORVIN).items()))
 
-    # ============= 15 — o RECEBEDOR de mãos cheias ACOMODA (item 44) ========= #
-    # O caso que ABRIU os itens 44/45: dar uma moeda a quem segurava duas coisas era
-    # recusado por `maos_ocupadas`. Mecanicamente correto, e o efeito era que ninguém
-    # de mãos cheias recebia nada — o gesto social mais comum do jogo virava turno
-    # perdido. Medido em jogo: dois dias de tentativas do Torvin contra o Obadiah, que
-    # estava de mãos cheias justamente com o que Torvin queria.
-    #
-    # A decisão do mantenedor foi SIMETRIA: os dois lados acomodam. Duas saídas, a
-    # menos invasiva primeiro — (a) o que chega vai para uma bolsa de quem recebe;
-    # (b) só se não couber, libera uma mão guardando o que já estava nela.
+    # ============= 15 — o RECEBEDOR de mãos cheias RECEBE (04/10/2026) ======= #
+    # O caso que abriu os itens 44/45: dar uma moeda a quem segurava duas coisas era
+    # recusado por `maos_ocupadas`. O item 44 acomodava (a bolsa de quem recebe, ou uma
+    # mão liberada), e sem bolsa a recusa seguia. Desde 04/10 não há limite de quantidade
+    # na mão: quem recebe segura, tenha bolsa ou não. O limite que sobra é o PESO.
     motor.apply_resolution("elga-taverneira", res(
         item_transfers=[{"item": "moeda-de-ouro", "to": "elga-taverneira"}]))
     motor.apply_resolution("elga-taverneira", res(
         item_transfers=[{"item": "bolsa-de-couro", "to": "elga-taverneira"}]))
     ELGA = TAVERNA / "elga-taverneira"
 
-    # 15a — o que chega CABE na bolsa dela: nenhuma mão se mexe.
+    # 15a — de mãos cheias e COM bolsa: o que chega vai para a mão, não para a bolsa.
     out15a = motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "seixo-preto", "to": "elga-taverneira"}]))
-    check("15a: quem recebe de mãos cheias guarda o recebido na PRÓPRIA bolsa",
+    check("15a: quem recebe de mãos cheias segura o que recebeu (nada vai para a bolsa)",
           not out15a["rejected"]
-          and (ELGA / "bolsa-de-couro" / "seixo-preto").is_dir()
-          and motor.slots_in_use(ELGA).get("mao")
-              == ["bolsa-de-couro", "moeda-de-ouro"],
+          and "seixo-preto" in (motor.slots_in_use(ELGA).get("mao") or [])
+          and not (ELGA / "bolsa-de-couro" / "seixo-preto").is_dir(),
           str(out15a["rejected"]) + str(motor.slots_in_use(ELGA)))
 
-    # 15b — o que chega NÃO cabe (atiçador M numa bolsa P): aí sim libera a mão,
-    # guardando o que estava nela. Nunca desloca o item da própria ação.
-    motor.apply_resolution("torvin-ferreiro", res(
-        item_transfers=[{"item": "aticador-de-ferro", "to": "torvin-ferreiro"}]))
-    out15b = motor.apply_resolution("torvin-ferreiro", res(
-        item_transfers=[{"item": "aticador-de-ferro", "to": "elga-taverneira"}]))
-    ac15 = (out15b.get("item_transfers_applied") or [{}])[0].get("acomodou") or {}
-    check("15b: não cabendo na bolsa, ela LIBERA a mão guardando o que segurava",
-          not out15b["rejected"] and ac15.get("modo") == "liberou_a_mao"
-          and (ELGA / "bolsa-de-couro" / "moeda-de-ouro").is_dir()
-          and "aticador-de-ferro" in (motor.slots_in_use(ELGA).get("mao") or []),
-          str(out15b["rejected"]) + str(ac15))
-    check("15b: e o jogador é avisado do que ela guardou (Princípio X)",
-          any("abrir a mão" in f for f in server_app.inworld_effects(out15b)),
-          str(server_app.inworld_effects(out15b)))
-
-    # 15c — SEM SAÍDA a recusa continua valendo, agora honesta: não há mesmo onde.
-    # Elga passa a bolsa adiante e fica com duas coisas que não guardam nada.
+    # 15b — SEM bolsa nenhuma: era a recusa honesta do item 44; agora recebe também.
     motor.apply_resolution("elga-taverneira", res(
         item_transfers=[{"item": "bolsa-de-couro", "to": "taverna-do-gancho"}]))
-    motor.apply_resolution("elga-taverneira", res(
-        item_transfers=[{"item": "seixo-branco", "to": "elga-taverneira"}]))
     out15 = motor.apply_resolution("torvin-ferreiro", res(
         item_transfers=[{"item": "calca-de-linho", "to": "elga-taverneira"}]))
-    check("15c: sem bolsa onde acomodar, `maos_ocupadas` segue negando",
-          any(r.get("regra") == "maos_ocupadas" for r in out15["rejected"]),
-          str(out15["rejected"]))
-    check("15c: e nada foi mexido nas mãos dela ao tentar",
-          len(motor.slots_in_use(ELGA).get("mao") or []) == 2,
-          str(motor.slots_in_use(ELGA)))
+    check("15b: sem bolsa onde guardar, de mãos cheias, recebe mesmo assim",
+          not any(r.get("regra") == "maos_ocupadas" for r in out15["rejected"])
+          and "calca-de-linho" in (motor.slots_in_use(ELGA).get("mao") or []),
+          str(out15["rejected"]) + str(motor.slots_in_use(ELGA)))
+    # devolve a calça ao Torvin: o item 31 abaixo conta com ela nele
+    motor.apply_resolution("elga-taverneira", res(
+        item_transfers=[{"item": "calca-de-linho", "to": "torvin-ferreiro"}]))
+    # e o seixo ao chão, como estava antes do bloco
+    motor.apply_resolution("elga-taverneira", res(
+        item_transfers=[{"item": "seixo-preto", "to": "taverna-do-gancho"}]))
 
     # ============ item 31 §2: posse/vestir viram autoridade do executor ======= #
     # equip de item que está com OUTRA pessoa (calca-de-linho está no torvin) e
@@ -434,10 +410,12 @@ try:
           and "não refaça" not in cap_nv[0].get("erro", ""))
 
     # ===================== failed_effects estruturado (FR-011/SC-007) ======== #
-    frases = server_app.inworld_failures(out15["rejected"])
+    # (era a recusa `maos_ocupadas` do 15c; a de quantidade na mão saiu em 04/10, e a
+    # do bolso lotado do 7 serve igual: uma recusa de física com valores)
+    frases = server_app.inworld_failures(out7["rejected"])
     estruturadas = [f for f in frases if isinstance(f, dict) and f.get("regra")]
     check("failed_effects carried_item_ids {regra, valores} além do texto in-world",
-          estruturadas and estruturadas[0]["regra"] == "maos_ocupadas"
+          estruturadas and estruturadas[0]["regra"] == "container_lotado"
           and "valores" in estruturadas[0])
     check("frase de mundo presente na entrada estruturada",
           bool(estruturadas[0].get("o_que_falhou")))

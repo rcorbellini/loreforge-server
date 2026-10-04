@@ -300,26 +300,6 @@ try:
     negociar(TORVIN, "buy", ELGA, [MOEDAS[0]], [ANEL])
     check("SC-002: após recusa, mundo idêntico byte a byte", digital() == antes)
 
-    # --- equivalência com o give (risco D6) ----------------------------------- #
-    # As duas rotas usam os MESMOS check_*, mas têm políticas de destino
-    # diferentes de propósito: a negociação guarda numa bolsa quando há (senão
-    # comprar com três moedas seria impossível), enquanto o `give` põe na mão.
-    # A equivalência que precisa valer é a das REGRAS: sem contêiner disponível,
-    # os dois têm de dar o mesmo veredito.
-    chao(CAIXA)                       # tira a bolsa da Elga: só restam as mãos
-    dar(TORVIN, CORDA); dar(ELGA, FRASCO)
-    marcar(CORDA, negotiable=True); marcar(FRASCO, negotiable=True)
-    forbid_roll()
-    out_neg = negociar(TORVIN, "trade", ELGA, [CORDA], [FRASCO], necessidade=10)
-    ok_neg = bool(out_neg["trade_ops_applied"])
-    dar(TORVIN, CORDA); dar(ELGA, FRASCO)
-    out_give = motor.apply_resolution(TORVIN, res(
-        item_transfers=[{"item": CORDA, "to": ELGA}]))
-    ok_give = bool(out_give["item_transfers_applied"])
-    check("equivalência com o give (sem contêiner): mesmo veredito físico",
-          ok_neg == ok_give, f"negociacao={ok_neg} give={ok_give}")
-    dar(TORVIN, CORDA); dar(ELGA, CAIXA)
-
     # --- recusas distintas (SC-003) e pureza (SC-008) ------------------------- #
     dar(ELGA, FRASCO)
     regras = set()
@@ -453,6 +433,29 @@ try:
     check("perguntar devolve a lista para A Mente narrar",
           r_ask.get("wares") and FRASCO in
           [i["id"] for i in r_ask["wares"][0]["a_venda"]], str(r_ask.get("wares")))
+
+    # --- equivalência com o give (risco D6) ----------------------------------- #
+    # NO FIM, de propósito (04/10/2026): sem limite de quantidade na mão, a troca e o
+    # give daqui APLICAM — e a troca aplicada grava quem recebeu como dono (memória).
+    # No meio do cenário, isso tornava a corda "não é sua" para o Torvin no SC-003.
+    # As duas rotas usam os MESMOS check_*, mas têm políticas de destino
+    # diferentes de propósito: a negociação guarda numa bolsa quando há (senão
+    # comprar com três moedas seria impossível), enquanto o `give` põe na mão.
+    # A equivalência que precisa valer é a das REGRAS: sem contêiner disponível,
+    # os dois têm de dar o mesmo veredito.
+    chao(CAIXA)                       # tira a bolsa da Elga: só restam as mãos
+    dar(TORVIN, CORDA); dar(ELGA, FRASCO)
+    marcar(CORDA, negotiable=True); marcar(FRASCO, negotiable=True)
+    forbid_roll()
+    out_neg = negociar(TORVIN, "trade", ELGA, [CORDA], [FRASCO], necessidade=10)
+    ok_neg = bool(out_neg["trade_ops_applied"])
+    dar(TORVIN, CORDA); dar(ELGA, FRASCO)
+    out_give = motor.apply_resolution(TORVIN, res(
+        item_transfers=[{"item": CORDA, "to": ELGA}]))
+    ok_give = bool(out_give["item_transfers_applied"])
+    check("equivalência com o give (sem contêiner): mesmo veredito físico",
+          ok_neg == ok_give, f"negociacao={ok_neg} give={ok_give}")
+    dar(TORVIN, CORDA); dar(ELGA, CAIXA)
 
     # spec 045: a seção "Guarda de prosa: JSON descrito não é ato" morava aqui —
     # espelhava a guarda que `arbiter.resolve_with_tools` aplicava quando o

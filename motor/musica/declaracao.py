@@ -112,10 +112,6 @@ def _iw_sing(op):
     emp = op.get("empunhou")
     if isinstance(emp, dict):
         frase = f"tomou {motor.name_of(emp.get('item'))} e " + frase
-        guardou = emp.get("guardou")
-        if isinstance(guardou, dict):
-            frase += (f", guardando {motor.name_of(guardou.get('item'))} em "
-                      f"{motor.name_of(guardou.get('para'))} para abrir a mão")
     return frase
 
 

@@ -81,11 +81,30 @@ def main() -> int:
         check("1c: a prosa virou a descrição pós-vencimento",
               "azedo" in corpo, corpo[:60])
         check("1d: `vencido_em` foi carimbado", bool(fm["prazo"].get("vencido_em")))
+        # o NOME acompanha o estado (04/10/2026): o plano e a cena só veem o nome
+        check("1d2: o nome ganha o aposto de que já não presta, depois da vírgula",
+              str(fm.get("name", "")).endswith(", " + prazo.MARCA_VENCIDO), str(fm.get("name")))
 
         repetidas = [prazo.vencer_se_for_hora(p, io.read_doc(p / "item.md")[0])
                      for _ in range(10)]
         check("1e: dez leituras seguintes NÃO aplicam de novo",
               all(r is None for r in repetidas), str(repetidas))
+        nome_p = io.read_doc(p / "item.md")[0].get("name", "")
+        check("1f: e o aposto não se repete", nome_p.count(prazo.MARCA_VENCIDO) == 1, nome_p)
+
+        # 1g — o que venceu ANTES desta regra ganha o aposto na primeira vez que é visto
+        antigo = _item(tmp, "carne-antiga", {"prazo": {
+            "vence_em": agora - 99,
+            "ao_vencer": {"verbo": "virar"},
+            "urgencia": "", "descricao_vencida": "fria e endurecida, não é mais comestível",
+            "vencido_em": agora - 50}})
+        fm_ant, _ = io.read_doc(antigo / "item.md")
+        nome_antes = fm_ant.get("name", "")
+        r_ant = prazo.vencer_se_for_hora(antigo, fm_ant)
+        nome_depois = io.read_doc(antigo / "item.md")[0].get("name", "")
+        check("1g: o vencido antigo ganha o aposto ao ser visto, calado (não é vencimento novo)",
+              r_ant is None and nome_depois == prazo.nome_vencido(nome_antes)
+              and nome_depois != nome_antes, f"{nome_antes!r} → {nome_depois!r}")
 
         print("\n--- 2. leituras concorrentes do mesmo turno -----------------------")
         q = _item(tmp, "queijo", {"prazo": {

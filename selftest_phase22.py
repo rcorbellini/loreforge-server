@@ -112,8 +112,9 @@ check("B1: check_mao capacidade 0 → corpo_sem_slot",
       (motor.check_mao("x", [], 0) or {}).get("regra") == "corpo_sem_slot")
 check("B2: check_mao cap 4 com 3 ocupantes → ok (SC-002)",
       motor.check_mao("x", ["a", "b", "c"], 4) is None)
-check("B3: check_mao cap 2 com 2 ocupantes → maos_ocupadas",
-      (motor.check_mao("x", ["a", "b"], 2) or {}).get("regra") == "maos_ocupadas")
+# sem limite de quantidade na pega desde 04/10/2026 (mantenedor): cheia não recusa
+check("B3: check_mao cap 2 com 2 ocupantes → ok (a pega não tem limite de quantidade)",
+      motor.check_mao("x", ["a", "b"], 2) is None)
 check("B4: check_slot capacidade 0 → corpo_sem_slot (não slot_ocupado)",
       (motor.check_slot("i", "asas", [], 0) or {}).get("regra") == "corpo_sem_slot")
 check("B5: check_slot cap 1 cheio → slot_ocupado",
@@ -226,11 +227,14 @@ motor.apply_resolution("cao-farejador", res(
 grav_fm, _ = motor.read_doc(TAVERNA / "cao-farejador" / "graveto-teste" / "item.md")
 check("E5: o cão segura na BOCA — graveto pego fica com state.slot = focinho",
       motor.item_slot(grav_fm) == "focinho")
-# boca cheia (cap 1): um segundo item na boca é recusado
+# boca já com o graveto: desde 04/10/2026 a pega não tem limite de quantidade, e o
+# osso vai junto (o que limita é o peso)
 out_osso = motor.apply_resolution("cao-farejador", res(
     item_transfers=[{"item": "osso-teste", "to": "cao-farejador"}]))
-check("E6: boca já ocupada → 2º item na boca recusado (maos_ocupadas)",
-      any(r.get("regra") == "maos_ocupadas" for r in out_osso.get("rejected") or []))
+check("E6: boca já ocupada → o 2º item vai para a boca também (sem limite de quantidade)",
+      not (out_osso.get("rejected") or [])
+      and "osso-teste" in (motor.slots_in_use(TAVERNA / "cao-farejador").get("focinho") or []),
+      str(out_osso.get("rejected")))
 
 
 print("\n--- Bloco F: criatura SEM pega (caso-zero, sem divisão por zero) --------")

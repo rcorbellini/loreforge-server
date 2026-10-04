@@ -396,7 +396,8 @@ emp2, rej2 = motor.bring_to_hand(livre, "pena-guardada-p59")
 check("empunhar-A. já na mão: nada acontece e nada se narra",
       emp2 is None and rej2 is None, f"{emp2} / {rej2}")
 
-# (B) MÃOS CHEIAS, COM BOLSA — guarda algo para abrir a vaga.
+# (B) MÃOS CHEIAS, COM BOLSA — desde 04/10/2026 a pega não tem limite de quantidade:
+# a pena sobe para a mão junto do que já estava lá, e nada é guardado.
 cheio = _mk_char("maocheia-p59", "Mãos Cheias")
 _mk_item_guardado(cheio, "tralha-a-p59", slot="mao", nome="Tralha A")
 _mk_item_guardado(cheio, "tralha-b-p59", slot="mao", nome="Tralha B")
@@ -409,28 +410,23 @@ bolsa.mkdir(parents=True, exist_ok=True)
     "Uma bolsa de couro, aberta.\n", encoding="utf-8")
 pena_cheia = _mk_item_guardado(cheio, "pena-cheia-p59", dentro=bolsa)
 emp3, rej3 = motor.bring_to_hand(cheio, "pena-cheia-p59")
-check("empunhar-B. mãos cheias: abre vaga guardando o que já estava lá",
-      rej3 is None and _slot_de(cheio / "pena-cheia-p59") == motor.HAND_SLOT,
+check("empunhar-B. mãos cheias: a pena sobe para a mão junto do que já estava lá",
+      rej3 is None and _slot_de(cheio / "pena-cheia-p59") == motor.HAND_SLOT
+      and _slot_de(cheio / "tralha-a-p59") == motor.HAND_SLOT
+      and _slot_de(cheio / "tralha-b-p59") == motor.HAND_SLOT,
       f"rej={rej3}")
-check("empunhar-B. o que foi guardado é DECLARADO junto (nada calado)",
-      isinstance(emp3, dict) and isinstance(emp3.get("guardou"), dict),
-      str(emp3))
-check("empunhar-B. nunca desloca o item da própria ação",
-      (emp3 or {}).get("guardou", {}).get("item") != "pena-cheia-p59", str(emp3))
+check("empunhar-B. o gesto de tomar a pena é DECLARADO (nada calado), sem guardar nada",
+      isinstance(emp3, dict) and emp3.get("item") == "pena-cheia-p59"
+      and "guardou" not in emp3, str(emp3))
 
-# (C) MÃOS CHEIAS, SEM ONDE GUARDAR — a recusa segue valendo, honesta.
+# (C) MÃOS CHEIAS, SEM ONDE GUARDAR — era a recusa `maos_ocupadas`; agora empunha também.
 travado = _mk_char("travado-p59", "Travado")
 _mk_item_guardado(travado, "tralha-c-p59", slot="mao", nome="Tralha C")
 _mk_item_guardado(travado, "tralha-d-p59", slot="mao", nome="Tralha D")
 pena_travada = _mk_item_guardado(travado, "pena-travada-p59")
 emp4, rej4 = motor.bring_to_hand(travado, "pena-travada-p59")
-check("empunhar-C. sem contêiner onde guardar, recusa `maos_ocupadas`",
-      rej4 is not None and rej4.get("regra") == "maos_ocupadas", str(rej4))
-check("empunhar-C. e a recusa não é silenciosa (tem frase de mundo)",
-      bool((rej4 or {}).get("why")), str(rej4))
-check("empunhar-C. nada se moveu: a pena continua onde estava",
-      _slot_de(travado / "pena-travada-p59") is None,
-      str(_slot_de(travado / "pena-travada-p59")))
+check("empunhar-C. sem contêiner onde guardar, de mãos cheias, empunha mesmo assim",
+      rej4 is None and _slot_de(travado / "pena-travada-p59") == motor.HAND_SLOT, str(rej4))
 
 # (D) VESTIDO não é empunhável por gesto implícito — isso é `unequip`.
 vestido = _mk_char("vestido-p59", "Vestido")

@@ -186,6 +186,23 @@ def carimbar_se_houver(pasta: Path, dados: dict, dura_s: float,
     return True
 
 
+# O NOME ACOMPANHA O ESTADO (mantenedor, 04/10/2026). A prosa trocada só chega a quem LÊ a
+# descrição; o plano, a fala e a lista da cena só veem o nome. Medido jogando: a "Carne
+# Assada" vencida ("fria e endurecida, não é mais comestível") seguia "Carne Assada", o
+# Sorin tentava comê-la e o mundo respondia "não é algo que se coma", sem porquê. O aposto
+# vai depois da vírgula, como o epíteto dos nomes do mundo ("Fenn, o Dedos-Leves"): quem
+# cita a coisa pelo nome dela ("a carne assada") continua achando. Só ITEM: um personagem
+# não "deixa de prestar".
+MARCA_VENCIDO = "já não presta"
+
+
+def nome_vencido(nome: str) -> str:
+    nome = str(nome or "").strip()
+    if not nome or MARCA_VENCIDO in nome:
+        return nome
+    return f"{nome}, {MARCA_VENCIDO}"
+
+
 def vencer_se_for_hora(pasta: Path, fm: dict, filename: str = "item.md",
                        agora: float | None = None) -> dict | None:
     """O GANCHO DO CAMINHO DE LEITURA. Recebe o `fm` que o chamador já leu, para não
@@ -202,8 +219,28 @@ def vencer_se_for_hora(pasta: Path, fm: dict, filename: str = "item.md",
     """
     bloco = (fm or {}).get(BLOCO)
     if not pendente(bloco, agora):
+        _marcar_nome_se_venceu(pasta, fm, bloco, filename)
         return None
     return aplicar(pasta, filename=filename, agora=agora)
+
+
+def _marcar_nome_se_venceu(pasta: Path, fm: dict, bloco, filename: str) -> None:
+    """O que venceu ANTES de o nome acompanhar o estado (04/10/2026) ganha o aposto na
+    primeira vez que alguém o vê — preguiçoso, uma escrita por item, e calado: não é um
+    vencimento novo (nada a lembrar nem a narrar)."""
+    if filename != "item.md" or not isinstance(bloco, dict) or not bloco.get("vencido_em"):
+        return
+    if not (bloco.get("descricao_vencida") or "").strip():
+        return
+    nome = (fm or {}).get("name") or ""
+    novo = nome_vencido(nome)
+    if not nome or novo == nome:
+        return
+    fm_disco, corpo = io.read_doc(pasta / filename)
+    if fm_disco.get("name") != nome:
+        return                              # mudou entre a leitura e aqui: não briga
+    fm_disco["name"] = novo
+    io.write_doc(pasta / filename, fm_disco, corpo)
 
 
 def aplicar(pasta: Path, filename: str = "item.md",
@@ -253,6 +290,8 @@ def aplicar(pasta: Path, filename: str = "item.md",
     if nova:
         corpo = nova
         feito["prosa_trocada"] = True
+        if filename == "item.md" and fm.get("name"):
+            fm["name"] = nome_vencido(fm["name"])
 
     fm[BLOCO] = {**bloco, "vencido_em": agora if agora is not None else time.time()}
     io.write_doc(alvo, fm, corpo)

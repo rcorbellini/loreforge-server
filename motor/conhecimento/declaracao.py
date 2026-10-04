@@ -644,10 +644,6 @@ def _iw_write(op):
     emp = op.get("empunhou")
     if isinstance(emp, dict):
         frase = f"tomou {name_of(emp.get('item'))} e " + frase
-        guardou = emp.get("guardou")
-        if isinstance(guardou, dict):
-            frase += (f", guardando {name_of(guardou.get('item'))} em "
-                      f"{name_of(guardou.get('para'))} para abrir a mão")
     return frase
 
 

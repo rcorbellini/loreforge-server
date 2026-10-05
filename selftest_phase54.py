@@ -109,9 +109,15 @@ check("FR-011: o bloco `trabalho` saiu inteiro",
 check("FR-011: o arquivo CONTINUA no disco com a data da extinção (Princípio IV)",
       (_obj / "object.md").exists()
       and isinstance((_fm2.get("state") or {}).get("extinto_em"), int))
-check("FR-012: quem estava no lugar recebeu o fato do apagamento",
-      "apagou" in (motor.io.read_doc(_char_pres / "character.md")[0]
-                   .get("status") or {}).get("action", ""))
+# O canal é a MEMÓRIA desde 05/10/2026: o `status.action` diz o que ele está FAZENDO, e o aviso
+# o sujava (a praça inteira "fazendo" a rebrota). Quem estava ali lembra; a ação fica intocada.
+def _lembra(char_folder, trecho):
+    return any(trecho in (motor.io.read_doc(m)[1] or "")
+               for m in (char_folder / "memories").glob("*.md")) if (char_folder / "memories").exists() else False
+check("FR-012: quem estava no lugar LEMBRA do apagamento (memória, não a ação)",
+      _lembra(_char_pres, "apagou")
+      and "apagou" not in ((motor.io.read_doc(_char_pres / "character.md")[0]
+                            .get("status") or {}).get("action") or ""))
 
 check("FR-026: `fogo` entrou em DOMAINS", "fogo" in validator.DOMAINS)
 _pr = motor.memoria.primitivas._peso_das_repeticoes
@@ -299,9 +305,10 @@ check("SC-006: e sumiu dos enums de fonte de calor, sem regra nova",
       _fogo_id not in _cand2.get("cook_fonte", [])
       and _fogo_id not in _cand2.get("forge_fonte", []))
 
-check("FR-012: quem estava no lugar soube que o fogo se apagou",
-      "apagou" in (motor.io.read_doc(_ator / "character.md")[0]
-                   .get("status") or {}).get("action", ""),
+check("FR-012: quem estava no lugar soube que o fogo se apagou (memória, não a ação)",
+      _lembra(_ator, "apagou")
+      and "apagou" not in ((motor.io.read_doc(_ator / "character.md")[0]
+                            .get("status") or {}).get("action") or ""),
       str((motor.io.read_doc(_ator / "character.md")[0].get("status") or {}).get("action")))
 
 # --- SC-006a: o acúmulo não existe ---

@@ -457,30 +457,29 @@ def _notificar(bloco: dict, pasta: Path, resultado: dict) -> None:
     """Princípio X: o efeito precisa CHEGAR a quem viveu.
 
     COM `ator` (cook, forja) avisa só ele — é dele o trabalho. SEM `ator` (a fonte de
-    fogo, que não ocupa ninguém) avisa QUEM ESTÁ NO LUGAR: sem isto o apagamento
-    seria absolutamente mudo, e o canal ficaria com dois dos três passos do
-    Princípio X. `status.action` é o canal de sempre — transitório, lido pela
-    narração do momento seguinte, sem tocar em memória."""
+    fogo, a rebrota) avisa QUEM ESTÁ NO LUGAR: sem isto o apagamento seria
+    absolutamente mudo.
+
+    O CANAL É A MEMÓRIA (mantenedor, 05/10/2026). Era o `status.action`, e o campo que diz
+    o que ele está FAZENDO virava o aviso: a praça inteira aparecia na cena como "Bento (o
+    que foi colhido aqui voltou a crescer)", até a próxima ação de cada um. O que aconteceu
+    mora na memória, que a Mente já recebe na cena seguinte ("Ele lembra: …"); o
+    `status.action` o aviso não toca mais. Curta: `small` para quem fez (2 dias),
+    `trivial` para quem só estava ali (6 h).
+
+    Import de `memoria` é LOCAL pelo mesmo ciclo de `_testemunhar_conclusao_prazo`."""
+    from . import memoria
     fato = resultado.get("fato") or _FATO_POR_TOOL.get(bloco.get("tool")) \
         or "algo que estava em curso aqui terminou"
     ator = bloco.get("ator")
     if ator:
-        try:
-            alvos = [io.find_character_folder(ator)]
-        except Exception:
-            return
-    else:
-        chars, _, _ = io._scene_entities(pasta.parent)
-        alvos = list(chars.values())
-    for char_folder in alvos:
-        arquivo = char_folder / "character.md"
-        if not arquivo.exists():
-            continue
-        fm, body = read_doc(arquivo)
-        status = dict(fm.get("status") or {})
-        status["action"] = fato
-        fm["status"] = status
-        write_doc(arquivo, fm, body)
+        memoria.record_event(ator, fato[:1].upper() + fato[1:] + ".", "trabalho_concluido",
+                             [pasta.name], intensity="small")
+        return
+    chars, _, _ = io._scene_entities(pasta.parent)
+    for quem in chars:
+        memoria.record_event(quem, f"Vi que {fato}.", "trabalho_concluido",
+                             [pasta.name], intensity="trivial")
 
 
 # spec 057 (US4, Mecanismo B): qual evento de testemunha cada `tool` de PRAZO
